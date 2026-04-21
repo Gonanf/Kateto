@@ -1,0 +1,7 @@
+{
+  "name": "tts",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "uv run --env-file=.env main.py"
+  }
+}

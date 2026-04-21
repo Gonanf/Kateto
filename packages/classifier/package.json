@@ -1,0 +1,8 @@
+{
+  "name": "classifier",
+  "version": "0.1.0",
+  "scripts": {
+    "train": "uv run --env-file=.env train.py",
+    "dev": "uv run --env-file=.env server.py"
+  }
+}

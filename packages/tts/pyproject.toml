@@ -1,0 +1,10 @@
+[project]
+name = "tts"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "realtimestt[all]>=0.3.104",
+    "realtimetts[all]>=0.6.0",
+]

@@ -1,0 +1,11 @@
+{
+  "name": "kateto",
+  "dependencies": {},
+  "devDependencies": {
+    "turbo": "^2.9.6"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "packageManager": "bun@1.3.11"
+}

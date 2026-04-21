@@ -1,0 +1,1001 @@
+text,label
+"Che Juan, como va la mudanza?",think
+"Decime que hago ahora.",talk
+"Tengo que dejar de procrastinar.",think
+"Cateto, escribime un dialogo corto.",talk
+"Claro, por eso no funcionaba.",think
+"El vecino esta haciendo ruido.",think
+"Decime por que pasa esto.",talk
+"Me estoy superando cada dia.",think
+"Kateto, escribime un poema corto.",talk
+"Teto, hola, como estas hoy?",talk
+"Kasane Teto, dame un resumen del proyecto.",talk
+"Se actualizo el framework.",think
+"Ya lo tengo resuelto en la cabeza.",think
+"Camila, nos vemos en el asado?",think
+"Carlos se enoja cuando le hacen code review.",think
+"Necesito un enfoque sistematico.",think
+"Creame una analogia explicativa.",talk
+"Cateto, cual es la mejor opcion?",talk
+"La bateria se esta agotando.",think
+"Recordar actualizar el changelog.",think
+"Teto, como lo harias vos?",talk
+"Fernando, podemos mejorar la UX del dashboard?",think
+"Tengo que ver el bosque completo.",think
+"Kasane Teto, que hace esta funcion exactamente?",talk
+"No me olvide de actualizar la doc.",think
+"Necesito confiar en mi instinto.",think
+"La red esta inestable hoy.",think
+"Cateto, revisa bien antes de responder.",talk
+"Sera que necesito mas memoria?",think
+"Mama, necesito un consejo.",think
+"Kateto, evaluame el rendimiento de esto.",talk
+"Kasane Teto, que me recomendas para este problema?",talk
+"Gustavo, revisa los permisos del bucket.",think
+"Que ventajas tiene cada uno?",talk
+"Teto, que me recomendas para este problema?",talk
+"Kasane Teto, creame una metafora para esto.",talk
+"Kateto, que enfoque me sugieres?",talk
+"Teto, el formato esta mal, cambialo.",talk
+"Cateto, revisame el diseño de la API.",talk
+"Gustavo, vas al cine esta noche?",think
+"Teto, corregi el ultimo parrafo.",talk
+"Che Juan, me pasas el numero del medico?",think
+"Kateto, que es lo mas urgente?",talk
+"Lucia es muy eficiente con su tiempo.",think
+"Inventame un ejemplo practico.",talk
+"Hermano, me prestas la camioneta?",think
+"Valentina, me pasas la receta de la torta?",think
+"Che Pedro, probaste la cerveza artesanal?",think
+"Ahora entiendo por que pasaba.",think
+"Kateto, resumime la documentacion.",talk
+"No entiendo el flujo de datos.",think
+"Cual seria tu consejo?",talk
+"Entonces ese era el problema.",think
+"Cateto, que framework me recomendas?",talk
+"Kasane Teto, analizame este codigo.",talk
+"No logro entender la logica.",think
+"Kasane Teto, che, como va todo?",talk
+"Cateto, resumime la documentacion.",talk
+"Cateto, buenas tardes, necesito ayuda.",talk
+"Kasane Teto, inventame una historia breve.",talk
+"Che Julieta, me pasas el contacto del plomero?",think
+"Kateto, te equivocaste en la ultima respuesta.",talk
+"Hermana, me ayudarias a elegir?",think
+"Kateto, buenas, arrancamos?",talk
+"Paula, vamos al recital el mes que viene?",think
+"Me estoy enfocando en lo importante.",think
+"Maria siempre tiene las mejores ideas.",think
+"De donde viene ese ruido?",think
+"Hola, como estas hoy?",talk
+"Pensemos en las alternativas.",think
+"Kateto, recordame que tengo pendiente.",talk
+"Cateto, analizame este codigo.",talk
+"Cateto, me orientas con este diseño?",talk
+"Kateto, resumime lo que hablamos ayer.",talk
+"Cateto, cuando termina el sprint?",talk
+"Me estoy sintiendo mas seguro.",think
+"Kasane Teto, que version estamos usando?",talk
+"Cateto, que enfoque me sugieres?",talk
+"Estoy re contento con el avance.",think
+"Hermano, nos vemos en la cancha?",think
+"Teto, armame un esquema del proyecto.",talk
+"Genera un resumen ejecutivo.",talk
+"Teto, generame un documento con los datos.",talk
+"Necesito que alguien revise la seguridad.",think
+"Cateto, que herramienta me conviene usar?",talk
+"Kateto, que me recomendas para este problema?",talk
+"Que alguien me ayude con la query compleja.",think
+"Mama, me pasas el remedio?",think
+"Que alguien me explique la arquitectura.",think
+"Que carajo esta pasando aqui?",think
+"Me estoy acostumbrando al ritmo.",think
+"Obvio, no lo habia visto asi.",think
+"Ana, revisa el schema de la API.",think
+"Necesito que me ayuden con el deploy.",think
+"Cateto, inventame un ejemplo practico.",talk
+"Se actualizo el sistema solo.",think
+"Me orientas con este diseño?",talk
+"Que alguien me explique el flujo de datos.",think
+"Entonces la clave estaba ahi.",think
+"Kasane Teto, explicame con un ejemplo.",talk
+"Kateto, que significa este mensaje?",talk
+"Alguien sabe como se configura esto?",think
+"Matias, me contas que onda con tu familia?",think
+"Teto, como se configura esto?",talk
+"Mama, me haces la receta de siempre?",think
+"Florencia, podemos mejorar los tests?",think
+"Cateto, dame lo mas importante de esto.",talk
+"Kasane Teto, falta informacion en tu respuesta.",talk
+"Necesito que alguien revise mi codigo.",think
+"Cateto, revisame la logica del algoritmo.",talk
+"Marcos nunca comenta su codigo.",think
+"Kateto, armame un esquema del proyecto.",talk
+"Cateto, recordame que tengo pendiente.",talk
+"Teto, dame ideas para mejorar el UX.",talk
+"Teto, como funciona este modulo?",talk
+"Hay mucho ruido afuera.",think
+"Necesito que alguien revise la API publica.",think
+"Alguien tiene el diagrama de arquitectura?",think
+"Resumime lo que hablamos ayer.",talk
+"Teto, revisame la logica del algoritmo.",talk
+"Kateto, esto no es lo que esperaba.",talk
+"No olvidar la reunion de las tres.",think
+"Papa, me ayudarias a pintar?",think
+"Teto, analizame este codigo.",talk
+"Necesito que alguien actualice la doc tecnica.",think
+"Tengo que mantener la curiosidad viva.",think
+"Che Florencia, probaste el cafe nuevo?",think
+"Necesito que alguien revise los logs de error.",think
+"Teto, buenas tardes, necesito ayuda.",talk
+"Escribime un slogan catchy.",talk
+"No olvidar hacer el backup.",think
+"Isabella, necesito que me expliques la arquitectura.",think
+"Hermano, como va el trabajo?",think
+"Necesito que alguien revise el pipeline de CI.",think
+"Diego siempre propone soluciones creativas.",think
+"Carlos siempre rompe el build.",think
+"Teto, que tarea hago ahora?",talk
+"Teto, revisa bien antes de responder.",talk
+"Diego, me ayudarias a pintar la pared?",think
+"Claudia, vamos a tomar un cafe?",think
+"Teto, me orientas con este diseño?",talk
+"Kateto, cual seria tu consejo?",talk
+"Teto, cual es el siguiente paso?",talk
+"Cateto, eso no es lo que pedi.",talk
+"Kateto, como abordarias esta situacion?",talk
+"Teto, cual es la mejor practica?",talk
+"Kasane Teto, inventame un ejemplo practico.",talk
+"Kateto, hola, tenes un minuto?",talk
+"Que alivio, ya lo arregle.",think
+"Marcos nunca responde los mensajes.",think
+"Juan nunca hace los tests unitarios.",think
+"Me pregunto cuantas lineas de codigo llevo.",think
+"Tengo que acordarme de enviar el email.",think
+"Sintetizame los puntos clave.",talk
+"Aaaaa, ya entendi como funciona.",think
+"Como podria hacer esto...",think
+"Analizame los logs del servidor.",talk
+"Santiago, pasame el diagrama de flujo.",think
+"Me siento perdido en este codigo.",think
+"Me das una mano con esto?",talk
+"Cateto, preparame un informe detallado.",talk
+"Quizas deberia consultar a alguien.",think
+"Hermano, me pasas las herramientas?",think
+"Cateto, que onda, todo listo?",talk
+"Tal vez deberia usar otro lenguaje.",think
+"Teto, buenas, arrancamos?",talk
+"Explicame el concepto de base.",talk
+"Quizas deberia automatizar los backups.",think
+"Papa, me ayudarias a mudar el sofa?",think
+"Esto es un misterio total.",think
+"Kasane Teto, revisa bien antes de responder.",talk
+"Esto me esta haciendo crecer como dev.",think
+"Alguien tiene el backup de ayer?",think
+"Marcos, vamos a tomar algo despues?",think
+"Como lo harias vos?",talk
+"Alguien puede optimizar el build pipeline?",think
+"Esto me esta generando mucha ansiedad.",think
+"Mama, como esta el gato?",think
+"Paula, que me decis de la peli nueva?",think
+"Cateto, che, como va todo?",talk
+"Kasane Teto, analizame la complejidad.",talk
+"Kateto, que framework me recomendas?",talk
+"Kateto, explicame la diferencia entre ambos.",talk
+"Ya entiendo el flujo completo.",think
+"Sofia, vamos al parque esta tarde?",think
+"Valentina, pasame las metricas del mes.",think
+"Kateto, eso no es lo que pedi.",talk
+"Lucia es muy paciente con los juniors.",think
+"Alguien puede hacer el deploy de urgencia?",think
+"Me da curiosidad ver los benchmarks.",think
+"Tomas, que me decis del partido?",think
+"Teto, dame lo mas importante de esto.",talk
+"Que alguien me ayude con la configuracion del cache.",think
+"Papa, me ayudarias con la compu?",think
+"Se fue el wifi de nuevo.",think
+"Kateto, analizame los datos del archivo.",talk
+"Dame un resumen del proyecto.",talk
+"Kasane Teto, evaluame el rendimiento de esto.",talk
+"Llego la notificacion del build.",think
+"Cateto, que significa este mensaje?",talk
+"El build paso todos los tests.",think
+"Cuantas lineas tiene el archivo?",talk
+"Preparame un informe detallado.",talk
+"Juan es muy bueno resolviendo problemas.",think
+"Hermana, como te va en la facu?",think
+"Kasane Teto, analizame los logs del servidor.",talk
+"Sera que necesito mas recursos?",think
+"Que alguien me ayude con la migracion.",think
+"Teto, cual seria tu consejo?",talk
+"Kasane Teto, como lo harias vos?",talk
+"Pedro, ayudame con la configuracion del server.",think
+"Ana es muy buena con los deadlines.",think
+"Teto, donde esta el error en el codigo?",talk
+"No tengo la menor idea.",think
+"Kasane Teto, hola, como estas hoy?",talk
+"Que pasara si el servidor se cae?",think
+"Kateto, cual es el siguiente paso?",talk
+"Tengo que dejar de compararme.",think
+"Cateto, buenas, todo bien?",talk
+"Pasame esto a espanol.",talk
+"Que alguien me pase las credenciales del server.",think
+"Lucia siempre entrega antes del deadline.",think
+"Comparame las bases de datos.",talk
+"Marta, pasame el reporte de testing.",think
+"Cateto, haceme un analisis rapido.",talk
+"Armame un cronograma.",talk
+"Cateto, el resultado no es correcto.",talk
+"Kasane Teto, creame una analogia explicativa.",talk
+"Diego siempre quiere refactorizar todo.",think
+"Che Marta, como va la relacion?",think
+"Voy a leer la documentacion oficial.",think
+"Necesito que alguien haga el testing.",think
+"Kateto, armame un cronograma.",talk
+"Buenas tardes, necesito ayuda.",talk
+"Lucia es muy buena explicando conceptos.",think
+"Necesito que alguien haga el backup urgente.",think
+"Lucia, pasame el analisis de rendimiento.",think
+"Sera que estoy usando la libreria correcta?",think
+"Lucia es la mejor desarrolladora del equipo.",think
+"Kateto, hola, tengo una consulta.",talk
+"Que es lo mas urgente?",talk
+"Kateto, revisame la logica del algoritmo.",talk
+"Sofia, nos vemos en la cancha el sabado?",think
+"Cateto, crea un plan de accion.",talk
+"Necesito repasar los conceptos basicos.",think
+"Laura, me prestas el cargador?",think
+"Kateto, revisa bien antes de responder.",talk
+"Sofia, terminaste la tarea que te pedi?",think
+"Hermano, me pasas el numero del plomero?",think
+"Como se configura esto?",talk
+"Laura, pasame el roadmap actualizado.",think
+"Mama, cuando venis a visitarme?",think
+"Haceme un analisis rapido.",talk
+"Alguien puede hacer code review?",think
+"Necesito mantener la motivacion alta.",think
+"Necesito disfrutar el proceso.",think
+"Tengo que entender el contexto completo.",think
+"Me estoy dando cuenta de mis limites.",think
+"Juan, como va la implementacion del cache?",think
+"Che Fernando, me pasas la playlist?",think
+"Necesito establecer prioridades claras.",think
+"Cateto, hola, tenes un minuto?",talk
+"Cateto, que hace esta funcion exactamente?",talk
+"Que hace esta funcion exactamente?",talk
+"Me da curiosidad como lo hicieron.",think
+"Necesito organizar mis ideas.",think
+"Esto me supera completamente.",think
+"Me pregunto cuanto tardara.",think
+"Cateto, explicame el concepto de base.",talk
+"Teto, crea un plan de accion.",talk
+"Revisa bien antes de responder.",talk
+"Cateto, buenas, arrancamos?",talk
+"Que lindo dia para programar.",think
+"Ana es la que mas horas trabaja.",think
+"Ya lo tengo, era mas simple.",think
+"Necesito conectar los puntos.",think
+"Hermana, nos juntamos a cocinar?",think
+"Recordar actualizar las dependencias.",think
+"Ana es muy perfeccionista con el diseño.",think
+"Dame ideas para el nombre del proyecto.",talk
+"Cateto, condensame toda esta info.",talk
+"Che Nicolas, que plan para el viernes?",think
+"Teto, revisame la arquitectura.",talk
+"Kasane Teto, que enfoque me sugieres?",talk
+"Kateto, como se usa esta herramienta?",talk
+"No olvidar hacer los tests.",think
+"Teto, explicame en pocas palabras.",talk
+"Me estoy volviendo mas eficiente.",think
+"Teto, explicame el concepto de base.",talk
+"Esto me esta agotando mentalmente.",think
+"Martin, explicame como funciona tu modulo.",think
+"Marcos nunca sigue las convenciones.",think
+"Kateto, que onda, todo listo?",talk
+"Fernando, como va la migracion de datos?",think
+"Que me falta para terminar?",talk
+"Crea un plan de accion.",talk
+"El aire acondicionado no anda.",think
+"Esto me esta abriendo nuevas puertas.",think
+"Tengo que analizar la situacion.",think
+"Necesito un plan mas estructurado.",think
+"Teto, escribime un slogan catchy.",talk
+"Sera que necesito un CDN?",think
+"Cateto, como se usa esta herramienta?",talk
+"Papa, me explicarias como se poda?",think
+"Claro, por eso fallaba antes.",think
+"Kasane Teto, hola, podemos empezar?",talk
+"Alguien tiene la clave del staging?",think
+"Kateto, explicame con un ejemplo.",talk
+"Teto, que onda, todo listo?",talk
+"Kateto, cual es la mejor practica?",talk
+"Alguien tiene la configuracion nueva del nginx?",think
+"Que alguien me explique la logica de negocio.",think
+"Matias, revisa la configuracion del CI/CD.",think
+"Tengo que reservar la sala.",think
+"Que frio hace en la oficina.",think
+"Teto, revisame el diseño de la API.",talk
+"Me quedo en blanco con esto.",think
+"Armame un esquema del proyecto.",talk
+"Tengo que aceptar que no se todo.",think
+"Teto, decime si hay errores aqui.",talk
+"Kasane Teto, explicame la diferencia entre ambos.",talk
+"Kateto, analizame este codigo.",talk
+"Alguien tiene el informe de incidentes?",think
+"Que alguien me pase el reporte mensual.",think
+"Donde esta el error en el codigo?",talk
+"Necesito ver el panorama general.",think
+"Escribime un dialogo corto.",talk
+"Maria no entiende nada de la arquitectura.",think
+"Kasane Teto, el resultado no es correcto.",talk
+"Decime el paso a paso.",talk
+"Sera mejor empezar de cero?",think
+"Papa, me explicarias como se usa esto?",think
+"Che Salvador, como va el emprendimiento?",think
+"Sera que necesito un message queue?",think
+"Kasane Teto, escribime un dialogo corto.",talk
+"Kasane Teto, que deberia hacer primero?",talk
+"Kasane Teto, escribi un blog sobre lo que dije.",talk
+"Me vuelve loco esta situacion.",think
+"Kasane Teto, eso no es lo que pedi.",talk
+"Kateto, buenas, todo bien?",talk
+"Tengo que evaluar los pros y contras.",think
+"Kasane Teto, decime por que pasa esto.",talk
+"El wifi anda re mal hoy.",think
+"Explicame la diferencia entre ambos.",talk
+"Tomas, como va el refactoring?",think
+"Voy a mapear las dependencias.",think
+"Kasane Teto, que significa este termino?",talk
+"Cateto, decime si hay errores aqui.",talk
+"Quizas el problema es de concurrencia.",think
+"Cateto, priorizame estas tareas.",talk
+"Que satisfaccion cuando compila.",think
+"Cateto, evaluame esta solucion.",talk
+"Que pasara si cambio la base de datos?",think
+"Teto, crea una lista de tareas pendientes.",talk
+"Kasane Teto, corregi el ultimo parrafo.",talk
+"Voy a hacer una pausa y respirar.",think
+"Kateto, hey, estas ahi?",talk
+"Teto, sintetizame los puntos clave.",talk
+"No comprendo que esta pasando.",think
+"Mama, me haces el pastel?",think
+"Mama, como va la jardinera?",think
+"Maria siempre propone buenas ideas.",think
+"Cateto, generame un documento con los datos.",talk
+"Cateto, revisame la arquitectura.",talk
+"Kasane Teto, explicame como funciona esto.",talk
+"Kateto, haceme un analisis rapido.",talk
+"Kasane Teto, donde esta el error en el codigo?",talk
+"Kasane Teto, preparame un informe detallado.",talk
+"Kateto, escribime una intro para el blog.",talk
+"Kateto, escribime un dialogo corto.",talk
+"Teto, explicame con un ejemplo.",talk
+"Teto, eso no es lo que pedi.",talk
+"Teto, que deberia hacer primero?",talk
+"Me estoy ahogando en detalles.",think
+"No entiendo por que tarda tanto.",think
+"Esto me esta sacando canas verdes.",think
+"Kasane Teto, que herramienta me conviene usar?",talk
+"Amanecio nublado hoy.",think
+"Que framework me recomendas?",talk
+"Asi que asi es la cosa...",think
+"Voy a descomponer el problema.",think
+"Ana, coordinemos la demo del viernes.",think
+"Claudia, probaste la app nueva?",think
+"Kasane Teto, que es lo mas urgente?",talk
+"Maria, como va el diseño de la base de datos?",think
+"Dame ideas para mejorar el UX.",talk
+"Cateto, resumime lo que hablamos ayer.",talk
+"Cateto, hola, tengo una consulta.",talk
+"Teto, escribime un dialogo corto.",talk
+"Cateto, esto no es lo que esperaba.",talk
+"Teto, resumime lo que hablamos ayer.",talk
+"Kasane Teto, resumime los cambios del ultimo commit.",talk
+"Mama, me ayudarias a organizar?",think
+"Me pregunto si puedo paralelizar esto.",think
+"Me estoy estresando de mas.",think
+"Kateto, como funciona este modulo?",talk
+"Ya me cierro el circulo.",think
+"Cateto, explicame en pocas palabras.",talk
+"Se reinicio el servidor solo.",think
+"Kateto, analizame los logs del servidor.",talk
+"Valentina, podemos pair programming un rato?",think
+"Teto, que es lo mas urgente?",talk
+"Necesito que alguien documente esto.",think
+"Kateto, que hace esta funcion exactamente?",talk
+"Laura, como resolviste ese bug?",think
+"Que pasara si el cliente cambia los requisitos?",think
+"Que significa este mensaje?",talk
+"Kateto, crea un plan de accion.",talk
+"Martin, necesitamos documentar los endpoints.",think
+"Ahora si me queda claro.",think
+"Cateto, analizame la complejidad.",talk
+"Quizas deberia probar otro enfoque.",think
+"Revisame la logica del algoritmo.",talk
+"Ya veo donde estaba el error.",think
+"Tengo que limpiar el codigo viejo.",think
+"Que me recomendas para este problema?",talk
+"Que sera de este proyecto en un año?",think
+"Ahora tiene sentido todo.",think
+"Teto, que framework me recomendas?",talk
+"Alguien puede revisar el PR?",think
+"Me da bronca no entender.",think
+"Juan siempre se equivoca con los commits.",think
+"No entiendo por que el build tarda tanto.",think
+"Cateto, armame un cronograma.",talk
+"Necesito que alguien revise los tests fallidos.",think
+"Teto, explicame la diferencia entre ambos.",talk
+"Teto, no entendiste bien la consigna.",talk
+"Kasane Teto, lo hiciste mal, deberia ser asi.",talk
+"Se cayo la base de datos.",think
+"Tengo que preparar la presentacion.",think
+"Mama, como te fue en el medico?",think
+"Kateto, me orientas con este diseño?",talk
+"Carlos es muy desprolijo con su codigo.",think
+"Kasane Teto, como se configura esto?",talk
+"Cateto, falta informacion en tu respuesta.",talk
+"Que bueno que guarde el borrador.",think
+"Carlos es muy lento con las tareas.",think
+"No me entra en la cabeza.",think
+"Kasane Teto, cual es el siguiente paso?",talk
+"Kasane Teto, priorizame estas tareas.",talk
+"Claro, tiene toda la logica.",think
+"Generame un documento con los datos.",talk
+"Kasane Teto, pasame el codigo corregido.",talk
+"No entiendo la configuracion del nginx.",think
+"Que alguien me pase las credenciales de AWS.",think
+"Cateto, analizame los datos del archivo.",talk
+"Esto no tiene ningun sentido.",think
+"Cateto, que es lo mas urgente?",talk
+"Hola, podemos empezar?",talk
+"Se corto la luz de nuevo.",think
+"No entiendo nada de esto.",think
+"Kateto, pasame las conclusiones principales.",talk
+"Cateto, explicame la diferencia entre ambos.",talk
+"Tengo que ser constante con esto.",think
+"Kasane Teto, que significa este mensaje?",talk
+"Cuando termina el sprint?",talk
+"Kateto, decime por que pasa esto.",talk
+"No se que hacer con esto.",think
+"Que alegria, por fin funciona!",think
+"Quizas deberia refactorizar el auth.",think
+"Cateto, armame un esquema del proyecto.",talk
+"Teto, hola, tengo una consulta.",talk
+"Organizame las tareas por prioridad.",talk
+"Que version estamos usando?",talk
+"Kateto, cuanto tiempo me queda para terminar?",talk
+"Kateto, sintetizame los puntos clave.",talk
+"Kasane Teto, cuanto tiempo me queda para terminar?",talk
+"Kasane Teto, hey, estas ahi?",talk
+"Kasane Teto, escribime un slogan catchy.",talk
+"Papa, cuando tenes tiempo hablamos?",think
+"Kateto, inventame un ejemplo practico.",talk
+"Cateto, decime que hago ahora.",talk
+"Kasane Teto, condensame toda esta info.",talk
+"Teto, que significa este mensaje?",talk
+"Cateto, pasame un extracto del informe.",talk
+"No se si vale la pena optimizar.",think
+"Se corto la internet de golpe.",think
+"Kateto, que tarea hago ahora?",talk
+"Necesito pensar esto bien...",think
+"Me re cago en todo esto.",think
+"Condensame toda esta info.",talk
+"Necesito pedir ayuda a alguien.",think
+"Mama, necesito que me ayudes con esto.",think
+"Teto, hola, tenes un minuto?",talk
+"Kasane Teto, sintetizame los puntos clave.",talk
+"Comparame los frameworks.",talk
+"Kateto, inventame una historia breve.",talk
+"Kateto, explicame en pocas palabras.",talk
+"Como hago para configurar esto?",talk
+"Alguien tiene acceso al servidor?",think
+"Kateto, que me falta para terminar?",talk
+"Kateto, creame una analogia explicativa.",talk
+"No logro descifrar el problema.",think
+"Teto, condensame toda esta info.",talk
+"Me da miedo tocar ese modulo.",think
+"Marcos es el que mas bugs introduce.",think
+"Kateto, analizame la complejidad.",talk
+"Teto, inventame un ejemplo practico.",talk
+"No me olvide de hacer code review.",think
+"Maria, como va el desarrollo del modulo?",think
+"Me tiene completamente confundido.",think
+"Tal vez el bug esta en otra parte.",think
+"Comparame estas dos opciones.",talk
+"Salvador, pasame el plan de contingencia.",think
+"Kasane Teto, armame un cronograma.",talk
+"Me estoy distrayendo con cualquier cosa.",think
+"Que alguien me pase las metricas del mes.",think
+"Teto, lo hiciste mal, deberia ser asi.",talk
+"Carlos nunca llega a tiempo a las reuniones.",think
+"Necesito que alguien optimice la query.",think
+"Cateto, por que falla el test?",talk
+"No me olvide de hacer el deploy.",think
+"Che Pedro, que me recomendas para leer?",think
+"Crea una lista de tareas pendientes.",talk
+"Cateto, hey, estas ahi?",talk
+"Necesito que alguien me de feedback.",think
+"Me encanta cuando sale a la primera.",think
+"Dame lo mas importante de esto.",talk
+"Kasane Teto, explicame el concepto de base.",talk
+"Kasane Teto, escribime una intro para el blog.",talk
+"Llego el paquete por fin.",think
+"Claudia, como te fue con el deploy?",think
+"Agustin, nos vemos en el cumple de Juan?",think
+"Papa, me explicarias la declaracion?",think
+"Cateto, decime por que pasa esto.",talk
+"Me pregunto si el API rate limit es suficiente.",think
+"Cateto, donde esta el error en el codigo?",talk
+"El perro esta ladrando mucho.",think
+"Cateto, corregi el ultimo parrafo.",talk
+"Teto, que herramienta me conviene usar?",talk
+"Kasane Teto, por que falla el test?",talk
+"Traducime esto al ingles.",talk
+"Tengo que celebrar los pequeños logros.",think
+"Cual es el siguiente paso?",talk
+"No entiendo el comportamiento del garbage collector.",think
+"Kateto, hola, podemos empezar?",talk
+"Camila, me ayudarias a mover el sofa?",think
+"Ana es muy detallista con la documentacion.",think
+"Tal vez la solucion es mas simple.",think
+"Hermana, me prestas tu auto?",think
+"Sofia, como va el monitoreo del sistema?",think
+"Marcos, nos juntamos a estudiar?",think
+"No se si el SSL esta bien configurado.",think
+"Teto, esto no es lo que esperaba.",talk
+"Che Lucia, como te fue en el examen?",think
+"Mama, me pasas la receta del guiso?",think
+"Esto me esta enseñando mucho.",think
+"Kasane Teto, que tarea hago ahora?",talk
+"Kasane Teto, que me falta para terminar?",talk
+"Kateto, preparame un informe detallado.",talk
+"Kateto, me das una mano con esto?",talk
+"Alguien tiene el plan de contingencia?",think
+"Teto, decime el paso a paso.",talk
+"Roberto, pasame el informe de incidentes.",think
+"Marcos, necesito tu opinion sobre el diseño.",think
+"Teto, me das una mano con esto?",talk
+"Teto, pasame el codigo corregido.",talk
+"Que alguien me pase el diagrama.",think
+"Kasane Teto, crea una lista de tareas pendientes.",talk
+"Kasane Teto, hola, tengo una consulta.",talk
+"Kasane Teto, dame ideas para el nombre del proyecto.",talk
+"Ana es muy buena con la comunicacion.",think
+"Kateto, cuantas lineas tiene el archivo?",talk
+"Que bronca, no me sale.",think
+"Teto, te equivocaste en la ultima respuesta.",talk
+"Kasane Teto, el formato esta mal, cambialo.",talk
+"Papa, como esta la salud?",think
+"Escribime un resumen de esto.",talk
+"Ya capte la logica detras.",think
+"Que mal esta el clima hoy.",think
+"Reflexionemos sobre esto un momento.",think
+"Gustavo, pasame los datos del sprint por favor.",think
+"Juan es el que mas sabe de DevOps.",think
+"Kasane Teto, decime que hago ahora.",talk
+"Esto me esta consumiendo toda la energia.",think
+"Me perdi completamente.",think
+"Tal vez el problema es otro.",think
+"Teto, ayudame a planificar el dia.",talk
+"Teto, analizame la complejidad.",talk
+"Necesito que alguien configure el CI.",think
+"Kasane Teto, haceme un analisis rapido.",talk
+"Kasane Teto, como se usa esta herramienta?",talk
+"Inventame una historia breve.",talk
+"Teto, que significa este termino?",talk
+"Carlos, nos juntamos el finde?",think
+"Mama, como te va con el curso?",think
+"Carlos, necesitamos mas cobertura de tests.",think
+"No tengo idea de por donde empezar.",think
+"Voy a razonar paso a paso.",think
+"Sera que necesito mas tests de integracion?",think
+"Cateto, escribime un poema corto.",talk
+"Kateto, ayudame a planificar el dia.",talk
+"Carlos, podemos hacer una reunion rapida?",think
+"No olvidar cerrar los issues.",think
+"Cateto, cuanto tiempo me queda para terminar?",talk
+"Comparame los pros y contras.",talk
+"Buenas, arrancamos con todo?",talk
+"Que onda, todo listo?",talk
+"Alguien puede hacer el refactoring del auth?",think
+"Cateto, no entendiste bien la consigna.",talk
+"El deploy fue exitoso por fin.",think
+"Teto, como se usa esta herramienta?",talk
+"Laura, como va tu proyecto personal?",think
+"Kasane Teto, resumime lo que hablamos ayer.",talk
+"Teto, cuanto tiempo me queda para terminar?",talk
+"Papa, me ayudarias con el jardin?",think
+"Cateto, que deberia hacer primero?",talk
+"Tengo que encontrar la raiz del asunto.",think
+"Kasane Teto, cual es la mejor practica?",talk
+"Cateto, inventame una historia breve.",talk
+"Necesito encontrar mi flow.",think
+"Analizame la complejidad.",talk
+"No se, me da que esto va a fallar.",think
+"Santiago, vamos a la feria el domingo?",think
+"El disco esta casi lleno.",think
+"Teto, preparame un informe detallado.",talk
+"Hey, estas ahi?",talk
+"Maria siempre ayuda a los compañeros.",think
+"Me da miedo hacer el deploy en viernes.",think
+"Kateto, priorizame estas tareas.",talk
+"Kasane Teto, buenas tardes, necesito ayuda.",talk
+"Quizas estoy complicando de mas.",think
+"Juan es muy bueno optimizando codigo.",think
+"Estoy re motivado con esto.",think
+"Necesito calmarme y pensar con cabeza fria.",think
+"Explicame con un ejemplo.",talk
+"Papa, como va la obra de la casa?",think
+"Mama, me haces las empanadas?",think
+"Nicolas, como va la optimizacion de queries?",think
+"Cual es mas rapido?",talk
+"Kateto, condensame toda esta info.",talk
+"Quizas deberia empezar con un prototipo.",think
+"Gustavo, me pasas el link del curso?",think
+"Marcos, podemos automatizar este proceso?",think
+"Priorizame estas tareas.",talk
+"Estoy re orgulloso del resultado.",think
+"Kasane Teto, dame lo mas importante de esto.",talk
+"Buenas, todo bien?",talk
+"Camila, pasame las credenciales del staging.",think
+"Me estoy perdiendo en el perfeccionismo.",think
+"Explicame como funciona esto.",talk
+"Quizas deberia usar Docker para esto.",think
+"Cateto, escribime un resumen de esto.",talk
+"Teto, buenas, todo bien?",talk
+"Tengo que identificar las variables.",think
+"Kateto, escribime un slogan catchy.",talk
+"Kateto, pasame un extracto del informe.",talk
+"Ayudame a planificar el dia.",talk
+"Kasane Teto, revisame la arquitectura.",talk
+"Che Maria, viste lo que paso ayer?",think
+"Recordame que tengo pendiente.",talk
+"Kasane Teto, revisame el diseño de la API.",talk
+"Marcos es muy critico con el codigo ajeno.",think
+"Me da curiosidad ver los resultados.",think
+"Cateto, dame ideas para mejorar el UX.",talk
+"Tengo que soltar y avanzar.",think
+"Que silencio, se fue todo el mundo.",think
+"Mama, me ayudarias a tejer?",think
+"Revisame la arquitectura.",talk
+"Kateto, dame ideas para el nombre del proyecto.",talk
+"Llego un email importante.",think
+"Teto, pasame las conclusiones principales.",talk
+"Cual conviene mas?",talk
+"Teto, resumime la documentacion.",talk
+"Necesito ser mas paciente conmigo.",think
+"Que alguien me pase el analisis de costos.",think
+"Roberto, actualiza la documentacion por favor.",think
+"Che Salvador, como andas?",think
+"Kateto, lo hiciste mal, deberia ser asi.",talk
+"Acordarme de pagar la suscripcion.",think
+"Kasane Teto, decime el paso a paso.",talk
+"Carlos nunca actualiza la documentacion.",think
+"Lucia es muy buena mentorando juniors.",think
+"Cateto, pasame el codigo corregido.",talk
+"Agustin, como va la integracion con la API?",think
+"Hay un parche de seguridad nuevo.",think
+"Che Roberto, como va todo por casa?",think
+"Teto, creame una analogia explicativa.",talk
+"Juan siempre tiene excusas para no entregar.",think
+"Kasane Teto, hola, tenes un minuto?",talk
+"Mama, como va la reunion de vecinos?",think
+"Me estoy adaptando bien al cambio.",think
+"Cual es mejor, A o B?",talk
+"Kasane Teto, explicame en pocas palabras.",talk
+"Esto me esta dando mucha experiencia.",think
+"Por que falla el test?",talk
+"Acordarme de responder los emails.",think
+"Alguien puede arreglar el bug del login?",think
+"No se si la arquitectura actual escala.",think
+"Teto, como abordarias esta situacion?",talk
+"Cateto, que me falta para terminar?",talk
+"Me pregunto cuantos usuarios hay.",think
+"Tengo que ser mas organizado.",think
+"Kasane Teto, cuantas lineas tiene el archivo?",talk
+"Que rabia, perdi todo el trabajo.",think
+"Cuanto tiempo me queda?",talk
+"El resultado no es correcto.",talk
+"Alguien tiene el schema actualizado?",think
+"Teto, analizame los datos del archivo.",talk
+"Que sera esto exactamente?",think
+"Cateto, resumime los cambios del ultimo commit.",talk
+"Necesito que alguien revise los permisos IAM.",think
+"Que significa este termino?",talk
+"Teto, analizame los logs del servidor.",talk
+"Kasane Teto, buenas, todo bien?",talk
+"Falta informacion en tu respuesta.",talk
+"Cateto, ayudame a planificar el dia.",talk
+"Tengo que revisar los logs manana.",think
+"Kasane Teto, cual es la mejor opcion?",talk
+"Kateto, donde esta el error en el codigo?",talk
+"Teto, decime que hago ahora.",talk
+"Tal vez deberia usar GraphQL.",think
+"Cateto, me das una mano con esto?",talk
+"Papa, cuando arreglamos lo del auto?",think
+"Cateto, que version estamos usando?",talk
+"Salvador, necesitamos que revises el informe antes de enviarlo.",think
+"Que alguien me ayude con el diseño grafico.",think
+"Kasane Teto, me orientas con este diseño?",talk
+"Cateto, el formato esta mal, cambialo.",talk
+"Pasame las conclusiones principales.",talk
+"Kateto, escribi un blog sobre lo que dije.",talk
+"Teto, cual es la mejor opcion?",talk
+"Che Martin, me contas de tu nuevo laburo?",think
+"Kateto, generame un documento con los datos.",talk
+"Kateto, decime que hago ahora.",talk
+"Andres, revisa el codigo que te comparti.",think
+"Teto, haceme un analisis rapido.",talk
+"Kateto, explicame como funciona esto.",talk
+"Valentina, me ayudarias a armar el mueble?",think
+"Que alguien me pase el roadmap del Q2.",think
+"Corregi el ultimo parrafo.",talk
+"Kateto, dame un resumen del proyecto.",talk
+"Que enfoque me sugieres?",talk
+"Teto, organizame las tareas por prioridad.",talk
+"Tal vez estoy sobre-pensando esto.",think
+"Teto, genera un resumen ejecutivo.",talk
+"Kateto, decime el paso a paso.",talk
+"Sera que vale la pena refactorizar?",think
+"Kasane Teto, evaluame esta solucion.",talk
+"Cateto, dame ideas para el nombre del proyecto.",talk
+"Paula, como va la migracion a microservicios?",think
+"Kateto, dame ideas para mejorar el UX.",talk
+"Necesito desconectar un rato.",think
+"Necesito enfocarme en una cosa a la vez.",think
+"Maria se olvida de hacer los tests.",think
+"Tal vez deberia implementar caching.",think
+"Cateto, que tarea hago ahora?",talk
+"Acordarme de documentar los cambios.",think
+"Que tarea deberia hacer primero?",talk
+"Maria es muy creativa con las soluciones.",think
+"Diego no para de hablar en las reuniones.",think
+"Esto me esta cambiando la perspectiva.",think
+"Kateto, buenas tardes, necesito ayuda.",talk
+"Cateto, que significa este termino?",talk
+"Kateto, como se configura esto?",talk
+"Carlos, vamos a caminar un rato?",think
+"Mama, como va todo en casa?",think
+"Kateto, che, como va todo?",talk
+"Cateto, hola, podemos empezar?",talk
+"Que alguien me explique el error del build.",think
+"Andres, nos juntamos a jugar a la play?",think
+"Lucia es muy organizada con su trabajo.",think
+"Kateto, como lo harias vos?",talk
+"Che Ana, que onda con tu vecino?",think
+"Necesito que alguien revise el modulo de pagos.",think
+"Kateto, corregi el ultimo parrafo.",talk
+"Kateto, el formato esta mal, cambialo.",talk
+"Kateto, falta informacion en tu respuesta.",talk
+"Kasane Teto, armame un esquema del proyecto.",talk
+"Teto, el resultado no es correcto.",talk
+"Teto, evaluame esta solucion.",talk
+"Kasane Teto, cuando termina el sprint?",talk
+"Teto, cuantas lineas tiene el archivo?",talk
+"Voy a desglosar el problema.",think
+"Kateto, pasame el codigo corregido.",talk
+"Hermana, me cuidas a los chicos?",think
+"Kasane Teto, como funciona este modulo?",talk
+"Ana no para de quejarse del codigo.",think
+"Kasane Teto, buenas, arrancamos?",talk
+"Hermano, nos juntamos el finde?",think
+"Sera que necesito monitoreo 24/7?",think
+"Ahora comprendo la arquitectura.",think
+"Hermana, me ayudarias con la mudanza?",think
+"Cateto, organizame las tareas por prioridad.",talk
+"Diego, como va la refactorizacion del auth?",think
+"Que significa este error raro?",think
+"Analicemos cada parte por separado.",think
+"Hola, tengo una consulta.",talk
+"Cateto, como funciona este modulo?",talk
+"La CPU esta al ciento por ciento.",think
+"Kateto, que herramienta me conviene usar?",talk
+"Cateto, evaluame el rendimiento de esto.",talk
+"Necesito repasar los apuntes del curso.",think
+"Daniela, como resolviste el problema de CORS?",think
+"Teto, dame un resumen del proyecto.",talk
+"Escribime una intro para el blog.",talk
+"Che Maria, que me recomendas para ver?",think
+"Kateto, revisame el diseño de la API.",talk
+"No se si es el momento correcto.",think
+"Analizame los datos del archivo.",talk
+"Teto, escribime un resumen de esto.",talk
+"Necesito que alguien revise el schema GraphQL.",think
+"Cateto, pasame las conclusiones principales.",talk
+"Teto, recordame que tengo pendiente.",talk
+"Diego siempre encuentra los bugs primero.",think
+"Mejor lo dejo para manana con cabeza fresca.",think
+"Papa, como va la huerta?",think
+"El servidor esta muy lento.",think
+"Se termino el espacio en disco.",think
+"Ana es muy buena detectando problemas.",think
+"Kateto, crea una lista de tareas pendientes.",talk
+"Che Lucia, como te va con la dieta?",think
+"Me estoy exigiendo demasiado.",think
+"Kateto, evaluame esta solucion.",talk
+"Evaluame el rendimiento de esto.",talk
+"Marcos nunca hace pair programming.",think
+"Cateto, creame una analogia explicativa.",talk
+"Kasane Teto, recordame que tengo pendiente.",talk
+"Che Martin, como esta tu perro?",think
+"Carlos es muy desorganizado con sus tareas.",think
+"Kasane Teto, genera un resumen ejecutivo.",talk
+"Que diferencias hay entre ambos?",talk
+"Cateto, lo hiciste mal, deberia ser asi.",talk
+"Kasane Teto, dame ideas para mejorar el UX.",talk
+"Kasane Teto, decime si hay errores aqui.",talk
+"No puedo creer que pase esto.",think
+"Debo considerar todas las opciones.",think
+"Kasane Teto, pasame un extracto del informe.",talk
+"Kasane Teto, crea un plan de accion.",talk
+"Que pasara si lo pruebo en produccion?",think
+"Escribime un poema corto.",talk
+"Papa, me ayudarias con la tablet?",think
+"Che Daniela, me ayudarias con la compu?",think
+"Que desesperacion, no avanza.",think
+"Pasame el codigo corregido.",talk
+"Kasane Teto, te equivocaste en la ultima respuesta.",talk
+"Que herramienta me conviene usar?",talk
+"Kasane Teto, que onda, todo listo?",talk
+"Kasane Teto, escribime un poema corto.",talk
+"No doy mas con este codigo.",think
+"Alguien que me explique como funciona esto.",think
+"Quizas deberia tomar un descanso.",think
+"La memoria RAM esta al limite.",think
+"Mama, como esta la abuela?",think
+"Claudia, revisa la politica de backups.",think
+"Cateto, crea una lista de tareas pendientes.",talk
+"Kateto, explicame el concepto de base.",talk
+"El monitor parpadea seguido.",think
+"Que frustracion, nada funciona.",think
+"Creame una metafora para esto.",talk
+"Como se usa esta herramienta?",talk
+"Kateto, dame lo mas importante de esto.",talk
+"Cateto, te equivocaste en la ultima respuesta.",talk
+"Hermana, nos juntamos a tomar mate?",think
+"Kasane Teto, resumime la documentacion.",talk
+"Kateto, cual es la mejor opcion?",talk
+"Teto, dame ideas para el nombre del proyecto.",talk
+"Maria es muy buena liderando el equipo.",think
+"Cateto, decime el paso a paso.",talk
+"Teto, falta informacion en tu respuesta.",talk
+"Teto, armame un cronograma.",talk
+"Kateto, organizame las tareas por prioridad.",talk
+"Kasane Teto, como abordarias esta situacion?",talk
+"Cateto, hola, como estas hoy?",talk
+"Teto, hola, podemos empezar?",talk
+"Kateto, genera un resumen ejecutivo.",talk
+"Recordar revisar el pull request.",think
+"Kateto, cuando termina el sprint?",talk
+"Kateto, decime si hay errores aqui.",talk
+"Cateto, escribi un blog sobre lo que dije.",talk
+"Pedro, revisa la configuracion de seguridad.",think
+"Teto, escribime un poema corto.",talk
+"Che, como va todo?",talk
+"Papa, como va el asado del finde?",think
+"Cateto, escribime un slogan catchy.",talk
+"Hermano, pasame eso por favor.",think
+"Cateto, genera un resumen ejecutivo.",talk
+"Teto, evaluame el rendimiento de esto.",talk
+"Me da curiosidad ver las estadisticas.",think
+"Teto, que enfoque me sugieres?",talk
+"Tengo que dejar el celular y concentrarme.",think
+"Cateto, dame un resumen del proyecto.",talk
+"Kasane Teto, que framework me recomendas?",talk
+"Cateto, creame una metafora para esto.",talk
+"Teto, escribime una intro para el blog.",talk
+"Cateto, como abordarias esta situacion?",talk
+"Teto, por que falla el test?",talk
+"Cateto, cual es la mejor practica?",talk
+"Explicame en pocas palabras.",talk
+"Kasane Teto, revisame la logica del algoritmo.",talk
+"Che Nicolas, como te va con el curso?",think
+"Cateto, cual es el siguiente paso?",talk
+"Tal vez deberia buscar en Stack Overflow.",think
+"Cual es la mejor practica?",talk
+"Cateto, sintetizame los puntos clave.",talk
+"Julieta, podemos optimizar esta query?",think
+"Juan siempre llega tarde al standup.",think
+"Teto, decime por que pasa esto.",talk
+"Me estoy volviendo paranoico con esto.",think
+"Kasane Teto, esto no es lo que esperaba.",talk
+"Kasane Teto, ayudame a planificar el dia.",talk
+"Esto me esta mostrando mis fortalezas.",think
+"Comparame Python con JavaScript.",talk
+"Tengo que planificar el sprint.",think
+"Che Fernando, como te va con el gimnasio?",think
+"Kateto, no entendiste bien la consigna.",talk
+"Kasane Teto, cual seria tu consejo?",talk
+"Que calor, no se puede trabajar.",think
+"Como abordarias esta situacion?",talk
+"Teto, hey, estas ahi?",talk
+"Kateto, creame una metafora para esto.",talk
+"Hermana, me cuidas al perro un rato?",think
+"Cateto, como se configura esto?",talk
+"Kasane Teto, pasame las conclusiones principales.",talk
+"Camila, revisa el pipeline de deployment.",think
+"Che Ana, probaste el restaurante nuevo?",think
+"Cateto, escribime una intro para el blog.",talk
+"Juan es muy bueno con la arquitectura.",think
+"Sera que necesito un load balancer?",think
+"Papa, como va el proyecto del garage?",think
+"Kasane Teto, escribime un resumen de esto.",talk
+"Kasane Teto, organizame las tareas por prioridad.",talk
+"Papa, nos vemos el domingo?",think
+"Kateto, que deberia hacer primero?",talk
+"Me pregunto si hay un atajo.",think
+"Papa, me pasas el contacto del electricista?",think
+"Me estoy volviendo mas creativo.",think
+"El proyecto compilo a la primera.",think
+"Diego, me contas que onda con tu laburo?",think
+"Tengo que hacer la demo el viernes.",think
+"Que paz cuando todo anda bien.",think
+"Evaluame esta solucion.",talk
+"Hay un olor raro en la cocina.",think
+"Teto, que hace esta funcion exactamente?",talk
+"Cateto, cual seria tu consejo?",talk
+"Teto, explicame como funciona esto.",talk
+"Me pregunto si funcionara...",think
+"Cateto, explicame como funciona esto.",talk
+"Teto, que version estamos usando?",talk
+"Lucia, actualizame el estado del proyecto.",think
+"Kateto, que significa este termino?",talk
+"Kasane Teto, generame un documento con los datos.",talk
+"Kateto, hola, como estas hoy?",talk
+"Kasane Teto, no entendiste bien la consigna.",talk
+"Kasane Teto, me das una mano con esto?",talk
+"Alguien puede mejorar la UX del dashboard?",think
+"Nicolas, revisa los logs del servidor.",think
+"Teto, resumime los cambios del ultimo commit.",talk
+"Kateto, el resultado no es correcto.",talk
+"Diego, revisa el PR que te mande ayer.",think
+"Que placer ver los tests en verde.",think
+"Kateto, escribime un resumen de esto.",talk
+"Revisame el diseño de la API.",talk
+"Esto es como chino mandarin.",think
+"No se, me da mala espina.",think
+"El cafe se termino.",think
+"Que pasara si lo cambio todo?",think
+"Paula, necesitamos hablar del deadline.",think
+"Que miedo de romper todo.",think
+"Teto, creame una metafora para esto.",talk
+"Kateto, que version estamos usando?",talk
+"Kateto, revisame la arquitectura.",talk
+"Me tiene podrido este bug.",think
+"Marcos es un genio con las bases de datos.",think
+"Teto, que me falta para terminar?",talk
+"Analizame este codigo.",talk
+"Ahora si, todo encaja perfecto.",think
+"Que pasara si falla en produccion?",think
+"Teto, priorizame estas tareas.",talk
+"Que alguien me pase los logs del sistema.",think
+"Ahora veo el patron completo.",think
+"Cateto, que me recomendas para este problema?",talk
+"Tal vez sea mejor esperar.",think
+"Diego no documenta nada de su codigo.",think
+"Cateto, cuantas lineas tiene el archivo?",talk
+"Cateto, analizame los logs del servidor.",talk
+"Diego siempre quiere usar tecnologia nueva.",think
+"Teto, inventame una historia breve.",talk
+"Kateto, por que falla el test?",talk
+"Teto, cuando termina el sprint?",talk
+"No se por donde agarrarlo.",think
+"Cateto, como lo harias vos?",talk
+"Che Roberto, me contas de tu viaje?",think
+"Che Isabella, como te fue en la entrevista?",think
+"Teto, escribi un blog sobre lo que dije.",talk
+"Kateto, resumime los cambios del ultimo commit.",talk
+"Kasane Teto, analizame los datos del archivo.",talk
+"Hermano, me prestas la bici?",think
+"Cateto, explicame con un ejemplo.",talk
+"Esto me esta consumiendo demasiado tiempo.",think
+"Diego siempre quiere cambiar de framework.",think
+"Hola, tenes un minuto?",talk
+"Teto, pasame un extracto del informe.",talk
+"Hay una actualizacion pendiente.",think
+"Voy a tomar un cafe y vuelvo.",think
+"Llego el feedback del cliente.",think
+"Esta cayendo granizo afuera.",think
+"Teto, che, como va todo?",talk
+"Decime si hay errores aqui.",talk
+"Juan, pasame el acceso al repositorio.",think
