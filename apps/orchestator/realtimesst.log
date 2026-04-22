@@ -2026,3 +2026,543 @@ OSError: handle is closed
 2026-04-21 16:18:15.848 - RealTimeSTT: realtimestt - INFO - None
 2026-04-21 16:18:15.860 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
 2026-04-21 16:18:15.949 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method
+2026-04-22 18:10:10.894 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-22 18:10:10.899 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-22 18:10:10.899 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-22 18:10:10.899 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-22 18:10:10.899 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-22 18:10:10.899 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-22 18:10:11.311 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 28
+2026-04-22 18:10:11.311 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 28: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:10:11.312 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 28 is 44100
+2026-04-22 18:10:11.312 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 28: [16000, 44100]
+2026-04-22 18:10:11.312 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-22 18:10:11.312 - RealTimeSTT: realtimestt - DEBUG - Found 35 total audio devices on the system.
+2026-04-22 18:10:11.312 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 3, 10, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34]
+2026-04-22 18:10:11.312 - RealTimeSTT: realtimestt - DEBUG - Validating device index 28 with info: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:10:11.390 - RealTimeSTT: realtimestt - ERROR - Error initializing Silero VAD voice activity detection engine: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1503, in load_library
+    ctypes.CDLL(path)
+    ~~~~~~~~~~~^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 361, in __init__
+    self._handle = self._load_library(name, mode, handle, winmode)
+                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 401, in _load_library
+    return _dlopen(name, mode)
+OSError: libc10_cuda.so: cannot open shared object file: No such file or directory
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/RealtimeSTT/audio_recorder.py", line 922, in __init__
+    self.silero_vad_model, _ = torch.hub.load(
+                               ~~~~~~~~~~~~~~^
+        repo_or_dir="snakers4/silero-vad",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        onnx=silero_use_onnx
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 669, in load
+    model = _load_local(repo_or_dir, model, *args, **kwargs)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 699, in _load_local
+    hub_module = _import_module(MODULE_HUBCONF, hubconf_path)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 118, in _import_module
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1023, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/hubconf.py", line 6, in <module>
+    from silero_vad.utils_vad import (init_jit_model,
+    ...<5 lines>...
+                                      OnnxWrapper)
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/__init__.py", line 7, in <module>
+    from silero_vad.model import load_silero_vad
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/model.py", line 1, in <module>
+    from .utils_vad import init_jit_model, OnnxWrapper
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/utils_vad.py", line 2, in <module>
+    import torchaudio
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/__init__.py", line 7, in <module>
+    from . import _extension  # noqa  # usort: skip
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/__init__.py", line 30, in <module>
+    _IS_TORCHAUDIO_EXT_AVAILABLE = _load_lib("_torchaudio")
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/utils.py", line 56, in _load_lib
+    torch.ops.load_library(paths[0])
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1505, in load_library
+    raise OSError(f"Could not load this library: {path}") from e
+OSError: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+2026-04-22 18:10:11.418 - RealTimeSTT: realtimestt - DEBUG - Device index 28 successfully validated.
+2026-04-22 18:10:11.418 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 28, sample_rate=16000, chunk_size=1024
+2026-04-22 18:10:11.438 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 28, sample rate: 16000, chunk size: 1024)
+2026-04-22 18:10:11.438 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-22 18:10:12.531 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:13.558 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:14.582 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:15.605 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:16.628 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:17.652 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:18.676 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:19.699 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:20.723 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:21.747 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:33.610 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-22 18:10:33.614 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-22 18:10:33.614 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-22 18:10:33.614 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-22 18:10:33.614 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-22 18:10:33.614 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-22 18:10:33.746 - RealTimeSTT: realtimestt - ERROR - Error initializing Silero VAD voice activity detection engine: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1503, in load_library
+    ctypes.CDLL(path)
+    ~~~~~~~~~~~^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 361, in __init__
+    self._handle = self._load_library(name, mode, handle, winmode)
+                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 401, in _load_library
+    return _dlopen(name, mode)
+OSError: libc10_cuda.so: cannot open shared object file: No such file or directory
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/RealtimeSTT/audio_recorder.py", line 922, in __init__
+    self.silero_vad_model, _ = torch.hub.load(
+                               ~~~~~~~~~~~~~~^
+        repo_or_dir="snakers4/silero-vad",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        onnx=silero_use_onnx
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 669, in load
+    model = _load_local(repo_or_dir, model, *args, **kwargs)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 699, in _load_local
+    hub_module = _import_module(MODULE_HUBCONF, hubconf_path)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 118, in _import_module
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1023, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/hubconf.py", line 6, in <module>
+    from silero_vad.utils_vad import (init_jit_model,
+    ...<5 lines>...
+                                      OnnxWrapper)
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/__init__.py", line 7, in <module>
+    from silero_vad.model import load_silero_vad
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/model.py", line 1, in <module>
+    from .utils_vad import init_jit_model, OnnxWrapper
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/utils_vad.py", line 2, in <module>
+    import torchaudio
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/__init__.py", line 7, in <module>
+    from . import _extension  # noqa  # usort: skip
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/__init__.py", line 30, in <module>
+    _IS_TORCHAUDIO_EXT_AVAILABLE = _load_lib("_torchaudio")
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/utils.py", line 56, in _load_lib
+    torch.ops.load_library(paths[0])
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1505, in load_library
+    raise OSError(f"Could not load this library: {path}") from e
+OSError: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+2026-04-22 18:10:33.936 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 28
+2026-04-22 18:10:33.936 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 28: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:10:33.936 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 28 is 44100
+2026-04-22 18:10:33.936 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 28: [16000, 44100]
+2026-04-22 18:10:33.936 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-22 18:10:33.936 - RealTimeSTT: realtimestt - DEBUG - Found 35 total audio devices on the system.
+2026-04-22 18:10:33.936 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 3, 10, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34]
+2026-04-22 18:10:33.936 - RealTimeSTT: realtimestt - DEBUG - Validating device index 28 with info: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:10:34.041 - RealTimeSTT: realtimestt - DEBUG - Device index 28 successfully validated.
+2026-04-22 18:10:34.041 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 28, sample_rate=16000, chunk_size=1024
+2026-04-22 18:10:34.053 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 28, sample rate: 16000, chunk size: 1024)
+2026-04-22 18:10:34.053 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-22 18:10:35.158 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:36.185 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:37.208 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:38.231 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:39.255 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:40.278 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:41.303 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:42.326 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:43.350 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:44.374 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:45.398 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:46.422 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:47.446 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:48.470 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:49.494 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:50.518 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:51.542 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:52.566 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:53.590 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:54.614 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:55.638 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:56.662 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:57.686 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:58.710 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:10:59.734 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:14.152 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-22 18:11:14.156 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-22 18:11:14.156 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-22 18:11:14.156 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-22 18:11:14.156 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-22 18:11:14.157 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-22 18:11:14.538 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 28
+2026-04-22 18:11:14.538 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 28: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:11:14.538 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 28 is 44100
+2026-04-22 18:11:14.539 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 28: [16000, 44100]
+2026-04-22 18:11:14.539 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-22 18:11:14.539 - RealTimeSTT: realtimestt - DEBUG - Found 35 total audio devices on the system.
+2026-04-22 18:11:14.539 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 3, 10, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34]
+2026-04-22 18:11:14.539 - RealTimeSTT: realtimestt - DEBUG - Validating device index 28 with info: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:11:14.609 - RealTimeSTT: realtimestt - ERROR - Error initializing Silero VAD voice activity detection engine: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1503, in load_library
+    ctypes.CDLL(path)
+    ~~~~~~~~~~~^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 361, in __init__
+    self._handle = self._load_library(name, mode, handle, winmode)
+                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 401, in _load_library
+    return _dlopen(name, mode)
+OSError: libc10_cuda.so: cannot open shared object file: No such file or directory
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/RealtimeSTT/audio_recorder.py", line 922, in __init__
+    self.silero_vad_model, _ = torch.hub.load(
+                               ~~~~~~~~~~~~~~^
+        repo_or_dir="snakers4/silero-vad",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        onnx=silero_use_onnx
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 669, in load
+    model = _load_local(repo_or_dir, model, *args, **kwargs)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 699, in _load_local
+    hub_module = _import_module(MODULE_HUBCONF, hubconf_path)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 118, in _import_module
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1023, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/hubconf.py", line 6, in <module>
+    from silero_vad.utils_vad import (init_jit_model,
+    ...<5 lines>...
+                                      OnnxWrapper)
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/__init__.py", line 7, in <module>
+    from silero_vad.model import load_silero_vad
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/model.py", line 1, in <module>
+    from .utils_vad import init_jit_model, OnnxWrapper
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/utils_vad.py", line 2, in <module>
+    import torchaudio
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/__init__.py", line 7, in <module>
+    from . import _extension  # noqa  # usort: skip
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/__init__.py", line 30, in <module>
+    _IS_TORCHAUDIO_EXT_AVAILABLE = _load_lib("_torchaudio")
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/utils.py", line 56, in _load_lib
+    torch.ops.load_library(paths[0])
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1505, in load_library
+    raise OSError(f"Could not load this library: {path}") from e
+OSError: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+2026-04-22 18:11:14.650 - RealTimeSTT: realtimestt - DEBUG - Device index 28 successfully validated.
+2026-04-22 18:11:14.650 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 28, sample_rate=16000, chunk_size=1024
+2026-04-22 18:11:14.666 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 28, sample rate: 16000, chunk size: 1024)
+2026-04-22 18:11:14.666 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-22 18:11:15.763 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:16.789 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:17.813 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:18.836 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:19.859 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:20.883 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:21.907 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:22.931 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:23.955 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:24.979 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:26.003 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:27.027 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:28.051 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:29.075 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:30.099 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:31.123 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:32.147 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:33.171 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:34.195 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:35.219 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:36.243 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:37.267 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:11:38.291 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:12.673 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-22 18:45:12.678 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-22 18:45:12.678 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-22 18:45:12.678 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-22 18:45:12.678 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-22 18:45:12.678 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-22 18:45:12.806 - RealTimeSTT: realtimestt - ERROR - Error initializing Silero VAD voice activity detection engine: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1503, in load_library
+    ctypes.CDLL(path)
+    ~~~~~~~~~~~^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 361, in __init__
+    self._handle = self._load_library(name, mode, handle, winmode)
+                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 401, in _load_library
+    return _dlopen(name, mode)
+OSError: libc10_cuda.so: cannot open shared object file: No such file or directory
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/RealtimeSTT/audio_recorder.py", line 922, in __init__
+    self.silero_vad_model, _ = torch.hub.load(
+                               ~~~~~~~~~~~~~~^
+        repo_or_dir="snakers4/silero-vad",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        onnx=silero_use_onnx
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 669, in load
+    model = _load_local(repo_or_dir, model, *args, **kwargs)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 699, in _load_local
+    hub_module = _import_module(MODULE_HUBCONF, hubconf_path)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 118, in _import_module
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1023, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/hubconf.py", line 6, in <module>
+    from silero_vad.utils_vad import (init_jit_model,
+    ...<5 lines>...
+                                      OnnxWrapper)
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/__init__.py", line 7, in <module>
+    from silero_vad.model import load_silero_vad
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/model.py", line 1, in <module>
+    from .utils_vad import init_jit_model, OnnxWrapper
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/utils_vad.py", line 2, in <module>
+    import torchaudio
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/__init__.py", line 7, in <module>
+    from . import _extension  # noqa  # usort: skip
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/__init__.py", line 30, in <module>
+    _IS_TORCHAUDIO_EXT_AVAILABLE = _load_lib("_torchaudio")
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/utils.py", line 56, in _load_lib
+    torch.ops.load_library(paths[0])
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1505, in load_library
+    raise OSError(f"Could not load this library: {path}") from e
+OSError: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+2026-04-22 18:45:13.051 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 28
+2026-04-22 18:45:13.051 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 28: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:45:13.051 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 28 is 44100
+2026-04-22 18:45:13.051 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 28: [16000, 44100]
+2026-04-22 18:45:13.051 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-22 18:45:13.051 - RealTimeSTT: realtimestt - DEBUG - Found 35 total audio devices on the system.
+2026-04-22 18:45:13.052 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 3, 10, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34]
+2026-04-22 18:45:13.052 - RealTimeSTT: realtimestt - DEBUG - Validating device index 28 with info: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:45:13.153 - RealTimeSTT: realtimestt - DEBUG - Device index 28 successfully validated.
+2026-04-22 18:45:13.153 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 28, sample_rate=16000, chunk_size=1024
+2026-04-22 18:45:13.170 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 28, sample rate: 16000, chunk size: 1024)
+2026-04-22 18:45:13.170 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-22 18:45:14.270 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:21.088 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-22 18:45:21.093 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-22 18:45:21.093 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-22 18:45:21.094 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-22 18:45:21.094 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-22 18:45:21.094 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-22 18:45:21.166 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 28
+2026-04-22 18:45:21.166 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 28: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:45:21.166 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 28 is 44100
+2026-04-22 18:45:21.166 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 28: [16000, 44100]
+2026-04-22 18:45:21.166 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-22 18:45:21.166 - RealTimeSTT: realtimestt - DEBUG - Found 35 total audio devices on the system.
+2026-04-22 18:45:21.166 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 3, 10, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34]
+2026-04-22 18:45:21.166 - RealTimeSTT: realtimestt - DEBUG - Validating device index 28 with info: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:45:21.217 - RealTimeSTT: realtimestt - ERROR - Error initializing Silero VAD voice activity detection engine: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1503, in load_library
+    ctypes.CDLL(path)
+    ~~~~~~~~~~~^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 361, in __init__
+    self._handle = self._load_library(name, mode, handle, winmode)
+                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/.local/share/uv/python/cpython-3.13.12-linux-x86_64-gnu/lib/python3.13/ctypes/__init__.py", line 401, in _load_library
+    return _dlopen(name, mode)
+OSError: libc10_cuda.so: cannot open shared object file: No such file or directory
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/RealtimeSTT/audio_recorder.py", line 922, in __init__
+    self.silero_vad_model, _ = torch.hub.load(
+                               ~~~~~~~~~~~~~~^
+        repo_or_dir="snakers4/silero-vad",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        onnx=silero_use_onnx
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 669, in load
+    model = _load_local(repo_or_dir, model, *args, **kwargs)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 699, in _load_local
+    hub_module = _import_module(MODULE_HUBCONF, hubconf_path)
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/hub.py", line 118, in _import_module
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1023, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/hubconf.py", line 6, in <module>
+    from silero_vad.utils_vad import (init_jit_model,
+    ...<5 lines>...
+                                      OnnxWrapper)
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/__init__.py", line 7, in <module>
+    from silero_vad.model import load_silero_vad
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/model.py", line 1, in <module>
+    from .utils_vad import init_jit_model, OnnxWrapper
+  File "/home/chaos/.cache/torch/hub/snakers4_silero-vad_master/src/silero_vad/utils_vad.py", line 2, in <module>
+    import torchaudio
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/__init__.py", line 7, in <module>
+    from . import _extension  # noqa  # usort: skip
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/__init__.py", line 30, in <module>
+    _IS_TORCHAUDIO_EXT_AVAILABLE = _load_lib("_torchaudio")
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/_extension/utils.py", line 56, in _load_lib
+    torch.ops.load_library(paths[0])
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torch/_ops.py", line 1505, in load_library
+    raise OSError(f"Could not load this library: {path}") from e
+OSError: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/python3.13/site-packages/torchaudio/lib/_torchaudio.abi3.so
+2026-04-22 18:45:21.265 - RealTimeSTT: realtimestt - DEBUG - Device index 28 successfully validated.
+2026-04-22 18:45:21.265 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 28, sample_rate=16000, chunk_size=1024
+2026-04-22 18:45:21.278 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 28, sample rate: 16000, chunk size: 1024)
+2026-04-22 18:45:21.278 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-22 18:45:22.382 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:23.409 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:24.432 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:25.456 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:26.479 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:27.503 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:28.527 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:29.551 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:45:30.574 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:55:35.296 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-22 18:55:35.299 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-22 18:55:35.300 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-22 18:55:35.300 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-22 18:55:35.300 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-22 18:55:35.300 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-22 18:55:35.682 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 28
+2026-04-22 18:55:35.682 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 28: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:55:35.683 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 28 is 44100
+2026-04-22 18:55:35.683 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 28: [16000, 44100]
+2026-04-22 18:55:35.683 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-22 18:55:35.683 - RealTimeSTT: realtimestt - DEBUG - Found 35 total audio devices on the system.
+2026-04-22 18:55:35.683 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 3, 10, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34]
+2026-04-22 18:55:35.683 - RealTimeSTT: realtimestt - DEBUG - Validating device index 28 with info: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:55:35.787 - RealTimeSTT: realtimestt - DEBUG - Device index 28 successfully validated.
+2026-04-22 18:55:35.788 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 28, sample_rate=16000, chunk_size=1024
+2026-04-22 18:55:35.803 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 28, sample rate: 16000, chunk size: 1024)
+2026-04-22 18:55:35.803 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-22 18:55:36.039 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-22 18:55:36.043 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-22 18:55:36.043 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-22 18:55:36.120 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-22 18:55:36.121 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-22 18:55:36.121 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-22 18:55:36.121 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-22 18:55:36.121 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-22 18:55:36.899 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:55:37.926 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:55:38.950 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:55:39.973 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:55:40.996 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:55:42.020 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:55:43.044 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:58:27.320 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-22 18:58:27.324 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-22 18:58:27.324 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-22 18:58:27.324 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-22 18:58:27.324 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-22 18:58:27.324 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-22 18:58:27.660 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 28
+2026-04-22 18:58:27.660 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 28: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:58:27.660 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 28 is 44100
+2026-04-22 18:58:27.660 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 28: [16000, 44100]
+2026-04-22 18:58:27.660 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-22 18:58:27.660 - RealTimeSTT: realtimestt - DEBUG - Found 35 total audio devices on the system.
+2026-04-22 18:58:27.660 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 3, 10, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34]
+2026-04-22 18:58:27.660 - RealTimeSTT: realtimestt - DEBUG - Validating device index 28 with info: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 18:58:27.784 - RealTimeSTT: realtimestt - DEBUG - Device index 28 successfully validated.
+2026-04-22 18:58:27.784 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 28, sample_rate=16000, chunk_size=1024
+2026-04-22 18:58:27.865 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-22 18:58:27.865 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 28, sample rate: 16000, chunk size: 1024)
+2026-04-22 18:58:27.866 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-22 18:58:27.866 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-22 18:58:27.866 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-22 18:58:28.027 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-22 18:58:28.027 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-22 18:58:28.028 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-22 18:58:28.028 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-22 18:58:28.028 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-22 18:58:28.971 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:58:29.998 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:58:31.021 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:58:32.044 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:58:33.068 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:58:34.091 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:58:35.115 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 18:58:35.608 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in wait_audio, shutting down
+2026-04-22 18:58:35.608 - RealTimeSTT: realtimestt - DEBUG - Finishing recording thread
+2026-04-22 18:58:35.613 - RealTimeSTT: realtimestt - DEBUG - Terminating reader process
+2026-04-22 18:58:35.672 - RealTimeSTT: realtimestt - DEBUG - Terminating transcription process
+2026-04-22 18:58:35.672 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
+2026-04-22 18:58:35.771 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method
+2026-04-22 19:05:09.883 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-22 19:05:09.909 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-22 19:05:09.913 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-22 19:05:09.913 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-22 19:05:09.914 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-22 19:05:09.914 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-22 19:05:10.394 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 28
+2026-04-22 19:05:10.394 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 28: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 19:05:10.395 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 28 is 44100
+2026-04-22 19:05:10.395 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 28: [16000, 44100]
+2026-04-22 19:05:10.395 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-22 19:05:10.395 - RealTimeSTT: realtimestt - DEBUG - Found 34 total audio devices on the system.
+2026-04-22 19:05:10.395 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 3, 10, 17, 18, 19, 20, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33]
+2026-04-22 19:05:10.395 - RealTimeSTT: realtimestt - DEBUG - Validating device index 28 with info: {'index': 28, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-22 19:05:10.587 - RealTimeSTT: realtimestt - DEBUG - Device index 28 successfully validated.
+2026-04-22 19:05:10.587 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 28, sample_rate=16000, chunk_size=1024
+2026-04-22 19:05:10.589 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-22 19:05:10.590 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-22 19:05:10.590 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-22 19:05:10.614 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 28, sample rate: 16000, chunk size: 1024)
+2026-04-22 19:05:10.615 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-22 19:05:10.931 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-22 19:05:10.931 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-22 19:05:10.931 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-22 19:05:10.931 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-22 19:05:10.932 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-22 19:05:11.704 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 19:05:12.730 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 19:05:13.754 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-22 19:05:14.124 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in wait_audio, shutting down
+2026-04-22 19:05:14.124 - RealTimeSTT: realtimestt - DEBUG - Finishing recording thread
+2026-04-22 19:05:14.126 - RealTimeSTT: realtimestt - DEBUG - Terminating reader process
+2026-04-22 19:05:14.192 - RealTimeSTT: realtimestt - DEBUG - Terminating transcription process
+2026-04-22 19:05:14.192 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
+2026-04-22 19:05:14.284 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method

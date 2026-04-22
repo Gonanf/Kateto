@@ -1,0 +1,6 @@
+{
+  "name": "protos",
+  "scripts": {
+    "generate": "uv run python -m grpcio_tools.protoc -I . --python_out=python --pyi_out=python"
+  }
+}

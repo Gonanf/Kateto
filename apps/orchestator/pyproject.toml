@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
-dependencies = ["realtimestt[all]>=0.3.104", "ctranslate2==4.7.1"]
+dependencies = [
+    "realtimestt[all]>=0.3.104",
+    "ctranslate2==4.7.1",
+    "grpcio-tools>=1.80.0",
+    "grpcio>=1.80.0",
+]
 
 [tool.uv.sources]
 ctranslate2 = { path = "./wheels/ctranslate2-4.7.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }

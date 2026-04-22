@@ -4,14 +4,14 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "torch",
+    "torchaudio>=2.11.0",
+    "triton-rocm",
+]
 
 [tool.uv.workspace]
-members = [
-    "packages/classifier",
-    "packages/orchestator",
-    "packages/tts",
-]
+members = ["apps/classifier", "apps/orchestator", "apps/tts", "apps/protos"]
 
 [tool.uv]
 index-strategy = "unsafe-best-match"
@@ -22,4 +22,5 @@ url = "https://download.pytorch.org/whl/rocm7.2"
 
 [tool.uv.sources]
 torch = { index = "pytorch-rocm" }
+torchaudio = { index = "pytorch-rocm" }
 triton-rocm = { index = "pytorch-rocm" }
