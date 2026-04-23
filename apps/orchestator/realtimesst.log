@@ -2602,3 +2602,669 @@ OSError: Could not load this library: /home/chaos/proyectos/kateto/.venv/lib/pyt
 2026-04-22 20:51:52.513 - RealTimeSTT: realtimestt - INFO - None
 2026-04-22 20:51:52.531 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
 2026-04-22 20:51:52.628 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method
+2026-04-23 16:22:52.851 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:22:52.855 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:22:52.855 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:22:52.855 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:22:52.855 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:22:52.855 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:22:53.174 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 12
+2026-04-23 16:22:53.175 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 12: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:22:53.175 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 12 is 44100
+2026-04-23 16:22:53.175 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 12: [16000, 44100]
+2026-04-23 16:22:53.175 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:22:53.175 - RealTimeSTT: realtimestt - DEBUG - Found 20 total audio devices on the system.
+2026-04-23 16:22:53.175 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+2026-04-23 16:22:53.175 - RealTimeSTT: realtimestt - DEBUG - Validating device index 12 with info: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:22:53.281 - RealTimeSTT: realtimestt - DEBUG - Device index 12 successfully validated.
+2026-04-23 16:22:53.281 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 12, sample_rate=16000, chunk_size=1024
+2026-04-23 16:22:53.307 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 12, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:22:53.307 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:22:53.472 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-23 16:22:53.473 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-23 16:22:53.473 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-23 16:22:53.604 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-23 16:22:53.604 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-23 16:22:53.605 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:22:53.605 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:22:53.605 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:22:54.488 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:22:55.512 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:22:55.913 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in wait_audio, shutting down
+2026-04-23 16:22:55.913 - RealTimeSTT: realtimestt - DEBUG - Finishing recording thread
+2026-04-23 16:22:55.917 - RealTimeSTT: realtimestt - DEBUG - Terminating reader process
+2026-04-23 16:22:55.969 - RealTimeSTT: realtimestt - DEBUG - Terminating transcription process
+2026-04-23 16:22:56.020 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
+2026-04-23 16:22:56.090 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method
+2026-04-23 16:23:46.969 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:23:46.973 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:23:46.974 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:23:46.974 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:23:46.974 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:23:46.974 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:23:47.295 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 12
+2026-04-23 16:23:47.295 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 12: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:23:47.295 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 12 is 44100
+2026-04-23 16:23:47.295 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 12: [16000, 44100]
+2026-04-23 16:23:47.295 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:23:47.295 - RealTimeSTT: realtimestt - DEBUG - Found 20 total audio devices on the system.
+2026-04-23 16:23:47.295 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+2026-04-23 16:23:47.295 - RealTimeSTT: realtimestt - DEBUG - Validating device index 12 with info: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:23:47.538 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-23 16:23:47.539 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-23 16:23:47.539 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-23 16:23:47.542 - RealTimeSTT: realtimestt - DEBUG - Device index 12 successfully validated.
+2026-04-23 16:23:47.542 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 12, sample_rate=16000, chunk_size=1024
+2026-04-23 16:23:47.583 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 12, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:23:47.583 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:23:47.931 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-23 16:23:47.932 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-23 16:23:47.932 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:23:47.932 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:23:47.932 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:23:48.674 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:49.698 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:50.722 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:51.746 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:52.770 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:53.794 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:54.818 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:55.842 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:56.866 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:57.890 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:58.914 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:23:59.938 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:00.962 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:01.986 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:03.010 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:04.034 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:05.058 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:06.082 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:07.106 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:08.130 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:09.154 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:10.178 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:11.202 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:12.226 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:12.673 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in wait_audio, shutting down
+2026-04-23 16:24:12.673 - RealTimeSTT: realtimestt - DEBUG - Finishing recording thread
+2026-04-23 16:24:12.674 - RealTimeSTT: realtimestt - DEBUG - Terminating reader process
+2026-04-23 16:24:12.685 - RealTimeSTT: realtimestt - DEBUG - Terminating transcription process
+2026-04-23 16:24:12.763 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
+2026-04-23 16:24:12.853 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method
+2026-04-23 16:24:40.119 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:24:40.130 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:24:40.130 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:24:40.130 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:24:40.130 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:24:40.131 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:24:40.229 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 12
+2026-04-23 16:24:40.230 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 12: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:24:40.230 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 12 is 44100
+2026-04-23 16:24:40.230 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 12: [16000, 44100]
+2026-04-23 16:24:40.230 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:24:40.230 - RealTimeSTT: realtimestt - DEBUG - Found 20 total audio devices on the system.
+2026-04-23 16:24:40.230 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+2026-04-23 16:24:40.230 - RealTimeSTT: realtimestt - DEBUG - Validating device index 12 with info: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:24:40.346 - RealTimeSTT: realtimestt - DEBUG - Device index 12 successfully validated.
+2026-04-23 16:24:40.346 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 12, sample_rate=16000, chunk_size=1024
+2026-04-23 16:24:40.361 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 12, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:24:40.361 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:24:40.739 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-23 16:24:40.740 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-23 16:24:40.740 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-23 16:24:40.961 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-23 16:24:40.961 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-23 16:24:40.961 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:24:40.961 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:24:40.962 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:24:41.431 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:42.455 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:43.479 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:44.503 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:45.527 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:46.487 - RealTimeSTT: realtimestt - INFO - voice activity detected
+2026-04-23 16:24:46.487 - RealTimeSTT: realtimestt - INFO - recording started
+2026-04-23 16:24:46.487 - RealTimeSTT: realtimestt - INFO - State changed from 'listening' to 'recording'
+2026-04-23 16:24:46.488 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording stop
+2026-04-23 16:24:46.551 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:47.575 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:47.639 - RealTimeSTT: realtimestt - INFO - recording stopped
+2026-04-23 16:24:47.640 - RealTimeSTT: realtimestt - DEBUG - No samples removed, final audio length: 34816
+2026-04-23 16:24:47.640 - RealTimeSTT: realtimestt - INFO - State changed from 'recording' to 'inactive'
+2026-04-23 16:24:47.716 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'transcribing'
+2026-04-23 16:24:47.716 - RealTimeSTT: realtimestt - DEBUG - Adding transcription request, no early transcription started
+2026-04-23 16:24:47.717 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:24:47.817 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:24:47.917 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:24:48.018 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:24:48.118 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:24:48.218 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:24:48.248 - RealTimeSTT: realtimestt - INFO - State changed from 'transcribing' to 'inactive'
+2026-04-23 16:24:48.269 - RealTimeSTT: realtimestt - DEBUG - Model tiny completed transcription in 0.55 seconds
+2026-04-23 16:24:48.599 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:49.623 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:50.647 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:51.671 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:52.695 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:53.719 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:54.743 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:55.767 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:56.791 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:57.815 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:58.839 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:24:59.863 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:25:00.887 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:25:01.911 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:25:02.935 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:25:03.959 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:25:04.983 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:25:06.007 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:25:07.031 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:25:07.061 - RealTimeSTT: realtimestt - DEBUG - Debug: Caught exception in main try block
+2026-04-23 16:30:05.656 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:30:05.659 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:30:05.659 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:30:05.659 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:30:05.660 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:30:05.660 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:30:06.012 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 12
+2026-04-23 16:30:06.012 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 12: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:30:06.013 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 12 is 44100
+2026-04-23 16:30:06.013 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 12: [16000, 44100]
+2026-04-23 16:30:06.013 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:30:06.013 - RealTimeSTT: realtimestt - DEBUG - Found 20 total audio devices on the system.
+2026-04-23 16:30:06.013 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+2026-04-23 16:30:06.013 - RealTimeSTT: realtimestt - DEBUG - Validating device index 12 with info: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:30:06.106 - RealTimeSTT: realtimestt - DEBUG - Device index 12 successfully validated.
+2026-04-23 16:30:06.106 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 12, sample_rate=16000, chunk_size=1024
+2026-04-23 16:30:06.147 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 12, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:30:06.148 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:30:07.252 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:08.276 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:09.300 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:10.324 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:16.064 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:30:16.068 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:30:16.068 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:30:16.068 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:30:16.068 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:30:16.068 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:30:16.198 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 12
+2026-04-23 16:30:16.198 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 12: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:30:16.198 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 12 is 44100
+2026-04-23 16:30:16.198 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 12: [16000, 44100]
+2026-04-23 16:30:16.198 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:30:16.198 - RealTimeSTT: realtimestt - DEBUG - Found 21 total audio devices on the system.
+2026-04-23 16:30:16.199 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+2026-04-23 16:30:16.199 - RealTimeSTT: realtimestt - DEBUG - Validating device index 12 with info: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:30:16.286 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-23 16:30:16.287 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-23 16:30:16.287 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-23 16:30:16.300 - RealTimeSTT: realtimestt - DEBUG - Device index 12 successfully validated.
+2026-04-23 16:30:16.300 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 12, sample_rate=16000, chunk_size=1024
+2026-04-23 16:30:16.335 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 12, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:30:16.335 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:30:16.848 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-23 16:30:16.848 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-23 16:30:16.848 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:30:16.848 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:30:16.849 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:30:17.470 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:18.494 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:19.518 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:20.542 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:21.566 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:22.590 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:23.614 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:24.638 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:24.830 - RealTimeSTT: realtimestt - INFO - voice activity detected
+2026-04-23 16:30:24.830 - RealTimeSTT: realtimestt - INFO - recording started
+2026-04-23 16:30:24.830 - RealTimeSTT: realtimestt - INFO - State changed from 'listening' to 'recording'
+2026-04-23 16:30:24.830 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording stop
+2026-04-23 16:30:25.662 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:25.982 - RealTimeSTT: realtimestt - INFO - recording stopped
+2026-04-23 16:30:25.983 - RealTimeSTT: realtimestt - DEBUG - No samples removed, final audio length: 34816
+2026-04-23 16:30:25.983 - RealTimeSTT: realtimestt - INFO - State changed from 'recording' to 'inactive'
+2026-04-23 16:30:26.034 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'transcribing'
+2026-04-23 16:30:26.034 - RealTimeSTT: realtimestt - DEBUG - Adding transcription request, no early transcription started
+2026-04-23 16:30:26.034 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:30:26.135 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:30:26.235 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:30:26.335 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:30:26.436 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:30:26.536 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:30:26.586 - RealTimeSTT: realtimestt - INFO - State changed from 'transcribing' to 'inactive'
+2026-04-23 16:30:26.589 - RealTimeSTT: realtimestt - DEBUG - Model tiny completed transcription in 0.55 seconds
+2026-04-23 16:30:26.686 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:27.710 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:28.734 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:29.758 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:30.782 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:31.806 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:32.830 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:33.854 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:34.878 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:35.902 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:36.926 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:37.950 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:30:38.362 - RealTimeSTT: realtimestt - DEBUG - Debug: Caught exception in main try block
+2026-04-23 16:33:10.522 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:33:10.527 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:33:10.527 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:33:10.527 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:33:10.527 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:33:10.529 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:33:10.680 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 12
+2026-04-23 16:33:10.680 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 12: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:33:10.680 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 12 is 44100
+2026-04-23 16:33:10.680 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 12: [16000, 44100]
+2026-04-23 16:33:10.680 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:33:10.680 - RealTimeSTT: realtimestt - DEBUG - Found 20 total audio devices on the system.
+2026-04-23 16:33:10.680 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+2026-04-23 16:33:10.680 - RealTimeSTT: realtimestt - DEBUG - Validating device index 12 with info: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:33:10.784 - RealTimeSTT: realtimestt - DEBUG - Device index 12 successfully validated.
+2026-04-23 16:33:10.784 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 12, sample_rate=16000, chunk_size=1024
+2026-04-23 16:33:10.813 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 12, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:33:10.813 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:33:11.072 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-23 16:33:11.073 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-23 16:33:11.073 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-23 16:33:11.337 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-23 16:33:11.337 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-23 16:33:11.954 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:33:12.978 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:33:14.002 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:33:15.026 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:33:15.585 - RealTimeSTT: realtimestt - DEBUG - Debug: Caught exception in main try block
+2026-04-23 16:38:58.430 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:38:58.433 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:38:58.434 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:38:58.435 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:38:58.435 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:38:58.435 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:38:58.566 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 12
+2026-04-23 16:38:58.567 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 12: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:38:58.567 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 12 is 44100
+2026-04-23 16:38:58.567 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 12: [16000, 44100]
+2026-04-23 16:38:58.567 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:38:58.567 - RealTimeSTT: realtimestt - DEBUG - Found 20 total audio devices on the system.
+2026-04-23 16:38:58.567 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+2026-04-23 16:38:58.567 - RealTimeSTT: realtimestt - DEBUG - Validating device index 12 with info: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:38:58.663 - RealTimeSTT: realtimestt - DEBUG - Device index 12 successfully validated.
+2026-04-23 16:38:58.663 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 12, sample_rate=16000, chunk_size=1024
+2026-04-23 16:38:58.702 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 12, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:38:58.703 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:38:59.047 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-23 16:38:59.048 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-23 16:38:59.048 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-23 16:38:59.267 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-23 16:38:59.267 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-23 16:38:59.267 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:38:59.267 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:38:59.268 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:38:59.875 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:00.899 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:01.923 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:02.307 - RealTimeSTT: realtimestt - INFO - voice activity detected
+2026-04-23 16:39:02.307 - RealTimeSTT: realtimestt - INFO - recording started
+2026-04-23 16:39:02.307 - RealTimeSTT: realtimestt - INFO - State changed from 'listening' to 'recording'
+2026-04-23 16:39:02.308 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording stop
+2026-04-23 16:39:02.947 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:03.459 - RealTimeSTT: realtimestt - INFO - recording stopped
+2026-04-23 16:39:03.460 - RealTimeSTT: realtimestt - DEBUG - No samples removed, final audio length: 34816
+2026-04-23 16:39:03.460 - RealTimeSTT: realtimestt - INFO - State changed from 'recording' to 'inactive'
+2026-04-23 16:39:03.521 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'transcribing'
+2026-04-23 16:39:03.521 - RealTimeSTT: realtimestt - DEBUG - Adding transcription request, no early transcription started
+2026-04-23 16:39:03.521 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:39:03.622 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:39:03.723 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:39:03.823 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:39:03.923 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:39:03.971 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:04.024 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:39:04.075 - RealTimeSTT: realtimestt - INFO - State changed from 'transcribing' to 'inactive'
+2026-04-23 16:39:04.076 - RealTimeSTT: realtimestt - DEBUG - Model tiny completed transcription in 0.55 seconds
+2026-04-23 16:39:04.076 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:39:04.076 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:39:04.078 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:39:04.995 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:06.019 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:07.043 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:08.067 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:09.091 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:39:09.399 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in wait_audio, shutting down
+2026-04-23 16:39:09.399 - RealTimeSTT: realtimestt - DEBUG - Finishing recording thread
+2026-04-23 16:39:09.408 - RealTimeSTT: realtimestt - DEBUG - Terminating reader process
+2026-04-23 16:39:09.422 - RealTimeSTT: realtimestt - DEBUG - Terminating transcription process
+2026-04-23 16:39:09.491 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
+2026-04-23 16:39:09.581 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method
+2026-04-23 16:41:39.544 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:41:39.549 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:41:39.550 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:41:39.550 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:41:39.551 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:41:39.550 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:41:39.692 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 12
+2026-04-23 16:41:39.692 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 12: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:41:39.692 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 12 is 44100
+2026-04-23 16:41:39.692 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 12: [16000, 44100]
+2026-04-23 16:41:39.692 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:41:39.692 - RealTimeSTT: realtimestt - DEBUG - Found 20 total audio devices on the system.
+2026-04-23 16:41:39.692 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+2026-04-23 16:41:39.692 - RealTimeSTT: realtimestt - DEBUG - Validating device index 12 with info: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:41:39.792 - RealTimeSTT: realtimestt - DEBUG - Device index 12 successfully validated.
+2026-04-23 16:41:39.792 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 12, sample_rate=16000, chunk_size=1024
+2026-04-23 16:41:39.845 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 12, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:41:39.845 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:41:40.127 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-23 16:41:40.128 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-23 16:41:40.128 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-23 16:41:40.365 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-23 16:41:40.365 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-23 16:41:40.365 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:41:40.365 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:41:40.366 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:41:40.940 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:41.964 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:42.157 - RealTimeSTT: realtimestt - INFO - voice activity detected
+2026-04-23 16:41:42.157 - RealTimeSTT: realtimestt - INFO - recording started
+2026-04-23 16:41:42.157 - RealTimeSTT: realtimestt - INFO - State changed from 'listening' to 'recording'
+2026-04-23 16:41:42.157 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording stop
+2026-04-23 16:41:42.988 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:43.309 - RealTimeSTT: realtimestt - INFO - recording stopped
+2026-04-23 16:41:43.309 - RealTimeSTT: realtimestt - DEBUG - No samples removed, final audio length: 34816
+2026-04-23 16:41:43.309 - RealTimeSTT: realtimestt - INFO - State changed from 'recording' to 'inactive'
+2026-04-23 16:41:43.368 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'transcribing'
+2026-04-23 16:41:43.368 - RealTimeSTT: realtimestt - DEBUG - Adding transcription request, no early transcription started
+2026-04-23 16:41:43.368 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:41:43.469 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:41:43.569 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:41:43.670 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:41:43.770 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:41:43.870 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:41:43.914 - RealTimeSTT: realtimestt - INFO - State changed from 'transcribing' to 'inactive'
+2026-04-23 16:41:43.923 - RealTimeSTT: realtimestt - DEBUG - Model tiny completed transcription in 0.56 seconds
+2026-04-23 16:41:43.923 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:41:43.924 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:41:43.924 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:41:44.012 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:45.036 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:46.060 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:47.084 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:48.108 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:49.132 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:50.156 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:51.180 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:52.204 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:53.228 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:54.252 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:55.276 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:56.300 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:57.324 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:58.348 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:41:59.372 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:00.396 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:01.420 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:02.444 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:03.468 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:04.492 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:05.132 - RealTimeSTT: realtimestt - INFO - voice activity detected
+2026-04-23 16:42:05.132 - RealTimeSTT: realtimestt - INFO - recording started
+2026-04-23 16:42:05.132 - RealTimeSTT: realtimestt - INFO - State changed from 'listening' to 'recording'
+2026-04-23 16:42:05.132 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording stop
+2026-04-23 16:42:05.516 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:06.284 - RealTimeSTT: realtimestt - INFO - recording stopped
+2026-04-23 16:42:06.285 - RealTimeSTT: realtimestt - DEBUG - No samples removed, final audio length: 34816
+2026-04-23 16:42:06.285 - RealTimeSTT: realtimestt - INFO - State changed from 'recording' to 'inactive'
+2026-04-23 16:42:06.285 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'transcribing'
+2026-04-23 16:42:06.286 - RealTimeSTT: realtimestt - DEBUG - Adding transcription request, no early transcription started
+2026-04-23 16:42:06.286 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:42:06.386 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:42:06.487 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:42:06.540 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:06.587 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:42:06.687 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:42:06.788 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:42:06.838 - RealTimeSTT: realtimestt - INFO - State changed from 'transcribing' to 'inactive'
+2026-04-23 16:42:06.839 - RealTimeSTT: realtimestt - DEBUG - Model tiny completed transcription in 0.55 seconds
+2026-04-23 16:42:06.839 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:42:06.839 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:42:06.840 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:42:07.564 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:08.588 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:09.612 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:10.636 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:11.660 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:12.684 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:13.708 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:14.732 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:15.756 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:16.780 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:17.804 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:18.828 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:19.852 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:20.876 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:21.900 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:22.924 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:23.948 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:24.972 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:25.996 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:27.020 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:28.044 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:29.068 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:30.092 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:31.116 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:32.140 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:33.164 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:34.188 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:35.212 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:36.236 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:37.260 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:38.284 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:39.308 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:40.332 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:41.356 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:42.380 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:43.404 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:44.428 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:45.452 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:42:45.613 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in wait_audio, shutting down
+2026-04-23 16:42:45.613 - RealTimeSTT: realtimestt - DEBUG - Finishing recording thread
+2026-04-23 16:42:45.620 - RealTimeSTT: realtimestt - DEBUG - Terminating reader process
+2026-04-23 16:42:45.655 - RealTimeSTT: realtimestt - DEBUG - Terminating transcription process
+2026-04-23 16:42:45.683 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
+2026-04-23 16:42:45.772 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method
+2026-04-23 16:46:08.785 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:46:08.789 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:46:08.789 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:46:08.790 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:46:08.790 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:46:08.790 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:46:08.941 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 12
+2026-04-23 16:46:08.941 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 12: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:46:08.941 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 12 is 44100
+2026-04-23 16:46:08.941 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 12: [16000, 44100]
+2026-04-23 16:46:08.941 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:46:08.941 - RealTimeSTT: realtimestt - DEBUG - Found 20 total audio devices on the system.
+2026-04-23 16:46:08.941 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+2026-04-23 16:46:08.941 - RealTimeSTT: realtimestt - DEBUG - Validating device index 12 with info: {'index': 12, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:46:09.037 - RealTimeSTT: realtimestt - DEBUG - Device index 12 successfully validated.
+2026-04-23 16:46:09.037 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 12, sample_rate=16000, chunk_size=1024
+2026-04-23 16:46:09.084 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 12, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:46:09.084 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:46:09.526 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-23 16:46:09.526 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-23 16:46:09.526 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-23 16:46:09.587 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-23 16:46:09.587 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-23 16:46:09.587 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:46:09.588 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:46:09.588 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:46:10.207 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:11.231 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:12.255 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:13.279 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:14.303 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:15.327 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:16.351 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:16.735 - RealTimeSTT: realtimestt - INFO - voice activity detected
+2026-04-23 16:46:16.735 - RealTimeSTT: realtimestt - INFO - recording started
+2026-04-23 16:46:16.735 - RealTimeSTT: realtimestt - INFO - State changed from 'listening' to 'recording'
+2026-04-23 16:46:16.735 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording stop
+2026-04-23 16:46:17.375 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:17.951 - RealTimeSTT: realtimestt - INFO - recording stopped
+2026-04-23 16:46:17.951 - RealTimeSTT: realtimestt - DEBUG - No samples removed, final audio length: 35840
+2026-04-23 16:46:17.952 - RealTimeSTT: realtimestt - INFO - State changed from 'recording' to 'inactive'
+2026-04-23 16:46:18.043 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'transcribing'
+2026-04-23 16:46:18.043 - RealTimeSTT: realtimestt - DEBUG - Adding transcription request, no early transcription started
+2026-04-23 16:46:18.044 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:46:18.144 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:46:18.244 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:46:18.345 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:46:18.399 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:18.445 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:46:18.545 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:46:18.639 - RealTimeSTT: realtimestt - INFO - State changed from 'transcribing' to 'inactive'
+2026-04-23 16:46:18.678 - RealTimeSTT: realtimestt - DEBUG - Model tiny completed transcription in 0.64 seconds
+2026-04-23 16:46:18.679 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:46:18.679 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:46:18.679 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:46:19.423 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:20.447 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:21.471 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:22.495 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:23.519 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:24.543 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:25.567 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:26.591 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:27.615 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:28.639 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:29.663 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:30.687 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:31.711 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:32.735 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:33.759 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:34.783 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:35.807 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:36.831 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:37.855 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:38.878 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:39.902 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:40.926 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:41.950 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:42.974 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:43.998 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:45.022 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:46.046 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:47.070 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:48.094 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:49.118 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:50.142 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:51.166 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:52.190 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:53.214 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:54.238 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:55.262 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:56.286 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:57.310 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:58.334 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:46:59.358 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:00.382 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:01.406 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:02.430 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:03.170 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in wait_audio, shutting down
+2026-04-23 16:47:03.170 - RealTimeSTT: realtimestt - DEBUG - Finishing recording thread
+2026-04-23 16:47:03.175 - RealTimeSTT: realtimestt - DEBUG - Terminating reader process
+2026-04-23 16:47:03.213 - RealTimeSTT: realtimestt - DEBUG - Terminating transcription process
+2026-04-23 16:47:03.213 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
+2026-04-23 16:47:03.303 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method
+2026-04-23 16:47:07.928 - RealTimeSTT: realtimestt - INFO - Starting RealTimeSTT
+2026-04-23 16:47:07.931 - RealTimeSTT: realtimestt - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2026-04-23 16:47:07.932 - RealTimeSTT: realtimestt - DEBUG - Starting audio data worker with target_sample_rate=16000, buffer_size=512, input_device_index=None
+2026-04-23 16:47:07.932 - RealTimeSTT: realtimestt - DEBUG - Creating PyAudio interface...
+2026-04-23 16:47:07.932 - RealTimeSTT: realtimestt - INFO - Initializing WebRTC voice with Sensitivity 3
+2026-04-23 16:47:07.932 - RealTimeSTT: realtimestt - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2026-04-23 16:47:08.095 - RealTimeSTT: realtimestt - DEBUG - No device index supplied; using default device 10
+2026-04-23 16:47:08.096 - RealTimeSTT: realtimestt - DEBUG - Retrieving highest sample rate for device index 10: {'index': 10, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:47:08.096 - RealTimeSTT: realtimestt - DEBUG - Highest supported sample rate for device index 10 is 44100
+2026-04-23 16:47:08.096 - RealTimeSTT: realtimestt - DEBUG - Sample rates to try for device 10: [16000, 44100]
+2026-04-23 16:47:08.096 - RealTimeSTT: realtimestt - DEBUG - Attempting to initialize audio stream at 16000 Hz.
+2026-04-23 16:47:08.096 - RealTimeSTT: realtimestt - DEBUG - Found 18 total audio devices on the system.
+2026-04-23 16:47:08.096 - RealTimeSTT: realtimestt - DEBUG - Available input devices with input channels: [0, 2, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+2026-04-23 16:47:08.096 - RealTimeSTT: realtimestt - DEBUG - Validating device index 10 with info: {'index': 10, 'structVersion': 2, 'name': 'default', 'hostApi': 0, 'maxInputChannels': 128, 'maxOutputChannels': 128, 'defaultLowInputLatency': 0.008707482993197279, 'defaultLowOutputLatency': 0.008707482993197279, 'defaultHighInputLatency': 0.034829931972789115, 'defaultHighOutputLatency': 0.034829931972789115, 'defaultSampleRate': 44100.0}
+2026-04-23 16:47:08.308 - RealTimeSTT: realtimestt - DEBUG - Device index 10 successfully validated.
+2026-04-23 16:47:08.308 - RealTimeSTT: realtimestt - DEBUG - Opening stream with device index 10, sample_rate=16000, chunk_size=1024
+2026-04-23 16:47:08.347 - RealTimeSTT: realtimestt - INFO - Microphone connected and validated (device index: 10, sample rate: 16000, chunk size: 1024)
+2026-04-23 16:47:08.347 - RealTimeSTT: realtimestt - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2026-04-23 16:47:08.548 - RealTimeSTT: realtimestt - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2026-04-23 16:47:08.559 - RealTimeSTT: realtimestt - DEBUG - Starting realtime worker
+2026-04-23 16:47:08.564 - RealTimeSTT: realtimestt - DEBUG - Waiting for main transcription model to start
+2026-04-23 16:47:08.762 - RealTimeSTT: realtimestt - DEBUG - Main transcription model ready
+2026-04-23 16:47:08.762 - RealTimeSTT: realtimestt - DEBUG - RealtimeSTT initialization completed successfully
+2026-04-23 16:47:08.762 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:47:08.762 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:47:08.762 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:47:09.555 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:10.580 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:11.348 - RealTimeSTT: realtimestt - INFO - voice activity detected
+2026-04-23 16:47:11.348 - RealTimeSTT: realtimestt - INFO - recording started
+2026-04-23 16:47:11.348 - RealTimeSTT: realtimestt - INFO - State changed from 'listening' to 'recording'
+2026-04-23 16:47:11.348 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording stop
+2026-04-23 16:47:11.603 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:12.627 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:12.820 - RealTimeSTT: realtimestt - INFO - recording stopped
+2026-04-23 16:47:12.820 - RealTimeSTT: realtimestt - DEBUG - No samples removed, final audio length: 39936
+2026-04-23 16:47:12.820 - RealTimeSTT: realtimestt - INFO - State changed from 'recording' to 'inactive'
+2026-04-23 16:47:12.916 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'transcribing'
+2026-04-23 16:47:12.916 - RealTimeSTT: realtimestt - DEBUG - Adding transcription request, no early transcription started
+2026-04-23 16:47:12.917 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:47:13.017 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:47:13.117 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:47:13.218 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:47:13.318 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:47:13.418 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:47:13.519 - RealTimeSTT: realtimestt - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2026-04-23 16:47:13.533 - RealTimeSTT: realtimestt - INFO - State changed from 'transcribing' to 'inactive'
+2026-04-23 16:47:13.570 - RealTimeSTT: realtimestt - DEBUG - Model tiny completed transcription in 0.65 seconds
+2026-04-23 16:47:13.570 - RealTimeSTT: realtimestt - INFO - Setting listen time
+2026-04-23 16:47:13.570 - RealTimeSTT: realtimestt - INFO - State changed from 'inactive' to 'listening'
+2026-04-23 16:47:13.571 - RealTimeSTT: realtimestt - DEBUG - Waiting for recording start
+2026-04-23 16:47:13.652 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:14.675 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:15.699 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:16.723 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:17.747 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:18.772 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:19.795 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:20.819 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:21.843 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:22.867 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:23.891 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:24.915 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:25.939 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:26.963 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:27.987 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:29.011 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:30.035 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:31.059 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:32.083 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:33.107 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:34.131 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:35.155 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:36.179 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:37.203 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:38.227 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:39.251 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:40.275 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:41.299 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:42.323 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:43.347 - RealTimeSTT: realtimestt - DEBUG - _audio_data_worker writing audio data into queue.
+2026-04-23 16:47:44.050 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in wait_audio, shutting down
+2026-04-23 16:47:44.050 - RealTimeSTT: realtimestt - DEBUG - Finishing recording thread
+2026-04-23 16:47:44.051 - RealTimeSTT: realtimestt - DEBUG - Terminating reader process
+2026-04-23 16:47:44.056 - RealTimeSTT: realtimestt - DEBUG - Receive from stdout pipe
+2026-04-23 16:47:44.056 - RealTimeSTT: realtimestt - INFO - None
+2026-04-23 16:47:44.068 - RealTimeSTT: realtimestt - DEBUG - Terminating transcription process
+2026-04-23 16:47:44.091 - RealTimeSTT: realtimestt - DEBUG - Finishing realtime thread
+2026-04-23 16:47:44.180 - RealTimeSTT: realtimestt - INFO - KeyboardInterrupt in text() method
