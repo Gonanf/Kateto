@@ -28,11 +28,6 @@ class Orchestator:
     def process_text(self, text):
         print(text)
 
-        # for token in self.manager.stub.Prompt(manager_pb.PromptRequest(text=text)):
-        #     print(token.token)
-        #     # TODO: 23/04/2026 send to TTS
-        #     self.tts.stub.Speak(tts_pb.SpeakRequest(token=token))
-        #
         prompt_stream = self.manager.stub.Prompt(manager_pb.PromptRequest(text=text))
 
         speech_result = self.tts.stub.Speak(speak_requests_from_prompt(prompt_stream))
@@ -43,7 +38,12 @@ class Orchestator:
 
     def start(self):
         print("Wait until it says 'speak now'")
-        recorder = AudioToTextRecorder()
+        recorder = AudioToTextRecorder(
+            language="es",
+            post_speech_silence_duration=1.0,
+            model="medium",
+            device="cuda",
+        )
 
         while True:
             recorder.text(self.process_text)

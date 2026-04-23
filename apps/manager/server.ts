@@ -2,7 +2,7 @@ import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { type PromptRequest, type PromptResponse } from "../protos/manager/typescript/manager_pb.ts";
 import { createOpencode, createOpencodeClient, type Session } from "@opencode-ai/sdk/v2"
-import { Effect, Layer, Context, Stream, Option } from "effect"
+import { Effect, Layer, Context, Stream, Option, Scope } from "effect"
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { error } from 'console';
@@ -58,6 +58,8 @@ const useSession = Layer.effect(SessionService, Effect.gen(function* () {
   return session.data
 }))
 
+const scope = await Effect.runPromise(Scope.make());
+const sessionLayer = await Effect.runPromise(Layer.buildWithScope(useSession, scope));
 
 const program = (call: grpc.ServerWritableStream<any, PromptResponse>) => Effect.gen(function* () {
   console.log("Starting prompt handler...")
@@ -91,17 +93,6 @@ const program = (call: grpc.ServerWritableStream<any, PromptResponse>) => Effect
 
   console.log("Prompt response received:", JSON.stringify(response.data, null, 2))
 
-  // If the response already has parts, stream them immediately
-  // if (response.data?.parts && Array.isArray(response.data.parts)) {
-  //   console.log("Streaming", response.data.parts.length, "parts from response")
-  //   for (const part of response.data.parts) {
-  //     console.log("Part:", part)
-  //     if (part.type === "text") {
-  //       call.write({ token: part.text } as PromptResponse)
-  //     }
-  //   }
-  // }
-
   // Also process real-time events if stream is available
   if (events.stream) {
     console.log("Processing event stream for real-time updates...")
@@ -115,13 +106,18 @@ const program = (call: grpc.ServerWritableStream<any, PromptResponse>) => Effect
     // Race stream processing against a 60s timeout
     yield* Effect.race(
       Stream.runForEach(stream, (event) => Effect.sync(() => {
-        console.log("Event received:", event.type, JSON.stringify(event.properties))
+        // console.log("Event received:", event.type, JSON.stringify(event.properties))
 
         if (event.type == "message.part.updated" && event.properties.part.type == "text") {
           talking = true
-
           console.warn("Starting to talk...")
         }
+
+        if (event.type == "message.part.updated" && event.properties.part.type == "reasoning") {
+          talking = false
+          console.warn("Thinking, not talking...")
+        }
+
 
         if (event.type === "message.part.delta" && talking) {
           const part = event.properties?.delta
@@ -133,6 +129,7 @@ const program = (call: grpc.ServerWritableStream<any, PromptResponse>) => Effect
 
         if (event.type === "session.idle") {
           talking = false
+          //TODO: On idle stop the stream (?) 
           call.end()
         }
       })),
@@ -152,7 +149,7 @@ const server = new grpc.Server();
 async function prompt(call: grpc.ServerWritableStream<any, PromptResponse>) {
   await Effect.runPromise(
     program(call).pipe(
-      Effect.provide(useSession)
+      Effect.provide(sessionLayer)
     )
   )
 }
