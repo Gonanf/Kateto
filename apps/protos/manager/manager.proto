@@ -1,0 +1,18 @@
+service Manager {
+  rpc Prompt(PromptRequest) returns (stream PromptResponse);
+}
+
+enum Agents {
+  CHARLATAN = 0;
+  SONADOR = 1;
+}
+
+message PromptRequest {
+  required string text = 1;
+  optional Agents agent = 2;
+}
+
+message PromptResponse {
+  required string token = 1;
+  // Agents agent = 2; maybe for later
+}

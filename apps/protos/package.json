@@ -1,6 +1,18 @@
 {
   "name": "protos",
   "scripts": {
-    "generate": "uv run python -m grpcio_tools.protoc -I . --python_out=python --pyi_out=python"
+    "gen": "uv run python gen.py"
+  },
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "protobufjs": "^8.0.1"
   }
 }

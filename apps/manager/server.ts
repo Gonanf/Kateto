@@ -3,9 +3,13 @@ import * as protoLoader from '@grpc/proto-loader';
 import { type PromptRequest, type PromptResponse } from "../protos/manager/typescript/manager_pb.ts";
 import { createOpencode, createOpencodeClient, type Session } from "@opencode-ai/sdk"
 import { Effect, Layer, Context, Stream, Option } from "effect"
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-const packageDefinition = protoLoader.loadSync("../protos/manager/manager.proto", {
+const packageDefinition = protoLoader.loadSync(join(__dirname, "../protos/manager/manager.proto"), {
   keepCase: true,
   longs: String,
   enums: String,
@@ -14,8 +18,7 @@ const packageDefinition = protoLoader.loadSync("../protos/manager/manager.proto"
 });
 
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
-
-const manager = protoDescriptor.manager;
+const manager = protoDescriptor.Manager;
 
 enum Agents {
   Charlatan = "kateto-charlatan",
@@ -54,7 +57,7 @@ const useSession = Layer.effect(SessionService, Effect.gen(function* () {
 }))
 
 
-const program = (call) => Effect.gen(function* () {
+const program = (call: grpc.ServerWritableStream<any, PromptResponse>) => Effect.gen(function* () {
   console.log("Sending prompt...")
   const session = yield* SessionService
 
@@ -74,35 +77,48 @@ const program = (call) => Effect.gen(function* () {
 
   const stream = Stream.fromAsyncIterable(events.stream, (e) => new Error("Error when getting the stream of events:", String(e)))
 
-  Stream.runForEach(stream, (event) => Effect.sync(() => {
+  yield* Stream.runForEach(stream, (event) => Effect.sync(() => {
     if (event.type === "message.part.updated") {
       const part = event.properties.part;
 
       if (part.type === "text") {
         // Send text delta as token events
         call.write({
-          prompt_response: {
-            token: part.text
-          },
-        });
+          token: part.text
+        } as PromptResponse);
       }
     }
-
   }))
 
+  // Signal end of stream
+  call.end();
 })
 
 
 const server = new grpc.Server();
 
-async function prompt(call) {
-
+async function prompt(call: grpc.ServerWritableStream<any, PromptResponse>) {
   await Effect.runPromise(
     program(call).pipe(
       Effect.provide(useSession)
     )
   )
-
 }
+
+// Register the Manager service
+server.addService(manager.service, {
+  prompt: prompt
+});
+
+// Start the server
+const PORT = 50051;
+server.bindAsync(`0.0.0.0:${PORT}`, grpc.ServerCredentials.createInsecure(), (err, port) => {
+  if (err) {
+    console.error("Failed to start gRPC server:", err);
+    process.exit(1);
+  }
+  console.log(`gRPC Manager server started on port ${port}`);
+  server.start();
+});
 
 
