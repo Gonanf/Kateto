@@ -3,3 +3,6 @@
 **/wheels
 **/.env
 **/.sisyphus
+.turbo
+**/__pycache__
+**.log
