@@ -32,7 +32,7 @@ def main():
         proto_files = list(proto_dir.glob("*.proto"))
         proto_names = [f.name for f in proto_files]
 
-        out_dir = proto_dir / "python"
+        out_dir = proto_dir / "src" / proto_dir.stem
         out_dir.mkdir(exist_ok=True)
 
         cmd = [
@@ -53,6 +53,21 @@ def main():
         )
 
         compile(cmd, proto_dir, out_dir, protos_root)
+
+        for f in proto_files:
+            cmd = [
+                "uv",
+                "init",
+                "--name",
+                str(f.stem + "_pb"),
+                "--bare",
+                "--lib",
+                str(out_dir),
+            ]
+
+            compile(cmd, proto_dir, out_dir, protos_root)
+            cmd = ["touch", str(out_dir / "__init__.py")]
+            compile(cmd, proto_dir, out_dir, protos_root)
 
         out_dir = proto_dir / "typescript"
         out_dir.mkdir(exist_ok=True)

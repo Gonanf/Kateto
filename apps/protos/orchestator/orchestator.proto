@@ -1,0 +1,11 @@
+service Orchestator {
+  rpc Speech(SpeechRequest) returns (SpeechResponse);
+}
+
+message SpeechRequest {
+  required string speech = 1;
+}
+
+message SpeechResponse {
+
+}
