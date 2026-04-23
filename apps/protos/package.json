@@ -1,7 +1,7 @@
 {
   "name": "protos",
   "scripts": {
-    "gen": "uv run python gen.py"
+    "gen": "uv run gen.py"
   },
   "module": "index.ts",
   "type": "module",

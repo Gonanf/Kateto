@@ -1,10 +1,11 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { type PromptRequest, type PromptResponse } from "../protos/manager/typescript/manager_pb.ts";
-import { createOpencode, createOpencodeClient, type Session } from "@opencode-ai/sdk"
+import { createOpencode, createOpencodeClient, type Session } from "@opencode-ai/sdk/v2"
 import { Effect, Layer, Context, Stream, Option } from "effect"
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { error } from 'console';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,6 +20,7 @@ const packageDefinition = protoLoader.loadSync(join(__dirname, "../protos/manage
 
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
 const manager = protoDescriptor.Manager;
+if (!manager) throw new Error("Expecting a Manager service in the proto, found nothing...")
 
 enum Agents {
   Charlatan = "kateto-charlatan",
@@ -58,40 +60,90 @@ const useSession = Layer.effect(SessionService, Effect.gen(function* () {
 
 
 const program = (call: grpc.ServerWritableStream<any, PromptResponse>) => Effect.gen(function* () {
-  console.log("Sending prompt...")
+  console.log("Starting prompt handler...")
   const session = yield* SessionService
 
-  console.log("Sending prompt to ", Agents.Charlatan.toString())
+  // Subscribe to events BEFORE sending prompt so we don't miss any tokens
+  console.log("Subscribing to events...")
+  const events = yield* Effect.tryPromise({
+    try: () => opencode.client.event.subscribe(),
+    catch: (error) => new Error(`Cannot subscribe to events: ${error}`)
+  })
+
+  console.log("Event subscription keys:", Object.keys(events))
+  console.log("Has stream:", "stream" in events)
+
+  // Send prompt
+  console.log("Sending prompt to", Agents.Charlatan)
   const response = yield* Effect.tryPromise({
-    try: () => opencode.client.session.prompt({
-      path: { id: session.id },
-      body: {
-        parts: [{ type: "text", text: call.request.text }],
-        agent: Agents.Charlatan.toString()
-      }
+    try: () => opencode.client.session.promptAsync({
+      sessionID: session.id,
+      parts: [{ type: "text", text: call.request.text }],
+      agent: Agents.Charlatan.toString(),
     }),
     catch: (error) => new Error(`Cannot send prompt: ${error}`)
   })
 
-  const events = yield* Effect.tryPromise({ try: () => opencode.client.event.subscribe(), catch: (error) => new Error("Cannot subscribe to events:", error) })
+  if (response.error) {
+    console.error("Prompt failed:", response.error)
+    return yield* Effect.fail(new Error(`Prompt failed: ${response.error}`))
+  }
 
-  const stream = Stream.fromAsyncIterable(events.stream, (e) => new Error("Error when getting the stream of events:", String(e)))
+  console.log("Prompt response received:", JSON.stringify(response.data, null, 2))
 
-  yield* Stream.runForEach(stream, (event) => Effect.sync(() => {
-    if (event.type === "message.part.updated") {
-      const part = event.properties.part;
+  // If the response already has parts, stream them immediately
+  // if (response.data?.parts && Array.isArray(response.data.parts)) {
+  //   console.log("Streaming", response.data.parts.length, "parts from response")
+  //   for (const part of response.data.parts) {
+  //     console.log("Part:", part)
+  //     if (part.type === "text") {
+  //       call.write({ token: part.text } as PromptResponse)
+  //     }
+  //   }
+  // }
 
-      if (part.type === "text") {
-        // Send text delta as token events
-        call.write({
-          token: part.text
-        } as PromptResponse);
-      }
-    }
-  }))
+  // Also process real-time events if stream is available
+  if (events.stream) {
+    console.log("Processing event stream for real-time updates...")
 
-  // Signal end of stream
-  call.end();
+    const stream = Stream.fromAsyncIterable(
+      events.stream,
+      (e) => new Error(`Stream error: ${e}`)
+    )
+
+    var talking = false
+    // Race stream processing against a 60s timeout
+    yield* Effect.race(
+      Stream.runForEach(stream, (event) => Effect.sync(() => {
+        console.log("Event received:", event.type, JSON.stringify(event.properties))
+
+        if (event.type == "message.part.updated" && event.properties.part.type == "text") {
+          talking = true
+
+          console.warn("Starting to talk...")
+        }
+
+        if (event.type === "message.part.delta" && talking) {
+          const part = event.properties?.delta
+
+          console.log("Writing token from event:", event)
+          call.write({ token: part } as PromptResponse)
+
+        }
+
+        if (event.type === "session.idle") {
+          talking = false
+          call.end()
+        }
+      })),
+      Effect.sleep("60 seconds").pipe(Effect.tap(() => console.log("Event stream timeout reached")))
+    ).pipe(
+      Effect.catchAll((error) => Effect.sync(() => console.error("Event stream failed:", error)))
+    )
+  }
+
+  console.log("Closing gRPC call")
+  call.end()
 })
 
 
@@ -118,7 +170,6 @@ server.bindAsync(`0.0.0.0:${PORT}`, grpc.ServerCredentials.createInsecure(), (er
     process.exit(1);
   }
   console.log(`gRPC Manager server started on port ${port}`);
-  server.start();
 });
 
 

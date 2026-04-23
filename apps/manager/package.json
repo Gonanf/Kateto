@@ -1,7 +1,7 @@
 {
   "name": "manager",
   "scripts": {
-    "dev": "bun run main.ts"
+    "dev": "bun run server.ts"
   },
   "type": "module",
   "dependencies": {

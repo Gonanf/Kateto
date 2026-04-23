@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import manager_pb2 as manager__pb2
+from . import tts_pb2 as tts__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -18,14 +18,14 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in manager_pb2_grpc.py depends on'
+        + ' but the generated code in tts_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 
 
-class ManagerStub(object):
+class TTSStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -34,43 +34,43 @@ class ManagerStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.Prompt = channel.unary_stream(
-                '/Manager/Prompt',
-                request_serializer=manager__pb2.PromptRequest.SerializeToString,
-                response_deserializer=manager__pb2.PromptResponse.FromString,
+        self.Speak = channel.stream_unary(
+                '/TTS/Speak',
+                request_serializer=tts__pb2.SpeakRequest.SerializeToString,
+                response_deserializer=tts__pb2.SpeakResponse.FromString,
                 _registered_method=True)
 
 
-class ManagerServicer(object):
+class TTSServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def Prompt(self, request, context):
+    def Speak(self, request_iterator, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
 
-def add_ManagerServicer_to_server(servicer, server):
+def add_TTSServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'Prompt': grpc.unary_stream_rpc_method_handler(
-                    servicer.Prompt,
-                    request_deserializer=manager__pb2.PromptRequest.FromString,
-                    response_serializer=manager__pb2.PromptResponse.SerializeToString,
+            'Speak': grpc.stream_unary_rpc_method_handler(
+                    servicer.Speak,
+                    request_deserializer=tts__pb2.SpeakRequest.FromString,
+                    response_serializer=tts__pb2.SpeakResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'Manager', rpc_method_handlers)
+            'TTS', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('Manager', rpc_method_handlers)
+    server.add_registered_method_handlers('TTS', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class Manager(object):
+class TTS(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def Prompt(request,
+    def Speak(request_iterator,
             target,
             options=(),
             channel_credentials=None,
@@ -80,12 +80,12 @@ class Manager(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_stream(
-            request,
+        return grpc.experimental.stream_unary(
+            request_iterator,
             target,
-            '/Manager/Prompt',
-            manager__pb2.PromptRequest.SerializeToString,
-            manager__pb2.PromptResponse.FromString,
+            '/TTS/Speak',
+            tts__pb2.SpeakRequest.SerializeToString,
+            tts__pb2.SpeakResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import orchestator_pb2 as orchestator__pb2
+from . import manager_pb2 as manager__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -18,14 +18,14 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in orchestator_pb2_grpc.py depends on'
+        + ' but the generated code in manager_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
     )
 
 
-class OrchestatorStub(object):
+class ManagerStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -34,43 +34,43 @@ class OrchestatorStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.Speech = channel.unary_unary(
-                '/Orchestator/Speech',
-                request_serializer=orchestator__pb2.SpeechRequest.SerializeToString,
-                response_deserializer=orchestator__pb2.SpeechResponse.FromString,
+        self.Prompt = channel.unary_stream(
+                '/Manager/Prompt',
+                request_serializer=manager__pb2.PromptRequest.SerializeToString,
+                response_deserializer=manager__pb2.PromptResponse.FromString,
                 _registered_method=True)
 
 
-class OrchestatorServicer(object):
+class ManagerServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def Speech(self, request, context):
+    def Prompt(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
 
-def add_OrchestatorServicer_to_server(servicer, server):
+def add_ManagerServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'Speech': grpc.unary_unary_rpc_method_handler(
-                    servicer.Speech,
-                    request_deserializer=orchestator__pb2.SpeechRequest.FromString,
-                    response_serializer=orchestator__pb2.SpeechResponse.SerializeToString,
+            'Prompt': grpc.unary_stream_rpc_method_handler(
+                    servicer.Prompt,
+                    request_deserializer=manager__pb2.PromptRequest.FromString,
+                    response_serializer=manager__pb2.PromptResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'Orchestator', rpc_method_handlers)
+            'Manager', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('Orchestator', rpc_method_handlers)
+    server.add_registered_method_handlers('Manager', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class Orchestator(object):
+class Manager(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def Speech(request,
+    def Prompt(request,
             target,
             options=(),
             channel_credentials=None,
@@ -80,12 +80,12 @@ class Orchestator(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(
+        return grpc.experimental.unary_stream(
             request,
             target,
-            '/Orchestator/Speech',
-            orchestator__pb2.SpeechRequest.SerializeToString,
-            orchestator__pb2.SpeechResponse.FromString,
+            '/Manager/Prompt',
+            manager__pb2.PromptRequest.SerializeToString,
+            manager__pb2.PromptResponse.FromString,
             options,
             channel_credentials,
             insecure,

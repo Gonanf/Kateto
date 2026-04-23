@@ -1,0 +1,11 @@
+service TTS {
+  rpc Speak(stream SpeakRequest) returns (SpeakResponse);
+}
+
+message SpeakRequest {
+  required string token = 1;
+}
+
+message SpeakResponse {
+
+}

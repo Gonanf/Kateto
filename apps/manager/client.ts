@@ -26,13 +26,16 @@ const prompt = process.argv[2] || "Hello, who are you?";
 
 console.log(`\n> ${prompt}\n`);
 
-const call = client.prompt({ text: prompt });
+const call = client.prompt({ text: prompt }, { deadline: Date.now() + 120000 });
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 let buffer = '';
 
-call.on('data', (response: { token: string }) => {
+call.on('data', async (response: { token: string }) => {
   buffer += response.token;
   process.stdout.write(response.token);
+  await sleep(75);
 });
 
 call.on('end', () => {

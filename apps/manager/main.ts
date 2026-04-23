@@ -45,18 +45,21 @@ const sendChat = (prompt: string, agent: Agents) => Effect.gen(function* () {
 
   console.log("Sending prompt to ", agent)
   const response = yield* Effect.tryPromise({
-    try: () => opencode.client.session.prompt({
+    try: () => opencode.client.session.promptAsync({
       path: { id: session.id },
       body: {
         parts: [{ type: "text", text: prompt }],
         agent: agent.toString()
-      }
+      },
+      onSseEvent: (event) => console.log("DATA: ", event),
+      onSseError: (error) => console.log("ERROR: ", error),
     }),
     catch: (error) => new Error(`Cannot send prompt: ${error}`)
   })
 
-  if (response.error) return yield* Effect.fail(response.error)
-  return response.data
+  //
+  // if (response.error) return yield* Effect.fail(response.error)
+  // return response.data
 }
 )
 
@@ -65,10 +68,17 @@ const program = Effect.gen(function* () {
   console.log("Sending prompt...")
   const response = yield* sendChat("Call me a good boy", Agents.Charlatan)
 
-  console.log(response)
-  for (const part of response.parts) {
-    console.log(part)
-  }
+  const eventStream = opencode.client.global.event({
+    onSseEvent: (event) => {
+      console.log("Token:", event)
+    }
+  })
+
+  // console.log(response)
+  // for (const part of response.parts) {
+  //   console.log(part)
+  // }
+  while (true) { }
 
 })
 

@@ -10,8 +10,10 @@ dependencies = [
   "grpcio-tools>=1.80.0",
   "grpcio>=1.80.0",
   "manager_pb",
+  "tts-pb",
 ]
 
 [tool.uv.sources]
 ctranslate2 = { path = "./wheels/ctranslate2-4.7.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }
 manager_pb = { workspace = true }
+tts-pb = { workspace = true }
