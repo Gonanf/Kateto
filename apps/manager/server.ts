@@ -22,10 +22,8 @@ const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
 const manager = protoDescriptor.Manager;
 if (!manager) throw new Error("Expecting a Manager service in the proto, found nothing...")
 
-enum Agents {
-  Charlatan = "kateto-charlatan",
-  Soñador = "kateto-soñador"
-}
+const Agents = { "CHARLATAN": "kateto-charlatan", "SONADOR": "kateto-soñador", "PRODUCTOWNER": "kateto-product-owner" }
+
 
 
 // TODO: Put this in an Effect and fork it
@@ -81,7 +79,7 @@ const program = (call: grpc.ServerWritableStream<any, PromptResponse>) => Effect
     try: () => opencode.client.session.promptAsync({
       sessionID: session.id,
       parts: [{ type: "text", text: call.request.text }],
-      agent: Agents.Charlatan.toString(),
+      agent: Agents[call.request.agent],
     }),
     catch: (error) => new Error(`Cannot send prompt: ${error}`)
   })

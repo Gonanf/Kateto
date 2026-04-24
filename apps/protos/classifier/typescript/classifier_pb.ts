@@ -1,54 +1,43 @@
-export const enum Agents {
-  CHARLATAN = "CHARLATAN",
-  SONADOR = "SONADOR",
-  PRODUCTOWNER = "PRODUCTOWNER",
+export const enum Labels {
+  talk = "talk",
+  think = "think",
 }
 
-export const encodeAgents: { [key: string]: number } = {
-  CHARLATAN: 0,
-  SONADOR: 1,
-  PRODUCTOWNER: 2,
+export const encodeLabels: { [key: string]: number } = {
+  talk: 0,
+  think: 1,
 };
 
-export const decodeAgents: { [key: number]: Agents } = {
-  0: Agents.CHARLATAN,
-  1: Agents.SONADOR,
-  2: Agents.PRODUCTOWNER,
+export const decodeLabels: { [key: number]: Labels } = {
+  0: Labels.talk,
+  1: Labels.think,
 };
 
-export interface PromptRequest {
-  text: string;
-  agent?: Agents;
+export interface BertRequest {
+  prompt: string;
 }
 
-export function encodePromptRequest(message: PromptRequest): Uint8Array {
+export function encodeBertRequest(message: BertRequest): Uint8Array {
   let bb = popByteBuffer();
-  _encodePromptRequest(message, bb);
+  _encodeBertRequest(message, bb);
   return toUint8Array(bb);
 }
 
-function _encodePromptRequest(message: PromptRequest, bb: ByteBuffer): void {
-  // required string text = 1;
-  let $text = message.text;
-  if ($text !== undefined) {
+function _encodeBertRequest(message: BertRequest, bb: ByteBuffer): void {
+  // required string prompt = 1;
+  let $prompt = message.prompt;
+  if ($prompt !== undefined) {
     writeVarint32(bb, 10);
-    writeString(bb, $text);
-  }
-
-  // optional Agents agent = 2;
-  let $agent = message.agent;
-  if ($agent !== undefined) {
-    writeVarint32(bb, 16);
-    writeVarint32(bb, encodeAgents[$agent]);
+    writeString(bb, $prompt);
   }
 }
 
-export function decodePromptRequest(binary: Uint8Array): PromptRequest {
-  return _decodePromptRequest(wrapByteBuffer(binary));
+export function decodeBertRequest(binary: Uint8Array): BertRequest {
+  return _decodeBertRequest(wrapByteBuffer(binary));
 }
 
-function _decodePromptRequest(bb: ByteBuffer): PromptRequest {
-  let message: PromptRequest = {} as any;
+function _decodeBertRequest(bb: ByteBuffer): BertRequest {
+  let message: BertRequest = {} as any;
 
   end_of_message: while (!isAtEnd(bb)) {
     let tag = readVarint32(bb);
@@ -57,15 +46,9 @@ function _decodePromptRequest(bb: ByteBuffer): PromptRequest {
       case 0:
         break end_of_message;
 
-      // required string text = 1;
+      // required string prompt = 1;
       case 1: {
-        message.text = readString(bb, readVarint32(bb));
-        break;
-      }
-
-      // optional Agents agent = 2;
-      case 2: {
-        message.agent = decodeAgents[readVarint32(bb)];
+        message.prompt = readString(bb, readVarint32(bb));
         break;
       }
 
@@ -74,37 +57,37 @@ function _decodePromptRequest(bb: ByteBuffer): PromptRequest {
     }
   }
 
-  if (message.text === undefined)
-    throw new Error("Missing required field: text");
+  if (message.prompt === undefined)
+    throw new Error("Missing required field: prompt");
 
   return message;
 }
 
-export interface PromptResponse {
-  token: string;
+export interface BertResponse {
+  label: Labels;
 }
 
-export function encodePromptResponse(message: PromptResponse): Uint8Array {
+export function encodeBertResponse(message: BertResponse): Uint8Array {
   let bb = popByteBuffer();
-  _encodePromptResponse(message, bb);
+  _encodeBertResponse(message, bb);
   return toUint8Array(bb);
 }
 
-function _encodePromptResponse(message: PromptResponse, bb: ByteBuffer): void {
-  // required string token = 1;
-  let $token = message.token;
-  if ($token !== undefined) {
-    writeVarint32(bb, 10);
-    writeString(bb, $token);
+function _encodeBertResponse(message: BertResponse, bb: ByteBuffer): void {
+  // required Labels label = 1;
+  let $label = message.label;
+  if ($label !== undefined) {
+    writeVarint32(bb, 8);
+    writeVarint32(bb, encodeLabels[$label]);
   }
 }
 
-export function decodePromptResponse(binary: Uint8Array): PromptResponse {
-  return _decodePromptResponse(wrapByteBuffer(binary));
+export function decodeBertResponse(binary: Uint8Array): BertResponse {
+  return _decodeBertResponse(wrapByteBuffer(binary));
 }
 
-function _decodePromptResponse(bb: ByteBuffer): PromptResponse {
-  let message: PromptResponse = {} as any;
+function _decodeBertResponse(bb: ByteBuffer): BertResponse {
+  let message: BertResponse = {} as any;
 
   end_of_message: while (!isAtEnd(bb)) {
     let tag = readVarint32(bb);
@@ -113,9 +96,9 @@ function _decodePromptResponse(bb: ByteBuffer): PromptResponse {
       case 0:
         break end_of_message;
 
-      // required string token = 1;
+      // required Labels label = 1;
       case 1: {
-        message.token = readString(bb, readVarint32(bb));
+        message.label = decodeLabels[readVarint32(bb)];
         break;
       }
 
@@ -124,8 +107,8 @@ function _decodePromptResponse(bb: ByteBuffer): PromptResponse {
     }
   }
 
-  if (message.token === undefined)
-    throw new Error("Missing required field: token");
+  if (message.label === undefined)
+    throw new Error("Missing required field: label");
 
   return message;
 }

@@ -1,0 +1,16 @@
+service Classifier {
+  rpc Classify(BertRequest) returns (BertResponse);
+}
+
+enum Labels {
+  talk = 0;
+  think = 1;
+}
+
+message BertRequest {
+  required string prompt = 1;
+}
+
+message BertResponse {
+  required Labels label = 1;
+}

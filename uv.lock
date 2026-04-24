@@ -10,6 +10,7 @@ resolution-markers = [
 [manifest]
 members = [
     "bert",
+    "classifier-pb",
     "kateto",
     "manager-pb",
     "orchestator",
@@ -271,7 +272,9 @@ version = "0.1.0"
 source = { virtual = "apps/classifier" }
 dependencies = [
     { name = "accelerate" },
+    { name = "classifier-pb" },
     { name = "datasets" },
+    { name = "grpcio" },
     { name = "pandas" },
     { name = "torch" },
     { name = "transformers" },
@@ -280,7 +283,9 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = ">=1.12.0" },
+    { name = "classifier-pb", editable = "apps/protos/classifier" },
     { name = "datasets", specifier = ">=4.8.4" },
+    { name = "grpcio", specifier = ">=1.80.0" },
     { name = "pandas", specifier = ">=3.0.2" },
     { name = "torch", specifier = ">=2.11.0", index = "https://download.pytorch.org/whl/rocm7.2" },
     { name = "transformers", specifier = "==4.57.3" },
@@ -403,6 +408,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/68/86/46bd42279d323deb8687c4a5a811fd548cb7d1de10cf6535d099877a9a9f/charset_normalizer-3.4.7-cp313-cp313-win_arm64.whl", hash = "sha256:80d04837f55fc81da168b98de4f4b797ef007fc8a79ab71c6ec9bc4dd662b15b", size = 147915, upload-time = "2026-04-02T09:27:05.971Z" },
     { url = "https://files.pythonhosted.org/packages/db/8f/61959034484a4a7c527811f4721e75d02d653a35afb0b6054474d8185d4c/charset_normalizer-3.4.7-py3-none-any.whl", hash = "sha256:3dce51d0f5e7951f8bb4900c257dad282f49190fdbebecd4ba99bcc41fef404d", size = 61958, upload-time = "2026-04-02T09:28:37.794Z" },
 ]
+
+[[package]]
+name = "classifier-pb"
+version = "0.1.0"
+source = { editable = "apps/protos/classifier" }
 
 [[package]]
 name = "click"

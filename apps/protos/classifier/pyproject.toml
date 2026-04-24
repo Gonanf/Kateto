@@ -1,0 +1,8 @@
+[project]
+name = "classifier_pb"
+version = "0.1.0"
+requires-python = ">=3.13"
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"

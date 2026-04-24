@@ -5,6 +5,7 @@ service Manager {
 enum Agents {
   CHARLATAN = 0;
   SONADOR = 1;
+PRODUCTOWNER = 2;
 }
 
 message PromptRequest {
