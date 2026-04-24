@@ -1,0 +1,139 @@
+@import "@fontsource-variable/jetbrains-mono";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+
+:root {
+  --font-size: 16px;
+  --background: #fffdf7;
+  --foreground: #3f3c30;
+  --card: #ffffff;
+  --card-foreground: #3f3c30;
+  --popover: #ffffff;
+  --popover-foreground: #3f3c30;
+  --primary: #f59e0b;
+  --primary-foreground: #ffffff;
+  --secondary: #fef3c7;
+  --secondary-foreground: #92400e;
+  --muted: #fef3c7;
+  --muted-foreground: #b45309;
+  --accent: #fde68a;
+  --accent-foreground: #92400e;
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+  --border: #fcd34d;
+  --input: transparent;
+  --input-background: #ffffff;
+  --switch-background: #fcd34d;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #f59e0b;
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: #030213;
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+
+.dark {
+  --background: #1c1917;
+  --foreground: #fef3c7;
+  --card: #292524;
+  --card-foreground: #fef3c7;
+  --popover: #292524;
+  --popover-foreground: #fef3c7;
+  --primary: #f59e0b;
+  --primary-foreground: #ffffff;
+  --secondary: #44403c;
+  --secondary-foreground: #fde68a;
+  --muted: #44403c;
+  --muted-foreground: #d6d3d1;
+  --accent: #57534e;
+  --accent-foreground: #fef3c7;
+  --destructive: #7f1d1d;
+  --destructive-foreground: #fecaca;
+  --border: #78716c;
+  --input: #44403c;
+  --ring: #f59e0b;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+}
+
+@theme inline {
+  --font-sans: 'JetBrains Mono', monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-mono: 'JetBrains Mono Variable', monospace;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body {
+  font-family: 'JetBrains Mono Variable', system-ui, -apple-system, 'Inter', sans-serif;
+  background: rgba(0,0,0,0);
+  color: var(--text);
+  margin: 0;
+}
+
+/* Layout styles reproduced with Tailwind utility classes in Vue components */

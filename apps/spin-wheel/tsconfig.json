@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "target": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["esnext", "dom"],
+    "types": ["bun"],
+    "strict": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "paths": {
+      "@workspace/*": ["../"],
+      "spin-wheel": ["./src/spin-wheel.d.ts"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*", "server.ts"]
+}
