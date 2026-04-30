@@ -8,3 +8,5 @@
 apps/classifier/intent-classifier
 **.log
 docs
+entities.json
+mempalace.yaml

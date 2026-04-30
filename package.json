@@ -3,7 +3,11 @@
   "scripts": {
     "dev": "turbo run dev"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@langchain/community": "^1.1.27",
+    "@langchain/core": "^1.1.42",
+    "node-llama-cpp": "3"
+  },
   "devDependencies": {
     "turbo": "^2.9.6"
   },

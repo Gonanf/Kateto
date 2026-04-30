@@ -28,9 +28,11 @@ class Classifier:
 
 def speak_requests_from_prompt(prompt_stream):
     for token in prompt_stream:
+        print(token)
         yield tts_pb.SpeakRequest(token=token.token)
 
 
+# TODO: Put this as a data contract
 Agents = ["CHARLATAN", "SONADOR"]
 
 
@@ -46,6 +48,10 @@ class Orchestator:
             manager_pb.PromptRequest(text=text, agent=Agents[label.label])
         )
 
+        # for token in prompt_stream:
+        #     print(token)
+        #     self.tts.stub.Speak(token)
+
         if label.label == 0:
             speech_result = self.tts.stub.Speak(
                 speak_requests_from_prompt(prompt_stream)
@@ -58,7 +64,7 @@ class Orchestator:
         self.classifier = Classifier()
         self.recorder = AudioToTextRecorder(
             language="es",
-            post_speech_silence_duration=5.0,
+            post_speech_silence_duration=2.0,
             model="medium",
             device="cuda",
         )

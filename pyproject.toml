@@ -13,6 +13,8 @@ members = [
   "apps/tts",
   "apps/protos",
   "apps/protos/*",
+  "apps/lang_manager",
+  "apps/manager",
 ]
 exclude = ["apps/protos/node_modules", "apps/protos/__pycache__"]
 
