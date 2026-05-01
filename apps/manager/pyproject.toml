@@ -17,7 +17,6 @@ dependencies = [
 ]
 
 [tool.pyright]
-include = ["langchain-openai", "langgraph", "langchain", "grpcio"]
 venvPath = "../../"
 venv = ".venv"
 

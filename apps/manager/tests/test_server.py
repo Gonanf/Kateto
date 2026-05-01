@@ -1,3 +1,4 @@
+from re import A
 import manager_pb
 import grpc
 import sys
@@ -40,9 +41,14 @@ class Client:
     def __init__(self) -> None:
         self.channel = grpc.insecure_channel("0.0.0.0:50051")
         self.stub = manager_pb.ManagerStub(self.channel)
+        self.agent = manager_pb.Agents.DREAMER
+
+    def Agent(self, agent: int):
+        self.agent = manager_pb.Agents(agent)
+        return self
 
     def Prompt(self, text):
-        return self.stub.Prompt(manager_pb.PromptRequest(text=text, agent="SONADOR"))
+        return self.stub.Prompt(manager_pb.PromptRequest(text=text, agent=self.agent))
 
 
 def test_mock_prompt(start_mock_server):
@@ -58,10 +64,18 @@ def test_mock_prompt(start_mock_server):
 
 def test_prompt(start_server):
     stream = Client().Prompt("Amogas")
-    print(stream)
     buffer = ""
     for i in stream:
         print(i)
+        buffer += i.token
+    print(buffer)
+    assert len(buffer) > 0
+
+
+def kateto_prompt(start_server):
+    stream = Client().Agent(0).Prompt("Kateto, insulta todo lo que puedas.")
+    buffer = ""
+    for i in stream:
         buffer += i.token
     print(buffer)
     assert len(buffer) > 0
