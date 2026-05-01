@@ -17,3 +17,7 @@ dependencies = [
 ctranslate2 = { path = "./wheels/ctranslate2-4.7.1-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl" }
 manager_pb = { workspace = true }
 tts-pb = { workspace = true }
+
+[tool.pyright]
+venvPath = "../../"
+venv = ".venv"

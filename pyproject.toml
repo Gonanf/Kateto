@@ -11,10 +11,13 @@ members = [
   "apps/classifier",
   "apps/orchestator",
   "apps/tts",
-  "apps/protos",
-  "apps/protos/*",
+  "packages/protos",
+  "packages/protos/*",
+  "apps/lang_manager",
+  "apps/manager",
+  "packages/data",
 ]
-exclude = ["apps/protos/node_modules", "apps/protos/__pycache__"]
+exclude = ["**/node_modules", "**/__pycache__"]
 
 [tool.uv]
 index-strategy = "unsafe-best-match"
@@ -27,3 +30,7 @@ url = "https://download.pytorch.org/whl/rocm7.2"
 torch = { index = "pytorch-rocm" }
 torchaudio = { index = "pytorch-rocm" }
 triton-rocm = { index = "pytorch-rocm" }
+
+[tool.pyright]
+venvPath = "./"
+venv = ".venv"

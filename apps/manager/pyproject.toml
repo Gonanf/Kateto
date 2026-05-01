@@ -1,0 +1,26 @@
+[project]
+name = "manager"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "bert",
+  "grpcio>=1.80.0",
+  "grpcio-tools>=1.80.0",
+  "langchain>=1.2.15",
+  "langchain-openai>=1.2.1",
+  "langgraph>=1.1.10",
+  "manager-pb",
+  "pytest>=9.0.3",
+  "pytest-asyncio>=1.3.0",
+  "pytest-fixtures>=0.1.0",
+]
+
+[tool.pyright]
+venvPath = "../../"
+venv = ".venv"
+
+[tool.uv.sources]
+manager-pb = { workspace = true }
+bert = { workspace = true }
