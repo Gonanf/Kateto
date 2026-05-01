@@ -3,17 +3,23 @@ import time
 from modules.agents import AGENTS
 
 
+def process_response(stream):
+    text = ""
+    reasoning = ""
+    for chunk in stream:
+        for content in chunk.content:
+            print(content)
+            if content["type"] == "text":
+                text += content["text"]
+            # elif content["type"] == "reasoning":
+            #     reasoning += content[""]
+    print("\n\nTEXT:", text, "\n\nREASONING\n\n", reasoning)
+    return {text, reasoning}
+
+
 def test_dreamer():
-    response = AGENTS["DREAMER"].invoke({"input": "Como anda, la rulobanda"})
-    print("DREAMER:", response)
+    process_response(AGENTS["DREAMER"].invoke({"input": "Como anda, la rulobanda"}))
 
 
 def test_talker():
-    response = AGENTS["TALKER"].invoke({"input": "Como anda, la rulobanda"})
-    print("TALKER:", response)
-    # print(
-    #     "\n\nTALking:",
-    #     response["output"][0]["content"][0]["text"],
-    #     len(response["output"]),
-    #     len(response["output"][0]["content"]),
-    # )
+    process_response(AGENTS["TALKER"].invoke({"input": "Como anda, la rulobanda"}))

@@ -2,6 +2,9 @@ from os import listdir
 from langchain_openai import ChatOpenAI
 from pathlib import Path
 from langchain_core.messages import HumanMessage, SystemMessage
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Agent:
@@ -11,14 +14,15 @@ class Agent:
         self.api_key = "Hello"
         reasoning = {
             "effort": "high",  # 'low', 'medium', or 'high'
-            "thinking_budget_tokens": 1024,
+            "thinking_budget_tokens": 512,
+            "generate_summary": "concise",
         }
         self.model = ChatOpenAI(
             model=model,
             base_url=self.base_url,
             api_key=self.api_key,
             max_tokens=4096,
-            # streaming=True,
+            streaming=True,
             reasoning=reasoning,
         )
         if not prompt_file.exists():
@@ -33,11 +37,8 @@ class Agent:
             SystemMessage(content=self.prompt),
             HumanMessage(content=state["input"]),
         ]
-        response = self.model.invoke(messages)
-
-        for i in response.content:
-            if i["type"] == "text":
-                return {"output": i["text"]}
+        for chunk in self.model.stream(messages):
+            yield chunk
 
 
 AGENTS = dict(
@@ -47,3 +48,17 @@ AGENTS = dict(
         "KatetoProductOwner", Path("data/agents/kateto-product-owner.md")
     ),
 )
+
+
+def process_response(stream):
+    text = ""
+    reasoning = ""
+    for chunk in stream:
+        for content in chunk.content:
+            print(content)
+            if content["type"] == "text":
+                text += content["text"]
+            # elif content["type"] == "reasoning":
+            #     reasoning += content[""]
+    logger.info("\n\nTEXT:", text, "\n\nREASONING\n\n", reasoning)
+    return {text, reasoning}

@@ -44,7 +44,7 @@ class Client:
         self.agent = manager_pb.Agents.DREAMER
 
     def Agent(self, agent: int):
-        self.agent = manager_pb.Agents(agent)
+        self.agent = agent
         return self
 
     def Prompt(self, text):
@@ -68,14 +68,15 @@ def test_prompt(start_server):
     for i in stream:
         print(i)
         buffer += i.token
-    print(buffer)
+
+    print("PRINT:", buffer)
     assert len(buffer) > 0
 
 
-def kateto_prompt(start_server):
+def test_kateto_prompt(start_server):
     stream = Client().Agent(0).Prompt("Kateto, insulta todo lo que puedas.")
     buffer = ""
     for i in stream:
         buffer += i.token
-    print(buffer)
+    print("PRINT:", buffer)
     assert len(buffer) > 0

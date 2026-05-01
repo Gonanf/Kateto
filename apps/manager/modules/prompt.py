@@ -42,8 +42,9 @@ def PromptFunction(request, context) -> Generator[manager_pb.PromptResponse]:
     for token in stream:
         print(token)
         message_chunk, metadata = token["data"]
-        print("MESSAGE:", message_chunk, "METADATA:", metadata)
-        yield manager_pb.PromptResponse(token=message_chunk.content)
-        # for name, state in token["data"].items():
-        #     print("NAME:", name, "STATE:", state)
-        #     yield manager_pb.PromptResponse(token="a")
+        print("MESSAGE:", message_chunk)
+
+        for block in message_chunk.content:
+            print("BLOCK:", block)
+            if block["type"] == "text":
+                yield manager_pb.PromptResponse(token=block["text"])
