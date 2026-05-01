@@ -11,3 +11,9 @@ def test_dreamer():
 def test_talker():
     response = AGENTS["TALKER"].invoke({"input": "Como anda, la rulobanda"})
     print("TALKER:", response)
+    # print(
+    #     "\n\nTALking:",
+    #     response["output"][0]["content"][0]["text"],
+    #     len(response["output"]),
+    #     len(response["output"][0]["content"]),
+    # )
