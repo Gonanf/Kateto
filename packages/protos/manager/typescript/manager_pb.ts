@@ -1,23 +1,23 @@
 export const enum Agents {
-  CHARLATAN = "CHARLATAN",
-  SONADOR = "SONADOR",
-  PRODUCTOWNER = "PRODUCTOWNER",
+  TALKER = "TALKER",
+  DREAMER = "DREAMER",
+  PRODUCT_OWNER = "PRODUCT_OWNER",
 }
 
 export const encodeAgents: { [key: string]: number } = {
-  CHARLATAN: 0,
-  SONADOR: 1,
-  PRODUCTOWNER: 2,
+  TALKER: 0,
+  DREAMER: 1,
+  PRODUCT_OWNER: 2,
 };
 
 export const decodeAgents: { [key: number]: Agents } = {
-  0: Agents.CHARLATAN,
-  1: Agents.SONADOR,
-  2: Agents.PRODUCTOWNER,
+  0: Agents.TALKER,
+  1: Agents.DREAMER,
+  2: Agents.PRODUCT_OWNER,
 };
 
 export interface PromptRequest {
-  text: string;
+  text?: string;
   agent?: Agents;
 }
 
@@ -28,7 +28,7 @@ export function encodePromptRequest(message: PromptRequest): Uint8Array {
 }
 
 function _encodePromptRequest(message: PromptRequest, bb: ByteBuffer): void {
-  // required string text = 1;
+  // optional string text = 1;
   let $text = message.text;
   if ($text !== undefined) {
     writeVarint32(bb, 10);
@@ -57,7 +57,7 @@ function _decodePromptRequest(bb: ByteBuffer): PromptRequest {
       case 0:
         break end_of_message;
 
-      // required string text = 1;
+      // optional string text = 1;
       case 1: {
         message.text = readString(bb, readVarint32(bb));
         break;
@@ -74,14 +74,11 @@ function _decodePromptRequest(bb: ByteBuffer): PromptRequest {
     }
   }
 
-  if (message.text === undefined)
-    throw new Error("Missing required field: text");
-
   return message;
 }
 
 export interface PromptResponse {
-  token: string;
+  token?: string;
 }
 
 export function encodePromptResponse(message: PromptResponse): Uint8Array {
@@ -91,7 +88,7 @@ export function encodePromptResponse(message: PromptResponse): Uint8Array {
 }
 
 function _encodePromptResponse(message: PromptResponse, bb: ByteBuffer): void {
-  // required string token = 1;
+  // optional string token = 1;
   let $token = message.token;
   if ($token !== undefined) {
     writeVarint32(bb, 10);
@@ -113,7 +110,7 @@ function _decodePromptResponse(bb: ByteBuffer): PromptResponse {
       case 0:
         break end_of_message;
 
-      // required string token = 1;
+      // optional string token = 1;
       case 1: {
         message.token = readString(bb, readVarint32(bb));
         break;
@@ -123,9 +120,6 @@ function _decodePromptResponse(bb: ByteBuffer): PromptResponse {
         skipUnknownField(bb, tag & 7);
     }
   }
-
-  if (message.token === undefined)
-    throw new Error("Missing required field: token");
 
   return message;
 }

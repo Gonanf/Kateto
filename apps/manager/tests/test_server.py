@@ -68,7 +68,6 @@ def test_prompt(start_server):
     for i in stream:
         print(i)
         buffer += i.token
-
     print("PRINT:", buffer)
     assert len(buffer) > 0
 

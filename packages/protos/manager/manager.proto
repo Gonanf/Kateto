@@ -1,19 +1,24 @@
+syntax = "proto3";
+package manager;
+
+
 service Manager {
   rpc Prompt(PromptRequest) returns (stream PromptResponse);
 }
 
 enum Agents {
-  CHARLATAN = 0;
-  SONADOR = 1;
-PRODUCTOWNER = 2;
+  TALKER = 0;
+  DREAMER = 1;
+  PRODUCT_OWNER = 2;
 }
 
 message PromptRequest {
-  required string text = 1;
+  string text = 1;
   optional Agents agent = 2;
 }
 
 message PromptResponse {
-  required string token = 1;
-  // Agents agent = 2; maybe for later
+  string token = 1;
 }
+
+

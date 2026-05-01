@@ -1,3 +1,4 @@
+import logging
 from typing import Generator
 import manager_pb
 import time
@@ -11,38 +12,21 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langchain_core.messages import HumanMessage, SystemMessage
 from modules.server import Manager
 from modules.agents import AGENTS
+from modules.graphs import GRAPHS
 
-
-class AgentState(TypedDict):
-    input: str
-    output: str
-
-
-graph = StateGraph(AgentState)
-
-graph.add_node("llm_node", AGENTS["TALKER"].invoke)
-graph.add_edge(START, "llm_node")
-graph.add_edge("llm_node", END)
-
-checkpointer = InMemorySaver()
-
-agent = graph.compile(checkpointer=checkpointer)
+logger = logging.getLogger(__name__)
 
 
 def PromptFunction(request, context) -> Generator[manager_pb.PromptResponse]:
-    stream = agent.stream(
+    stream = GRAPHS[request.agent].stream(
         {"input": request.text},
         {"configurable": {"thread_id": "1"}},
         stream_mode=["messages"],
         version="v2",
     )
 
-    print(request.agent)
-
     for token in stream:
-        print(token)
         message_chunk, metadata = token["data"]
-        print("MESSAGE:", message_chunk)
 
         for block in message_chunk.content:
             print("BLOCK:", block)

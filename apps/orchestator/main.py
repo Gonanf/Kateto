@@ -32,10 +32,6 @@ def speak_requests_from_prompt(prompt_stream):
         yield tts_pb.SpeakRequest(token=token.token)
 
 
-# TODO: Put this as a data contract
-Agents = ["CHARLATAN", "SONADOR"]
-
-
 class Orchestator:
     def process_text(self, text):
         print(text)
@@ -45,12 +41,8 @@ class Orchestator:
         print(label.label)
 
         prompt_stream = self.manager.stub.Prompt(
-            manager_pb.PromptRequest(text=text, agent=Agents[label.label])
+            manager_pb.PromptRequest(text=text, agent=manager_pb.Agents(label.label))
         )
-
-        # for token in prompt_stream:
-        #     print(token)
-        #     self.tts.stub.Speak(token)
 
         if label.label == 0:
             speech_result = self.tts.stub.Speak(

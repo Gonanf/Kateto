@@ -35,7 +35,7 @@ class ManagerStub(object):
             channel: A grpc.Channel.
         """
         self.Prompt = channel.unary_stream(
-                '/Manager/Prompt',
+                '/manager.Manager/Prompt',
                 request_serializer=manager__pb2.PromptRequest.SerializeToString,
                 response_deserializer=manager__pb2.PromptResponse.FromString,
                 _registered_method=True)
@@ -60,9 +60,9 @@ def add_ManagerServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'Manager', rpc_method_handlers)
+            'manager.Manager', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('Manager', rpc_method_handlers)
+    server.add_registered_method_handlers('manager.Manager', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -83,7 +83,7 @@ class Manager(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/Manager/Prompt',
+            '/manager.Manager/Prompt',
             manager__pb2.PromptRequest.SerializeToString,
             manager__pb2.PromptResponse.FromString,
             options,

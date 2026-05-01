@@ -7,12 +7,12 @@ DESCRIPTOR: _descriptor.FileDescriptor
 
 class Agents(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
-    CHARLATAN: _ClassVar[Agents]
-    SONADOR: _ClassVar[Agents]
-    PRODUCTOWNER: _ClassVar[Agents]
-CHARLATAN: Agents
-SONADOR: Agents
-PRODUCTOWNER: Agents
+    TALKER: _ClassVar[Agents]
+    DREAMER: _ClassVar[Agents]
+    PRODUCT_OWNER: _ClassVar[Agents]
+TALKER: Agents
+DREAMER: Agents
+PRODUCT_OWNER: Agents
 
 class PromptRequest(_message.Message):
     __slots__ = ("text", "agent")
