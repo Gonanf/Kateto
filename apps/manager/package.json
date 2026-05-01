@@ -1,15 +1,7 @@
 {
   "name": "manager",
+  "version": "0.1.0",
   "scripts": {
-    "dev": "bun run server.ts"
-  },
-  "type": "module",
-  "dependencies": {
-    "@grpc/grpc-js": "^1.14.3",
-    "@grpc/proto-loader": "^0.8.0",
-    "@opencode-ai/sdk": "^1.14.19",
-    "effect": "^3.21.1",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^6.0.3"
+    "dev": "uv run --env-file=.env main.py"
   }
 }

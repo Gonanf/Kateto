@@ -86,7 +86,7 @@ async function loadItems(): Promise<SpinItem[]> {
       return [];
     }
     case "AFFINE": {
-      const response = await $`bunx mcporter call affine.read_doc docId:${process.env.AFFINE_DOC_ID} includeMarkdown:true`;
+      const response = await $`bunx mcporter call affine.read_doc docId:${process.env.AFFINE_DOC_ID} includeMarkdown:true`.quiet();
       const content = await response.json() as { blocks?: AffineBlock[], markdown: string };
       const blocks: AffineBlock[] = (content.blocks ?? []).filter((b) => b.flavour === 'affine:list' && b.text) as AffineBlock[];
       const items: SpinItem[] = blocks.map((b) => ({
@@ -110,7 +110,7 @@ async function saveItems(itemInput: string | SpinItem): Promise<void> {
   const item: SpinItem = typeof itemInput === 'string' ? { id: 'auto', label: itemInput, checked: false } : itemInput;
   if (ITEMS_METHOD === 'AFFINE') {
     const label = item.label;
-    await $`bunx mcporter call affine.append_block docId:${process.env.AFFINE_DOC_ID} type:list style:todo text:"${label}" checked:false`;
+    await $`bunx mcporter call affine.append_block docId:${process.env.AFFINE_DOC_ID} type:list style:todo text:"${label}" checked:false`.quiet();
 
     // Refresh local cache
     const refreshed = await loadItems();
@@ -139,7 +139,7 @@ let usedItems = new Set<string>();
 let allItems: SpinItem[] = await loadItems();
 
 const packageDefinition = protoLoader.loadSync(
-  join(__dirname, '../protos/manager/manager.proto'),
+  join(__dirname, '../../packages/protos/manager/manager.proto'),
   {
     keepCase: true,
     longs: String,
@@ -150,7 +150,7 @@ const packageDefinition = protoLoader.loadSync(
 );
 
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
-const Manager = (protoDescriptor as any).Manager;
+const Manager = (protoDescriptor as any).manager.Manager;
 
 const grpcClient = new Manager(
   MANAGER_GRPC_ADDR,
@@ -159,7 +159,7 @@ const grpcClient = new Manager(
 
 function callManagerPrompt(text: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const call = grpcClient.prompt({ text, agent: "PRODUCTOWNER" }, { deadline: Date.now() + 120000 });
+    const call = grpcClient.prompt({ text, agent: "PRODUCT_OWNER" }, { deadline: Date.now() + 120000 });
     let buffer = '';
 
     call.on('data', (response: { token: string }) => {
@@ -258,11 +258,11 @@ const server = serve({
        * to modify existing blocks, so what i have to do is get the markdown, modify it manually and put it again
        */
       if (ITEMS_METHOD == "AFFINE") {
-        const response = await $`bunx mcporter call affine.read_doc docId:${process.env.AFFINE_DOC_ID} includeMarkdown:true`;
+        const response = await $`bunx mcporter call affine.read_doc docId:${process.env.AFFINE_DOC_ID} includeMarkdown:true`.quiet();
         const content = await response.json() as AffineRead;
         const currentMd = content.markdown;
         const newMarkdown = currentMd.replace(`- [ ] ${winner}`, `- [x] ${winner}`);
-        await $`bunx mcporter call affine.replace_doc_with_markdown docId:${process.env.AFFINE_DOC_ID} markdown:${newMarkdown}`;
+        await $`bunx mcporter call affine.replace_doc_with_markdown docId:${process.env.AFFINE_DOC_ID} markdown:${newMarkdown}`.quiet();
         allItems.forEach((i) => { if (i.label === winner) i.checked = true; });
       }
       usedItems.add(winner);
@@ -280,13 +280,13 @@ const server = serve({
         const target = allItems.find((it) => it.id === id);
         if (!target) return new Response('Not Found', { status: 404 });
         // Read current markdown to modify
-        const resp = await $`bunx mcporter call affine.read_doc docId:${process.env.AFFINE_DOC_ID} includeMarkdown:true`;
+        const resp = await $`bunx mcporter call affine.read_doc docId:${process.env.AFFINE_DOC_ID} includeMarkdown:true`.quiet();
         const mdContent = await resp.json() as { markdown: string };
         const oldMd = mdContent.markdown ?? '';
         // Remove the line containing the item label
         const lines = oldMd.split('\n');
         const newMd = lines.filter((ln) => !ln.includes(target.label)).join('\n');
-        await $`bunx mcporter call affine.replace_doc_with_markdown docId:${process.env.AFFINE_DOC_ID} markdown:${newMd}`;
+        await $`bunx mcporter call affine.replace_doc_with_markdown docId:${process.env.AFFINE_DOC_ID} markdown:${newMd}`.quiet();
         // Update local list
         allItems = allItems.filter((i) => i.id !== id);
       } else {
@@ -361,10 +361,10 @@ const server = serve({
     if (pathname === '/api/reset' && req.method === 'POST') {
       usedItems.clear();
       if (ITEMS_METHOD === 'AFFINE') {
-        const resp = await $`bunx mcporter call affine.read_doc docId:${process.env.AFFINE_DOC_ID} includeMarkdown:true`;
+        const resp = await $`bunx mcporter call affine.read_doc docId:${process.env.AFFINE_DOC_ID} includeMarkdown:true`.quiet();
         const data = await resp.json() as { markdown: string };
         const newMd = (data.markdown ?? '').split('\n').map((ln) => ln.startsWith('- [x]') ? ln.replace('- [x]', '- [ ]') : ln).join('\n');
-        await $`bunx mcporter call affine.replace_doc_with_markdown docId:${process.env.AFFINE_DOC_ID} markdown:${newMd}`;
+        await $`bunx mcporter call affine.replace_doc_with_markdown docId:${process.env.AFFINE_DOC_ID} markdown:${newMd}`.quiet();
         // refresh local items as unchecked
         allItems = await loadItems();
       }

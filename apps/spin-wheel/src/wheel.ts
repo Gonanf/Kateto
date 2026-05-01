@@ -44,7 +44,7 @@ export function initWheel(
 
 export function spinWheel(): void {
   if (!wheel) return;
-  wheel.spin(wheel.rotationSpeed + Math.floor(Math.random() * 600) + 800);
+  wheel.spin(wheel.rotationSpeed + Math.floor(Math.random() * 300) + 200);
 }
 
 export function updateItems(items: WheelItem[]): void {
