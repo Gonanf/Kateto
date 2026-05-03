@@ -19,12 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 def PromptFunction(request, context) -> Generator[manager_pb.PromptResponse]:
-    stream = KATETO.invoke(
+    stream = KATETO.stream(
         {"input": request.text, "agent": manager_pb.Agents.Name(request.agent)},
-        {"configurable": {"thread_id": "1"}},
+        {"configurable": {"thread_id": 1}},
         stream_mode=["messages"],
-        version=["v2"],
+        version="v2",
     )
     print("STREAM", stream)
+    # for token in stream:
+    #     yield manager_pb.PromptResponse(token=token.text)
     for token in stream:
-        yield manager_pb.PromptResponse(token=token.text)
+        message_chunk, metadata = token["data"]
+        yield manager_pb.PromptResponse(token=message_chunk.content)
