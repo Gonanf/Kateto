@@ -37,8 +37,9 @@ class Agent:
             SystemMessage(content=self.prompt),
             HumanMessage(content=state["input"]),
         ]
-        for chunk in self.model.stream(messages):
-            yield chunk
+        return self.model.invoke(messages)
+        # for chunk in self.model.stream(messages):
+        #     yield chunk
 
 
 AGENTS = dict(

@@ -9,7 +9,6 @@ service Manager {
 enum Agents {
   TALKER = 0;
   DREAMER = 1;
-  PRODUCT_OWNER = 2;
 }
 
 message PromptRequest {

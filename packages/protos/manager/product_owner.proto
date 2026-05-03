@@ -1,0 +1,17 @@
+syntax = "proto3";
+package manager.product_owner;
+
+service ProductOwner {
+  rpc CreateProject(ProjectRequest) returns (stream ProjectResponse);
+}
+
+message ProjectRequest {
+  string idea = 1;
+  string disponibility = 2;
+  repeated string team = 3;
+}
+
+message ProjectResponse {
+  string id = 1;
+}
+

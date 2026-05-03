@@ -172,19 +172,19 @@ function callManagerPrompt(text: string): Promise<string> {
 }
 
 function buildSprintPrompt(feature: string): string {
-  let prompt = feature;
+  let prompt = { feature: feature, availability: "Full Time", team: ["Chaos"] };
   try {
     const c = configState;
     if (c?.availability) {
-      prompt += `\nAvailability: ${c.availability}`;
+      prompt.availability = c.availability;
     }
     if (c?.teamPersons && c.teamPersons.length > 0) {
-      prompt += `\nTeam: ${c.teamPersons.join(', ')}`;
+      prompt.team = c.teamPersons;
     }
   } catch {
     // ignore config read issues, fall back to feature only
   }
-  return prompt;
+  return String(prompt);
 }
 
 function serveStaticFile(path: string): Response | null {

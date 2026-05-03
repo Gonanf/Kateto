@@ -1,51 +1,46 @@
-export const enum Agents {
-  TALKER = "TALKER",
-  DREAMER = "DREAMER",
+export interface ProjectRequest {
+  idea?: string;
+  disponibility?: string;
+  team?: string[];
 }
 
-export const encodeAgents: { [key: string]: number } = {
-  TALKER: 0,
-  DREAMER: 1,
-};
-
-export const decodeAgents: { [key: number]: Agents } = {
-  0: Agents.TALKER,
-  1: Agents.DREAMER,
-};
-
-export interface PromptRequest {
-  text?: string;
-  agent?: Agents;
-}
-
-export function encodePromptRequest(message: PromptRequest): Uint8Array {
+export function encodeProjectRequest(message: ProjectRequest): Uint8Array {
   let bb = popByteBuffer();
-  _encodePromptRequest(message, bb);
+  _encodeProjectRequest(message, bb);
   return toUint8Array(bb);
 }
 
-function _encodePromptRequest(message: PromptRequest, bb: ByteBuffer): void {
-  // optional string text = 1;
-  let $text = message.text;
-  if ($text !== undefined) {
+function _encodeProjectRequest(message: ProjectRequest, bb: ByteBuffer): void {
+  // optional string idea = 1;
+  let $idea = message.idea;
+  if ($idea !== undefined) {
     writeVarint32(bb, 10);
-    writeString(bb, $text);
+    writeString(bb, $idea);
   }
 
-  // optional Agents agent = 2;
-  let $agent = message.agent;
-  if ($agent !== undefined) {
-    writeVarint32(bb, 16);
-    writeVarint32(bb, encodeAgents[$agent]);
+  // optional string disponibility = 2;
+  let $disponibility = message.disponibility;
+  if ($disponibility !== undefined) {
+    writeVarint32(bb, 18);
+    writeString(bb, $disponibility);
+  }
+
+  // repeated string team = 3;
+  let array$team = message.team;
+  if (array$team !== undefined) {
+    for (let value of array$team) {
+      writeVarint32(bb, 26);
+      writeString(bb, value);
+    }
   }
 }
 
-export function decodePromptRequest(binary: Uint8Array): PromptRequest {
-  return _decodePromptRequest(wrapByteBuffer(binary));
+export function decodeProjectRequest(binary: Uint8Array): ProjectRequest {
+  return _decodeProjectRequest(wrapByteBuffer(binary));
 }
 
-function _decodePromptRequest(bb: ByteBuffer): PromptRequest {
-  let message: PromptRequest = {} as any;
+function _decodeProjectRequest(bb: ByteBuffer): ProjectRequest {
+  let message: ProjectRequest = {} as any;
 
   end_of_message: while (!isAtEnd(bb)) {
     let tag = readVarint32(bb);
@@ -54,15 +49,22 @@ function _decodePromptRequest(bb: ByteBuffer): PromptRequest {
       case 0:
         break end_of_message;
 
-      // optional string text = 1;
+      // optional string idea = 1;
       case 1: {
-        message.text = readString(bb, readVarint32(bb));
+        message.idea = readString(bb, readVarint32(bb));
         break;
       }
 
-      // optional Agents agent = 2;
+      // optional string disponibility = 2;
       case 2: {
-        message.agent = decodeAgents[readVarint32(bb)];
+        message.disponibility = readString(bb, readVarint32(bb));
+        break;
+      }
+
+      // repeated string team = 3;
+      case 3: {
+        let values = message.team || (message.team = []);
+        values.push(readString(bb, readVarint32(bb)));
         break;
       }
 
@@ -74,31 +76,31 @@ function _decodePromptRequest(bb: ByteBuffer): PromptRequest {
   return message;
 }
 
-export interface PromptResponse {
-  token?: string;
+export interface ProjectResponse {
+  id?: string;
 }
 
-export function encodePromptResponse(message: PromptResponse): Uint8Array {
+export function encodeProjectResponse(message: ProjectResponse): Uint8Array {
   let bb = popByteBuffer();
-  _encodePromptResponse(message, bb);
+  _encodeProjectResponse(message, bb);
   return toUint8Array(bb);
 }
 
-function _encodePromptResponse(message: PromptResponse, bb: ByteBuffer): void {
-  // optional string token = 1;
-  let $token = message.token;
-  if ($token !== undefined) {
+function _encodeProjectResponse(message: ProjectResponse, bb: ByteBuffer): void {
+  // optional string id = 1;
+  let $id = message.id;
+  if ($id !== undefined) {
     writeVarint32(bb, 10);
-    writeString(bb, $token);
+    writeString(bb, $id);
   }
 }
 
-export function decodePromptResponse(binary: Uint8Array): PromptResponse {
-  return _decodePromptResponse(wrapByteBuffer(binary));
+export function decodeProjectResponse(binary: Uint8Array): ProjectResponse {
+  return _decodeProjectResponse(wrapByteBuffer(binary));
 }
 
-function _decodePromptResponse(bb: ByteBuffer): PromptResponse {
-  let message: PromptResponse = {} as any;
+function _decodeProjectResponse(bb: ByteBuffer): ProjectResponse {
+  let message: ProjectResponse = {} as any;
 
   end_of_message: while (!isAtEnd(bb)) {
     let tag = readVarint32(bb);
@@ -107,9 +109,9 @@ function _decodePromptResponse(bb: ByteBuffer): PromptResponse {
       case 0:
         break end_of_message;
 
-      // optional string token = 1;
+      // optional string id = 1;
       case 1: {
-        message.token = readString(bb, readVarint32(bb));
+        message.id = readString(bb, readVarint32(bb));
         break;
       }
 

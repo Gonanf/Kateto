@@ -28,7 +28,6 @@ class Classifier:
 
 def speak_requests_from_prompt(prompt_stream):
     for token in prompt_stream:
-        print(token)
         yield tts_pb.SpeakRequest(token=token.token)
 
 
@@ -41,7 +40,7 @@ class Orchestator:
         print(label.label)
 
         prompt_stream = self.manager.stub.Prompt(
-            manager_pb.PromptRequest(text=text, agent=manager_pb.Agents(label.label))
+            manager_pb.PromptRequest(text=text, agent=label.label)
         )
 
         if label.label == 0:

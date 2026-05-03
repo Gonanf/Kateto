@@ -1,3 +1,4 @@
+import collections
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 import classifier_pb
 import grpc
@@ -17,9 +18,11 @@ class ClassifierServicer(classifier_pb.ClassifierServicer):
         self.classifier = pipeline(
             "text-classification", model=self.model, tokenizer=self.tokenizer
         )
+        self.queue = collections.deque(maxlen=3)
 
     def Classify(self, request, context):
-        response = self.classifier(request.prompt)
+        self.queue.append(request.prompt)
+        response = self.classifier("\n".join(self.queue))
         return classifier_pb.BertResponse(label=response[0]["label"])
 
 
