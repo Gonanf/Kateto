@@ -10,9 +10,13 @@ class KatetoState(TypedDict):
     output: str
 
 
+def Call(state: KatetoState):
+    return AGENTS[state["agent"]].invoke({"input": state["input"]})
+
+
 graph = StateGraph(KatetoState)
 
-graph.add_node("llm_node", AGENTS[agent].invoke)
+graph.add_node("llm_node", Call)
 graph.add_edge(START, "llm_node")
 graph.add_edge("llm_node", END)
 
