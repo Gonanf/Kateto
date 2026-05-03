@@ -16,6 +16,7 @@ members = [
   "apps/lang_manager",
   "apps/manager",
   "packages/data",
+  "packages/i_have_time",
 ]
 exclude = ["**/node_modules", "**/__pycache__"]
 

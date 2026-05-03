@@ -6,6 +6,7 @@
 .turbo
 **/__pycache__
 apps/classifier/intent-classifier
+apps/classifier/data
 **.log
 docs
 entities.json
