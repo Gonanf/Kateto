@@ -8,15 +8,19 @@ logger = logging.getLogger(__name__)
 
 
 class Agent:
-    def __init__(self, model: str, prompt_file: Path) -> None:
+    def __init__(
+        self, model: str, prompt_file: Path, reason: bool | None = None
+    ) -> None:
         self.model_name = model
         self.base_url = "http://localhost:11434/v1"
         self.api_key = "Hello"
-        reasoning = {
-            "effort": "high",  # 'low', 'medium', or 'high'
-            "thinking_budget_tokens": 512,
-            "generate_summary": "concise",
-        }
+        reasoning = None
+        if reason:
+            reasoning = {
+                "effort": "high",  # 'low', 'medium', or 'high'
+                "thinking_budget_tokens": 512,
+                "generate_summary": "concise",
+            }
         self.model = ChatOpenAI(
             model=model,
             base_url=self.base_url,
@@ -40,13 +44,27 @@ class Agent:
         return self.model.invoke(messages)
         # for chunk in self.model.stream(messages):
         #     yield chunk
+        #
+
+    def stream(self, state):
+        messages = [
+            SystemMessage(content=self.prompt),
+            HumanMessage(content=state["input"]),
+        ]
+
+        for chunk in self.model.stream(messages):
+            print("CHUNK:", chunk)
+            yield chunk
 
 
 AGENTS = dict(
     TALKER=Agent("KatetoTalker", Path("data/agents/kateto-charlatan.md")),
     DREAMER=Agent("KatetoDreamer", Path("data/agents/kateto-soñador.md")),
     PRODUCT_OWNER=Agent(
-        "KatetoProductOwner", Path("data/agents/kateto-product-owner.md")
+        "KatetoProductOwner",
+        Path("data/agents/kateto-product-owner.md"),
+        # "KatetoDreamer",
+        # Path("data/agents/kateto-product-owner.md"),
     ),
 )
 

@@ -2,10 +2,9 @@ from typing import Type, TypedDict, Literal, Union
 
 
 class IsBusy(TypedDict):
-    priority: int
     effort_days: int
-    effort_start: str  # Date class?
-    effort_end: str
+    effort_start: str  # ISO date string (YYYY-MM-DD)
+    effort_end: str  # ISO date string (YYYY-MM-DD)
 
 
 class Critery(TypedDict):
@@ -26,7 +25,10 @@ class PBI_Data(TypedDict):
     ]  # TODO: Add Bug and Epic?, when implementing in existing projects
     title: str
     description: str
-    content: PBI_Content
+    score: int
+    priority: int
+    notes: str
+    criteries: list[Critery]
 
 
 class PBI(TypedDict):
@@ -79,10 +81,11 @@ class DocumentData(TypedDict):
 
 class Document(TypedDict):
     title: str
-    team: list[Asignee]
-    data: DocumentData
-    pbi: list[PBI]
-    dod: list[DOD]
-    phases: list[Phase]
-    events: list[Event]
+    team: list[Asignee] | None
+    pbi_count: int
+    data: DocumentData | None
+    pbi: list[PBI] | None
+    dod: list[DOD] | None
+    phases: list[Phase] | None
+    events: list[Event] | None
     messages: list[str] | None

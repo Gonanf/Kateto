@@ -1,6 +1,6 @@
 import pytest
 import time
-from modules.agents import AGENTS
+from modules.core.agents import AGENTS
 
 
 def process_response(stream):
