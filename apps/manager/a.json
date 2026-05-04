@@ -1,0 +1,211 @@
+{
+  "role": "assistant",
+  "content": {
+    "pbis": [
+      {
+        "type": "Epic",
+        "title": "Comparar las características de Unity, Godot y UE5 en términos de rendimiento y compatibilidad",
+        "description": "Realizar una evaluación detallada de cada motor de juego en términos de rendimiento, compatibilidad con diferentes plataformas y optimización de recursos. Esto permitirá a los desarrolladores identificar las herramientas más adecuadas para sus proyectos.",
+        "score": 9,
+        "priority": 1,
+        "notes": "Es fundamental incluir métricas de rendimiento y benchmarking para garantizar la precisión del análisis.",
+        "criteries": [
+          {
+            "given_clause": "Incluir métricas de rendimiento y benchmarking",
+            "when_clause": "Cuando se requiere una evaluación objetiva de rendimiento",
+            "then_clause": "Proporcionar una comparación estructurada entre los motores"
+          },
+          {
+            "given_clause": "Incluir compatibilidad con plataformas",
+            "when_clause": "Cuando se analizan proyectos de distribución",
+            "then_clause": "Mostrar compatibilidad con dispositivos y plataformas"
+          }
+        ]
+      },
+      {
+        "type": "Epic",
+        "title": "Estructurar un recurso educativo sobre Unity, Godot y UE5",
+        "description": "Crear una guía educativa que incluya tutoriales, documentación y comparaciones de herramientas para estudiantes, profesionales y entusiastas del desarrollo de videojuegos.",
+        "score": 8,
+        "priority": 2,
+        "notes": "La guía debe ser accesible y bien organizada para facilitar el aprendizaje continuo.",
+        "criteries": [
+          {
+            "given_clause": "Documentación y tutoriales bien estructurados",
+            "when_clause": "Cuando se requiere un recurso educativo",
+            "then_clause": "Crear una guía que brinde información útil"
+          },
+          {
+            "given_clause": "Incluir comparaciones de herramientas",
+            "when_clause": "Cuando se analizan características de desarrollo",
+            "then_clause": "Asegurar que el recurso sea útil para tomar decisiones"
+          }
+        ]
+      },
+      {
+        "type": "Task",
+        "title": "Analizar la comunidad y recursos de Unity, Godot y UE5",
+        "description": "Investigar y documentar las comunidades, foros, tutoriales y recursos disponibles para cada plataforma, con el objetivo de identificar las herramientas más apoyadas por la comunidad.",
+        "score": 7,
+        "priority": 3,
+        "notes": "Es importante documentar las características de las comunidades para facilitar la toma de decisiones.",
+        "criteries": [
+          {
+            "given_clause": "Investigar recursos comunitarios",
+            "when_clause": "Cuando se requiere información sobre apoyo técnico",
+            "then_clause": "Documentar la comunidad y sus recursos"
+          },
+          {
+            "given_clause": "Identificar herramientas comunes",
+            "when_clause": "Cuando se analizan características de desarrollo",
+            "then_clause": "Mostrar herramientas que la comunidad utiliza comúnmente"
+          }
+        ]
+      },
+      {
+        "type": "Epic",
+        "title": "Explorar la capacidad de Unity, Godot y UE5 en proyectos prácticos",
+        "description": "Realizar un análisis práctico de cómo cada plataforma se aplica en proyectos de desarrollo de videojuegos, incluyendo ejemplos de implementación y desafíos típicos.",
+        "score": 9,
+        "priority": 1,
+        "notes": "Los proyectos prácticos deben ser relevantes para el desarrollo de videojuegos y mostrar las capacidades de cada motor.",
+        "criteries": [
+          {
+            "given_clause": "Proyectos prácticos relevantes",
+            "when_clause": "Cuando se requiere una aplicación práctica de las herramientas",
+            "then_clause": [
+              58861
+            ] "Mostrar cómo se aplican en proyectos de desarrollo"
+          },
+          {
+            "given_clause": "Implementación de características",
+            "when_clause": "Cuando se analizan capacidades de desarrollo",
+            "then_clause": "Incluir ejemplos de física, renderizado y diseño de niveles"
+          }
+        ]
+      },
+      {
+        "type": "Epic",
+        "title": "Analizar el desarrollo rápido y la curva de aprendizaje de Unity, Godot y UE5",
+        "description": "Evaluar la facilidad de aprendizaje, el tiempo de desarrollo y la curva de aprendizaje de cada plataforma, con el objetivo de ayudar a los nuevos desarrolladores a elegir la herramienta más adecuada.",
+        "score": 8,
+        "priority": 2,
+        "notes": "La curva de aprendizaje debe ser evaluada desde la perspectiva del nuevo desarrollador.",
+        "criteries": [
+          {
+            "given_clause": "Curva de aprendizaje y tiempo de desarrollo",
+            "when_clause": "Cuando se analizan características de desarrollo",
+            "then_clause": "Mostrar información sobre curva de aprendizaje y tiempo de desarrollo"
+          },
+          {
+            "given_clause": "Evaluación desde la perspectiva del nuevo desarrollador",
+            "when_clause": "Cuando se requiere apoyo para nuevos desarrolladores",
+            "then_clause": "Incluir información sobre facilidad de uso y curva de aprendizaje"
+          }
+        ]
+      },
+      {
+        "type": "Task",
+        "title": "Asegurar compatibilidad con entornos de desarrollo y version control",
+        "description": "Verificar que las herramientas estén compatibles con los entornos de desarrollo y version control utilizados por el equipo, incluyendo IDEs y sistemas de control de versiones.",
+        "score": 7,
+        "priority": 3,
+        "notes": "La compatibilidad es clave para el flujo de trabajo del equipo.",
+        "criteries": [
+          {
+            "given_clause": "Verificar compatibilidad con IDEs",
+            "when_clause": "Cuando se requiere una integración de herramientas",
+            "then_clause": "Asegurar que las herramientas estén compatibles con el entorno de trabajo"
+          },
+          {
+            "given_clause": "Verificar compatibilidad con version control",
+            "when_clause": "Cuando se requiere integración de versiones",
+            "then_clause": "Mostrar cómo se integran con sistemas de control de versiones"
+          }
+        ]
+      },
+      {
+        "type": "Epic",
+        "title": "Incluir apoyo de mentor o tutor en el análisis",
+        "description": "Asegurar que el análisis incluya la participación de un mentor o tutor con experiencia en desarrollo de videojuegos, para proporcionar perspectivas profesionales y recomendaciones.",
+        "score": 9,
+        "priority": 1,
+        "notes": "El mentor puede aportar información valiosa sobre experiencia práctica y desafíos comunes.",
+        "criteries": [
+          {
+            "given_clause": "Participación de un mentor o tutor",
+            "when_clause": "Cuando se requiere perspectiva profesional",
+            "then_clause": "Asegurar que el análisis incluya apoyo técnico"
+          },
+          {
+            "given_clause": "Experiencia práctica",
+            "when_clause": "Cuando se analizan capacidades de desarrollo",
+            "then_clause": "Mostrar cómo se aplica la experiencia del mentor"
+          }
+        ]
+      },
+      {
+        "type": "Task",
+        "title": "Documentar la compatibilidad con plataformas de distribución",
+        "description": "Investigar y documentar la compatibilidad de Unity, Godot y UE5 con plataformas de distribución y juegos en línea, incluyendo soporte para dispositivos móviles, consolas y plataformas web.",
+        "score": 7,
+        "priority": 3,
+        "notes": "La compatibilidad con plataformas es crucial para el alcance del proyecto.",
+        "criteries": [
+          {
+            [
+              58861
+            ] "given_clause": "Investigar soporte para plataformas",
+            "when_clause": "Cuando se analizan características de distribución",
+            "then_clause": "Mostrar compatibilidad con dispositivos y plataformas"
+          },
+          {
+            "given_clause": "Documentación de soporte",
+            "when_clause": "Cuando se requiere información sobre distribución",
+            "then_clause": "Asegurar que la documentación sea completa y actualizada"
+          }
+        ]
+      },
+      {
+        "type": "Task",
+        "title": "Asegurar el uso de tecnologías de desarrollo de videojuegos",
+        "description": "Verificar que las herramientas estén compatibles con tecnologías de desarrollo de videojuegos como IDEs, version control y herramientas de depuración.",
+        "score": 7,
+        "priority": 3,
+        "notes": "La integración con tecnologías de desarrollo es fundamental para el flujo de trabajo del equipo.",
+        "criteries": [
+          {
+            "given_clause": "Verificar compatibilidad con IDEs",
+            "when_clause": "Cuando se requiere integración de herramientas",
+            "then_clause": "Asegurar que las herramientas estén compatibles con el entorno de desarrollo"
+          },
+          {
+            "given_clause": "Verificar compatibilidad con version control",
+            "when_clause": "Cuando se requiere integración de versiones",
+            "then_clause": "Mostrar cómo se integran con sistemas de control de versiones"
+          }
+        ]
+      },
+      {
+        "type": "Epic",
+        "title": "Evaluar el impacto de la comunidad en el desarrollo de videojuegos",
+        "description": "Analizar cómo la comunidad de Unity, Godot y UE5 influye en el desarrollo de videojuegos, incluyendo la disponibilidad de recursos, tutoriales y apoyo técnico.",
+        "score": 8,
+        "priority": 2,
+        "notes": "La comunidad puede tener un impacto significativo en la calidad y el éxito del proyecto.",
+        "criteries": [
+          {
+            "given_clause": "Análisis de la comunidad",
+            "when_clause": "Cuando se requiere información sobre apoyo técnico",
+            "then_clause": "Mostrar cómo la comunidad apoya el desarrollo"
+          },
+          {
+            "given_clause": "Disponibilidad de recursos",
+            "when_clause": "Cuando se requiere apoyo técnico",
+            "then_clause": "Asegurar que el recurso sea útil y accesible"
+          }
+        ]
+      }
+    ]
+  }
+}

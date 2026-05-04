@@ -6,10 +6,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+AGENTS_DIR = Path(__file__).parent.parent.parent / "data" / "agents"
+
 
 class Agent:
     def __init__(
-        self, model: str, prompt_file: Path, reason: bool | None = None
+        self, model: str, prompt_file: str | Path, reason: bool | None = None
     ) -> None:
         self.model_name = model
         self.base_url = "http://localhost:11434/v1"
@@ -25,15 +27,18 @@ class Agent:
             model=model,
             base_url=self.base_url,
             api_key=self.api_key,
-            max_tokens=4096,
+            max_tokens=16384,
             streaming=True,
             reasoning=reasoning,
         )
-        if not prompt_file.exists():
+        prompt_path = (
+            AGENTS_DIR / prompt_file if isinstance(prompt_file, str) else prompt_file
+        )
+        if not prompt_path.exists():
             raise TypeError(
-                f"File: {prompt_file} does not exists, Current path: {listdir()}."
+                f"File: {prompt_path} does not exist. Available files: {listdir(AGENTS_DIR)}."
             )
-        with open(prompt_file, "r") as file:
+        with open(prompt_path, "r") as file:
             self.prompt = file.read()
 
     def invoke(self, state):
@@ -58,13 +63,19 @@ class Agent:
 
 
 AGENTS = dict(
-    TALKER=Agent("KatetoTalker", Path("data/agents/kateto-charlatan.md")),
-    DREAMER=Agent("KatetoDreamer", Path("data/agents/kateto-soñador.md")),
+    TALKER=Agent("KatetoTalker", "kateto-charlatan.md"),
+    DREAMER=Agent("KatetoDreamer", "kateto-soñador.md"),
     PRODUCT_OWNER=Agent(
-        "KatetoProductOwner",
-        Path("data/agents/kateto-product-owner.md"),
-        # "KatetoDreamer",
-        # Path("data/agents/kateto-product-owner.md"),
+        "KatetoMockOwner",
+        "kateto-product-owner.md",
+    ),
+    DOD=Agent(
+        "KatetoMockOwner",
+        "kateto-dod.md",
+    ),
+    PHASES=Agent(
+        "KatetoMockOwner",
+        "kateto-phases.md",
     ),
 )
 

@@ -1,10 +1,17 @@
+from typing import Annotated, Any, TypedDict
+
+from i_have_time.models import TimeSlot
+from pydantic import BaseModel, Field
+
 from modules.product_owner.states.project import (
     Document,
     Asignee,
     PBI,
-    PBI_Data,
     DocumentData,
     IsBusy,
+    Phase,
+    PhaseTask,
+    DOD,
 )
 from modules.core.agents import AGENTS
 from langgraph.types import Command, interrupt
@@ -12,8 +19,19 @@ from i_have_time.calendar import calculate_free_slots, CalendarClient
 from i_have_time.auth import get_credentials, build_calendar_service
 from datetime import date, timedelta
 import random
-from typing import Any
 from i_have_time.config import load_config
+
+
+class DODList(BaseModel):
+    dods: list[DOD] = Field(min_length=5, max_length=6)
+
+
+class PBIList(BaseModel):
+    pbis: list[PBI] = Field(min_length=5, max_length=10)
+
+
+class Phases(BaseModel):
+    phases: list[Phase] = Field(min_length=2, max_length=4)
 
 
 def ProductOwnerAgent(state: Document):
@@ -42,70 +60,140 @@ def ProductOwnerAgent(state: Document):
 
 
 def ProductBacklogItemAgent(state: Document):
+    if not state.get("data") or not state.get("title"):
+        return {}
     agent = AGENTS["PRODUCT_OWNER"]
-    structured_model = agent.model.with_structured_output(PBI_Data)
+    structured_model = agent.model.with_structured_output(PBIList)
 
-    if len(state.get("pbi", [])) >= state.get("pbi_count", 5):
-        return {"pbi": state["pbi"]} #Command(update={"pbi": new_pbi}, goto="product_backlog_item")
-
-    print("ITEMS:", state.get("pbi", "Nada"))
-    # items = state.get("pbi", [])
-    # items.append({"data": "amongas"})
-    # return Command(update={"pbi": items}, goto="product_backlog_item")
     prompt = f"""
-        You are a product owner creating product backlog items for a new project.
+You are a product owner creating product backlog items for: {state["title"]}
 
-        Project title: {state["title"]}
-        Project Data: {state["data"]}
-        Project Team capacity: {state["team"]}
+Project Data: {state["data"]}
+Team: {state["team"]}
 
-        Current items: {state.get("pbi", "Empty")}
-
-        Generate coherent backlog items. Items should:
-        1. Work together logically to build the complete product
-        2. Follow a sensible prioritization order (epics before stories, foundational features first)
-        3. Reference related items where applicable
-        4. Maintain consistent terminology and vision
-        5. Each item must include: type (User Story/Epic/Task), title, description, and content (score, notes, criteries)
-        """
-
+Generate between 5-10 items.
+Each item MUST have: type (User Story/Epic/Task/Bug), title, description, score, priority, notes, criteries.
+"""
     result = structured_model.invoke(prompt)
-    new_pbi = state.get("pbi", [])
-    new_pbi = new_pbi + [{"data": result}]
-    return Command(update={"pbi": new_pbi}, goto="product_backlog_item")
+    items = result.pbis
+    print(items)
+    return {"pbi": items}
+
+
+def PhasesAgent(state: Document):
+    if not state.get("pbi") or not state.get("team"):
+        return {}
+    agent = AGENTS["PRODUCT_OWNER"]
+    structured_model = agent.model.with_structured_output(Phases)
+
+    prompt = f"""
+You are organizing {len(state.get("pbi", []))} backlog items into project phases for: {state["title"]}
+
+PBIs: {state["pbi"]}
+Team: {state["team"]}
+
+CRITICAL: Generate exactly 2-4 phases that organize ALL the PBIs.
+Return JSON with key "phases" containing an array of phases.
+
+Each phase MUST have: title, duration_days (int), tasks (list of PhaseTask).
+Each PhaseTask MUST have: title, description, asignee (from team), effort_hours (float).
+"""
+    result = structured_model.invoke(prompt)
+    phases = result.phases
+
+    return {"phases": phases}
+
+
+def DODAgent(state: Document):
+    if not state.get("data") or not state.get("pbi"):
+        return {}
+
+    agent = AGENTS["PRODUCT_OWNER"]
+    structured_model = agent.model.with_structured_output(DODList)
+
+    prompt = f"""
+You are a product owner defining the Definition of Done (DoD) for a new project.
+
+Project title: {state["title"]}
+Project Data: {state["data"]}
+Product Backlog Items: {state["pbi"]}
+
+Generate a comprehensive Definition of Done that covers multiple categories.
+For each category, provide a list of concrete, verifiable checklist items.
+
+Categories to cover (use exactly these strings):
+- "Code Quality": Code review, style guides, linting, static analysis
+- "Testing": Unit tests, integration tests, test coverage thresholds
+- "Documentation": API docs, inline comments, README updates
+- "Deployment": Build passes, deployment scripts, environment configs
+- "Performance": Performance benchmarks, load testing, optimization checks
+
+Return a list of DOD entries, each with a category and a list of dod_items.
+"""
+
+    response = structured_model.invoke(prompt)
+    return {"dod": response.dods}
 
 
 def IsBusyAgent(state: Document):
-    if not state.get("pbi"):
-        return {}
     config = load_config()
-    print(config)
     credentials = get_credentials()
     calendar_service = build_calendar_service(credentials)
     client = CalendarClient(calendar_service)
-    updated_pbis: list[dict[str, Any]] = []
 
-    for idx, pbi in enumerate(state["pbi"]):
-        is_busy: IsBusy | None = None
+    result: dict[str, Any] = {}
+    if state.get("phases"):
+        updated_phases: list[Phase] = []
+        task_idx = 0
+        for phase in state["phases"]:
+            updated_tasks: list[PhaseTask] = []
+            for task in phase.get("tasks", []):
+                is_busy: IsBusy | None = None
+                if client:
+                    target_date = date.today() + timedelta(days=task_idx * 2)
+                    busy_slots = client.get_busy_slots_range(
+                        target_date,
+                        target_date + timedelta(days=phase["duration_days"]),
+                        tz="UTC",
+                        cfg=config,
+                    )
+                    if len(busy_slots) == 0:
+                        print("No space left for", task)
+                    slot = {"day": target_date, "slot": TimeSlot}
+                    for k, v in busy_slots.items():
+                        slot["day"] = k
+                        slot["slot"] = calculate_free_slots(
+                            v,
+                            config.working_hours,
+                            k,
+                            config.default_timezone,
+                            task.get("effort_hours", 4) * 60,
+                        )
+                        if len(slot["slot"]) > 0:
+                            break
 
-        if client:
-            target_date = date.today() + timedelta(days=idx * 2)
-            busy_slots = client.get_busy_slots(
-                target_date,
-                tz="UTC",
-                cfg=config,  # TODO: pass proper AppConfig with working_hours and buffer_minutes
+                    is_busy = {
+                        "effort_days": max(1, int(task.get("effort_hours", 4) / 8)),
+                        "effort_start": slot["slot"][0].start,
+                        "effort_end": (slot["slot"][0].end).isoformat(),
+                    }
+                    task_idx += 1
+                updated_tasks.append(
+                    {
+                        "title": task.get("title"),
+                        "description": task.get("description"),
+                        "asignee": task.get("asignee"),
+                        "effort_hours": task.get("effort_hours"),
+                        "is_busy": is_busy,
+                    }
+                )
+            updated_phases.append(
+                {
+                    "title": phase.get("title"),
+                    "duration_days": phase.get("duration_days"),
+                    "tasks": updated_tasks,
+                }
             )
-            is_busy = {
-                "effort_days": 3,
-                "effort_start": target_date.isoformat(),
-                "effort_end": (target_date + timedelta(days=3)).isoformat(),
-            }
+        result["phases"] = updated_phases
 
-        updated_pbis.append(
-            {
-                "data": pbi.get("data"),
-                "is_busy": is_busy,
-            }
-        )
-
-    return {"pbi": updated_pbis}
+    return result

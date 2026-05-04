@@ -3,8 +3,8 @@ from typing import Type, TypedDict, Literal, Union
 
 class IsBusy(TypedDict):
     effort_days: int
-    effort_start: str  # ISO date string (YYYY-MM-DD)
-    effort_end: str  # ISO date string (YYYY-MM-DD)
+    effort_start: str
+    effort_end: str
 
 
 class Critery(TypedDict):
@@ -13,27 +13,14 @@ class Critery(TypedDict):
     then_clause: str
 
 
-class PBI_Content(TypedDict):
-    score: int
-    notes: str
-    criteries: list[Critery]
-
-
-class PBI_Data(TypedDict):
-    type: Literal[
-        "User Story", "Epic", "Task"
-    ]  # TODO: Add Bug and Epic?, when implementing in existing projects
+class PBI(TypedDict):
+    type: Literal["User Story", "Epic", "Task", "Bug"]
     title: str
     description: str
     score: int
     priority: int
     notes: str
     criteries: list[Critery]
-
-
-class PBI(TypedDict):
-    data: PBI_Data
-    is_busy: IsBusy | None
 
 
 class DOD(TypedDict):
@@ -49,14 +36,17 @@ class Asignee(TypedDict):
 
 
 class PhaseTask(TypedDict):
+    title: str
     description: str
     asignee: Asignee
     effort_hours: float
+    is_busy: IsBusy | None
 
 
 class Phase(TypedDict):
     title: str
     duration_days: int
+    tasks: list[PhaseTask]
 
 
 class Event(TypedDict):
@@ -69,7 +59,7 @@ class Event(TypedDict):
     ]
     title: str
     description: str
-    start_time: str  # date class
+    start_time: str
     end_time: str
 
 
@@ -82,7 +72,6 @@ class DocumentData(TypedDict):
 class Document(TypedDict):
     title: str
     team: list[Asignee] | None
-    pbi_count: int
     data: DocumentData | None
     pbi: list[PBI] | None
     dod: list[DOD] | None
