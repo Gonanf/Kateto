@@ -5,6 +5,7 @@ from google.auth import credentials
 from httpx import _status_codes
 from pydantic import BaseModel, Field
 import pydantic
+import asyncio
 
 from modules.product_owner.states.project import (
     Document,
@@ -138,7 +139,7 @@ CRITICAL: Generate between 2-4 phases that organize ALL the PBIs.
 Return JSON with key "phases" containing an array of phases.
 
 Each phase MUST have: title, duration_days (int), tasks (list of PhaseTask).
-Each PhaseTask MUST have: title, description, asignee (from team), effort_hours (float).
+Each PhaseTask MUST have: title, description, asignee (from team), effort_hours (float, from 1 to 9 hours).
 """
     result = structured_model.invoke(prompt)
     phases = result.phases
@@ -205,7 +206,7 @@ def __generateMarkdown(state: Document):
     ):
         return
 
-    mdfile = MdUtils("[SPRINT]" + state.title)
+    mdfile = MdUtils(file_name="[SPRINT] " + state.title, title="")
     mdfile.new_header(level=1, title="Feature Overview")
     mdfile.new_header(level=2, title="Description")
     mdfile.new_paragraph(state.data.description)
@@ -222,14 +223,14 @@ def __generateMarkdown(state: Document):
     for d in state.team:
         data.append(d.name)
         data.append(d.type)
-    mdfile.new_table(columns=len(header), rows=len(state.team), text=header + data)
+    mdfile.new_table(columns=len(header), rows=len(state.team) + 1, text=header + data)
 
     mdfile.new_header(level=1, title="Product Backlog Items")
 
     for pbi in state.pbi:
         mdfile.new_header(level=2, title=pbi.title)
         mdfile.new_paragraph(pbi.description)
-        mdfile.new_paragraph("Score: " + str(pbi.score), "/13")
+        mdfile.new_paragraph("Score: " + str(pbi.score) + "/13")
         mdfile.new_paragraph("Priority: " + str(pbi.priority) + "/5")
         criteries = []
         header = ["Given", "When", "Then"]
@@ -238,7 +239,7 @@ def __generateMarkdown(state: Document):
             criteries.append(c.when_clause)
             criteries.append(c.then_clause)
         mdfile.new_table(
-            columns=len(header), rows=len(pbi.criteries), text=header + criteries
+            columns=len(header), rows=len(pbi.criteries) + 1, text=header + criteries
         )
 
         mdfile.new_paragraph(text=pbi.notes)
@@ -254,28 +255,35 @@ def __generateMarkdown(state: Document):
             data.append(t.description)
             data.append(t.asignee.name + f"({t.asignee.type})")
             data.append(f"{t.effort_hours} Hours")
-        mdfile.new_table(columns=len(header), rows=len(phase.tasks), text=header + data)
+        mdfile.new_table(
+            columns=len(header), rows=len(phase.tasks) + 1, text=header + data
+        )
 
     mdfile.new_header(level=1, title="Definition of Done")
     for d in state.dod:
         mdfile.new_header(level=2, title=d.category)
         mdfile.new_checkbox_list(items=d.dod_items)
 
+    mdfile.create_md_file()
     return mdfile.get_md_text()
 
 
+# Collection id: upYbUDJY_VBu-lb6CwfVk
 # function create_doc_from_markdown(workspaceId?: string, title?: string, markdown: string, strict?: boolean, parentDocId?: string);
-async def createAffineDocument(state: Document):
+def createAffineDocument(state: Document):
     config = {
         "mcpServers": {"affine": {"command": "bunx", "args": ["affine-mcp-server"]}}
     }
 
-    client = Client(config)
-    await client.call_tool(
-        "create_doc_from_markdown",
-        {
-            "workspaceId": "eb1e876b-d031-474a-9065-0be79a7e03b2",
-            "title": "[PROJECT] " + state.title,
-            "markdown": __generateMarkdown(state),
-        },
-    )
+    async def _run():
+        async with Client(config) as client:
+            await client.call_tool(
+                "create_doc_from_markdown",
+                {
+                    "workspaceId": "eb1e876b-d031-474a-9065-0be79a7e03b2",
+                    "title": "[PROJECT] " + state.title,
+                    "markdown": __generateMarkdown(state),
+                },
+            )
+
+    asyncio.run(_run())
