@@ -8,6 +8,7 @@ from modules.product_owner.agents.project_creation import (
     DODAgent,
     PhasesAgent,
     IsBusyAgent,
+    createAffineDocument,
 )
 
 graph = StateGraph(Document)
@@ -21,13 +22,15 @@ graph.add_node(
     retry_policy=RetryPolicy(max_attempts=3, initial_interval=1.0, backoff_factor=2.0),
 )
 graph.add_node("is_busy", IsBusyAgent)
+graph.add_node("create_affine", createAffineDocument)
 
 graph.add_edge(START, "product_owner")
 graph.add_edge("product_owner", "product_backlog_item")
 graph.add_edge("product_backlog_item", "dod")
 graph.add_edge("dod", "phases")
 graph.add_edge("phases", "is_busy")
-graph.add_edge("is_busy", END)
+graph.add_edge("is_busy", "create_affine")
+graph.add_edge("create_affine", END)
 
 checkpointer = InMemorySaver()
 

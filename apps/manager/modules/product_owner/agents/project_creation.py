@@ -1,7 +1,8 @@
 from json import load
-from typing import Any
+from typing import Any, dataclass_transform
 
 from google.auth import credentials
+from httpx import _status_codes
 from pydantic import BaseModel, Field
 import pydantic
 
@@ -10,7 +11,6 @@ from modules.product_owner.states.project import (
     Asignee,
     PBI,
     DocumentData,
-    IsBusy,
     Phase,
     PhaseTask,
     DOD,
@@ -21,6 +21,7 @@ from i_have_time.calendar import Calendar, Event
 from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 from fastmcp import Client
+from mdutils import MdUtils
 
 
 class DODList(BaseModel):
@@ -179,165 +180,6 @@ Return a list of DOD entries, each with a category and a list of dod_items.
     return {"dod": response.dods}
 
 
-# def __IsBusyAgent(state: Document):
-#
-#     # Initing I Have Time
-#     config = load_config()
-#     credentials = get_credentials()
-#     calendar_service = build_calendar_service(credentials)
-#     client = CalendarClient(calendar_service)
-#
-#     result: dict[str, Any] = {}
-#     current_day = date.today()
-#     if state.phases:
-#         updated_phases: list[Phase] = []
-#
-#         # Time slots already claimed by tasks in this phase
-#         booked_slots: dict[date, list[TimeSlot]] = {}
-#
-#         # Get every slot of time that we cannot assign
-#         project_end_min = date.today() + timedelta(
-#             days=sum(x.duration_days for x in state.phases)
-#         )
-#         base_busy = client.get_busy_slots_range(
-#             date.today(),
-#             project_end_min,
-#             tz=config.default_timezone,
-#             cfg=config,
-#         )
-#
-#         for phase in state.phases:
-#             updated_tasks: list[PhaseTask] = []
-#             for task in phase.tasks:
-#                 is_busy: IsBusy | None = None
-#
-#                 effort_hours = task.effort_hours
-#                 effort_minutes = effort_hours * 60
-#
-#                 busy_merged: dict[date, list[TimeSlot]] = {}
-#                 phase_end_date = current_day + timedelta(days=phase.duration_days)
-#
-#                 # Between the day where the task is soppoused to start and the day where it ends
-#                 for day in base_busy:
-#                     if day < current_day:
-#                         continue
-#                     if day > phase_end_date:
-#                         continue
-#                     # We get every busy (Existing events and claimed by tasks) time slots
-#                     day_busy = list(base_busy.get(day, []))
-#                     day_busy.extend(booked_slots.get(day, []))
-#                     busy_merged[day] = day_busy
-#
-#                 all_free_slots: list[TimeSlot] = []
-#                 for day, busy in busy_merged.items():
-#                     free = calculate_free_slots(
-#                         busy,
-#                         config.working_hours,
-#                         day,
-#                         config.default_timezone,
-#                     )
-#                     all_free_slots.extend(free)
-#                 all_free_slots.sort(key=lambda s: s.start)
-#
-#                 remaining_minutes = effort_minutes
-#                 scheduled_segments: list[dict] = []
-#                 for slot in all_free_slots:
-#                     if remaining_minutes <= 0:
-#                         break
-#                     slot_duration = (slot.end - slot.start).total_seconds() / 60
-#                     take = min(remaining_minutes, slot_duration)
-#
-#                     target_tz = ZoneInfo(config.default_timezone)
-#                     event_start = slot.start.astimezone(target_tz)
-#                     event_end = (slot.start + timedelta(minutes=take)).astimezone(
-#                         target_tz
-#                     )
-#
-#                     tag = config.tag_name or "[KATETO]"
-#                     event = EventDetails(
-#                         title=f"{task.title} {tag}",
-#                         description=task.description,
-#                         start=event_start,
-#                         end=event_end,
-#                         timezone=config.default_timezone,
-#                         location="",
-#                         attendees=[],
-#                     )
-#
-#                     event_id = None
-#                     try:
-#                         resp = client.create_event(event)
-#                         event_id = resp.get("id")
-#                     except Exception as e:
-#                         print(
-#                             f"Failed to create calendar event for '{task.title}': {e}"
-#                         )
-#
-#                     seg_start = slot.start
-#                     seg_end = slot.start + timedelta(minutes=take)
-#                     booked_slots.setdefault(seg_start.date(), []).append(
-#                         TimeSlot(start=seg_start, end=seg_end)
-#                     )
-#
-#                     scheduled_segments.append(
-#                         {
-#                             "start": seg_start.isoformat(),
-#                             "end": event_end.isoformat(),
-#                             "take_minutes": take,
-#                             "event_id": event_id,
-#                         }
-#                     )
-#                     remaining_minutes -= take
-#
-#                 total_parts = len(scheduled_segments)
-#                 if total_parts > 0:
-#                     final_slots = []
-#                     for idx, seg in enumerate(scheduled_segments):
-#                         part_num = idx + 1
-#                         task_title = task.title
-#                         if total_parts > 1:
-#                             task_title = f"{task_title} [{part_num}/{total_parts}]"
-#
-#                         final_slots.append(
-#                             {
-#                                 "part_number": part_num,
-#                                 "part_total": total_parts,
-#                                 "start": seg["start"],
-#                                 "end": seg["end"],
-#                                 "event_id": seg["event_id"],
-#                             }
-#                         )
-#
-#                     is_busy = IsBusy(
-#                         effort_days=max(1, int(effort_hours / 8)),
-#                         effort_start=final_slots[0]["start"],
-#                         effort_end=final_slots[-1]["end"],
-#                         scheduled_slots=final_slots,
-#                     )
-#                 else:
-#                     print(f"No free slots available for task: {task.title}")
-#
-#             updated_tasks.append(
-#                 PhaseTask(
-#                     title=task.title,
-#                     description=task.description,
-#                     asignee=task.asignee,
-#                     effort_hours=task.effort_hours,
-#                     is_busy=is_busy,
-#                 )
-#             )
-#         updated_phases.append(
-#             Phase(
-#                 title=phase.title,
-#                 duration_days=phase.duration_days,
-#                 tasks=updated_tasks,
-#             )
-#         )
-#     result["phases"] = updated_phases
-#
-#     return result
-
-
 def IsBusyAgent(state: Document):
     calendar = Calendar()
     if not state.phases:
@@ -354,7 +196,72 @@ def IsBusyAgent(state: Document):
 
 
 def __generateMarkdown(state: Document):
-    pass
+    if (
+        not state.data
+        or not state.phases
+        or not state.pbi
+        or not state.dod
+        or not state.team
+    ):
+        return
+
+    mdfile = MdUtils("[SPRINT]" + state.title)
+    mdfile.new_header(level=1, title="Feature Overview")
+    mdfile.new_header(level=2, title="Description")
+    mdfile.new_paragraph(state.data.description)
+
+    mdfile.new_header(level=2, title="Values")
+    mdfile.new_checkbox_list(state.data.project_values)
+
+    mdfile.new_header(level=2, title="Dependencies")
+    mdfile.new_checkbox_list(state.data.dependencies)
+
+    mdfile.new_header(level=1, title="Team capacity")
+    header = ["Name", "Type"]
+    data = []
+    for d in state.team:
+        data.append(d.name)
+        data.append(d.type)
+    mdfile.new_table(columns=len(header), rows=len(state.team), text=header + data)
+
+    mdfile.new_header(level=1, title="Product Backlog Items")
+
+    for pbi in state.pbi:
+        mdfile.new_header(level=2, title=pbi.title)
+        mdfile.new_paragraph(pbi.description)
+        mdfile.new_paragraph("Score: " + str(pbi.score), "/13")
+        mdfile.new_paragraph("Priority: " + str(pbi.priority) + "/5")
+        criteries = []
+        header = ["Given", "When", "Then"]
+        for c in pbi.criteries:
+            criteries.append(c.given_clause)
+            criteries.append(c.when_clause)
+            criteries.append(c.then_clause)
+        mdfile.new_table(
+            columns=len(header), rows=len(pbi.criteries), text=header + criteries
+        )
+
+        mdfile.new_paragraph(text=pbi.notes)
+
+    mdfile.new_header(level=1, title="Phases")
+    for index, phase in enumerate(state.phases):
+        mdfile.new_header(level=2, title=str(index) + ". " + phase.title)
+        mdfile.new_paragraph(text="Duration: " + str(phase.duration_days) + " Days")
+        data = []
+        header = ["Title", "Description", "Asignee", "Effort"]
+        for t in phase.tasks:
+            data.append(t.title)
+            data.append(t.description)
+            data.append(t.asignee.name + f"({t.asignee.type})")
+            data.append(f"{t.effort_hours} Hours")
+        mdfile.new_table(columns=len(header), rows=len(phase.tasks), text=header + data)
+
+    mdfile.new_header(level=1, title="Definition of Done")
+    for d in state.dod:
+        mdfile.new_header(level=2, title=d.category)
+        mdfile.new_checkbox_list(items=d.dod_items)
+
+    return mdfile.get_md_text()
 
 
 # function create_doc_from_markdown(workspaceId?: string, title?: string, markdown: string, strict?: boolean, parentDocId?: string);
@@ -368,7 +275,7 @@ async def createAffineDocument(state: Document):
         "create_doc_from_markdown",
         {
             "workspaceId": "eb1e876b-d031-474a-9065-0be79a7e03b2",
-            "title": "[PROJECT]" + state.title,
-            "markdown": "",
+            "title": "[PROJECT] " + state.title,
+            "markdown": __generateMarkdown(state),
         },
     )

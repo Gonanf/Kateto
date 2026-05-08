@@ -2,21 +2,6 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-class ScheduledSlot(BaseModel):
-    part_number: int
-    part_total: int
-    start: str
-    end: str
-    event_id: str | None
-
-
-class IsBusy(BaseModel):
-    effort_days: int
-    effort_start: str
-    effort_end: str
-    scheduled_slots: list[ScheduledSlot]
-
-
 class Critery(BaseModel):
     given_clause: str
     when_clause: str
@@ -50,27 +35,12 @@ class PhaseTask(BaseModel):
     description: str
     asignee: Asignee
     effort_hours: float
-    is_busy: IsBusy | None
 
 
 class Phase(BaseModel):
     title: str
     duration_days: int
     tasks: list[PhaseTask] = Field(min_length=3, max_length=6)
-
-
-class Event(BaseModel):
-    type: Literal[
-        "Sprint Planning",
-        "Daily Stand Up",
-        "Sprint Review",
-        "Sprint Retrospective",
-        "Work",
-    ]
-    title: str
-    description: str
-    start_time: str
-    end_time: str
 
 
 class DocumentData(BaseModel):
