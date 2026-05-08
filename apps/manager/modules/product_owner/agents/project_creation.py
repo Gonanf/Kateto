@@ -1,4 +1,5 @@
 from json import load
+import re
 from typing import Any, dataclass_transform
 
 from google.auth import credentials
@@ -12,14 +13,15 @@ from modules.product_owner.states.project import (
     Asignee,
     PBI,
     DocumentData,
-    Phase,
-    PhaseTask,
     DOD,
+    Sprint,
+    SprintDraft,
+    SprintTask,
 )
 from modules.core.agents import AGENTS
 from langgraph.types import Command, interrupt
-from i_have_time.calendar import Calendar, Event
-from datetime import date, timedelta
+from i_have_time.calendar import Calendar, Event, fromSliceToHours
+from datetime import MAXYEAR, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from fastmcp import Client
 from mdutils import MdUtils
@@ -33,8 +35,12 @@ class PBIList(BaseModel):
     pbis: list[PBI] = Field(min_length=5, max_length=10)
 
 
-class PhasesModel(BaseModel):
-    phases: list[Phase] = Field(min_length=2, max_length=4)
+class SprintList(BaseModel):
+    sprints: list[SprintDraft] = Field(min_length=2, max_length=4)
+
+
+class SprintTasksList(BaseModel):
+    tasks: list[SprintTask] = Field(min_length=2, max_length=6)
 
 
 def ProductOwnerAgent(state: Document):
@@ -123,30 +129,32 @@ Example PBI:
     return {"pbi": items}
 
 
-def PhasesAgent(state: Document):
+def SprintAgent(state: Document):
     if not state.pbi or not state.team:
         return {}
     agent = AGENTS["PRODUCT_OWNER"]
-    structured_model = agent.model.with_structured_output(PhasesModel)
+    structured_model = agent.model.with_structured_output(SprintList)
 
     prompt = f"""
-You are organizing {len(state.pbi)} backlog items into project phases for: {state.title}
+You are organizing {len(state.pbi)} backlog items into sprints for: {state.title}
 
 PBIs: {state.pbi}
 Team: {state.team}
 
-CRITICAL: Generate between 2-4 phases that organize ALL the PBIs.
-Return JSON with key "phases" containing an array of phases.
+CRITICAL: Generate between 2-4 sprints that organize ALL the PBIs.
+Return JSON with key "sprints" containing an array of sprint objects.
 
-Each phase MUST have: title, duration_days (int), tasks (list of PhaseTask).
-Each PhaseTask MUST have: title, description, asignee (from team), effort_hours (float, from 1 to 9 hours).
+Each sprint MUST have:
+- "goal": string (a concise sprint goal)
+- "description": string (what work will be done in this sprint)
+- "duration_weeks": integer (how many weeks the sprint lasts)
 """
     result = structured_model.invoke(prompt)
-    phases = result.phases
+    sprints = result.sprints
 
-    print(f"Generated {len(phases)} Phases")
+    print(f"Generated {len(sprints.sprints)} Sprints")
 
-    return {"phases": phases}
+    return {"draft_sprints": sprints}
 
 
 def DODAgent(state: Document):
@@ -181,12 +189,67 @@ Return a list of DOD entries, each with a category and a list of dod_items.
     return {"dod": response.dods}
 
 
+class SprintState(BaseModel):
+    document: Document
+    current: SprintDraft
+    week: int
+
+
+def SprintTasksAgent(state: SprintState):
+    cal = Calendar()
+    today = datetime.today() + timedelta(weeks=state.week)
+    free_hours = fromSliceToHours(
+        cal.getFreeTime(
+            min_time=today,
+            max_time=today + timedelta(weeks=state.current.duration_weeks),
+        )
+    )
+    available_hours = int(free_hours * 0.9)
+
+    prompt = f"""
+You are a product owner defining the tasks for a sprint.
+
+PROJECT INFO:
+- Title: {state.document.title}
+- Team: {state.document.team}
+- Description: {state.document.data.description if state.document.data else "N/A"}
+- Values: {state.document.data.project_values if state.document.data else "N/A"}
+
+PRODUCT BACKLOG ITEMS:
+{state.document.pbi}
+
+SPRINT INFO:
+- Goal: {state.current.goal}
+- Description: {state.current.description}
+- Duration: {state.current.duration_weeks} weeks
+- Available hours (after overhead buffer): {available_hours}
+
+TASK GENERATION RULES:
+1. Generate 2-6 tasks that directly contribute to the sprint goal and cover the relevant PBIs.
+2. Each task MUST have these fields:
+   - "title": short actionable name (e.g. "Implement login form validation")
+   - "description": clear definition of what needs to be done
+   - "asignee": object with "type" ("Human" or "Agent") and "name" (use team members from the Team list above)
+   - "effort_hours": float (estimated hours to complete)
+3. The SUM of all effort_hours MUST NOT exceed {available_hours}.
+4. Distribute tasks across team members based on their type (Humans for creative/decision work, Agents for repetitive/automated work).
+5. Every task must be clearly derivable from a PBI in the backlog.
+
+Return JSON with key "tasks" containing the array of task objects.
+"""
+
+    agent = AGENTS["PRODUCT_OWNER"]
+    structured_model = agent.model.with_structured_output(SprintTasksList)
+    sprint = structured_model.invoke(prompt)
+    return {"completed_sprints": [Sprint(data=state.current, tasks=sprint.tasks)]}
+
+
 def IsBusyAgent(state: Document):
     calendar = Calendar()
-    if not state.phases:
+    if not state.completed_sprints:
         return
-    for phases in state.phases:
-        for task in phases.tasks:
+    for sprint in state.completed_sprints:
+        for task in sprint.tasks:
             calendar.createEvent(
                 Event(
                     title=task.title,
@@ -199,7 +262,7 @@ def IsBusyAgent(state: Document):
 def __generateMarkdown(state: Document):
     if (
         not state.data
-        or not state.phases
+        or not state.completed_sprints
         or not state.pbi
         or not state.dod
         or not state.team
@@ -245,19 +308,23 @@ def __generateMarkdown(state: Document):
         mdfile.new_paragraph(text=pbi.notes)
 
     mdfile.new_header(level=1, title="Phases")
-    for index, phase in enumerate(state.phases):
-        mdfile.new_header(level=2, title=str(index) + ". " + phase.title)
-        mdfile.new_paragraph(text="Duration: " + str(phase.duration_days) + " Days")
+    for index, sprint in enumerate(state.completed_sprints):
+        mdfile.new_header(level=2, title=str(index + 1) + ". " + sprint.data.goal)
+        mdfile.new_paragraph(text=f"Description: {sprint.data.description}")
+        mdfile.new_paragraph(
+            text="Duration: " + str(sprint.data.duration_weeks) + " Weeks"
+        )
         data = []
         header = ["Title", "Description", "Asignee", "Effort"]
-        for t in phase.tasks:
+        for t in sprint.tasks:
             data.append(t.title)
             data.append(t.description)
             data.append(t.asignee.name + f"({t.asignee.type})")
             data.append(f"{t.effort_hours} Hours")
         mdfile.new_table(
-            columns=len(header), rows=len(phase.tasks) + 1, text=header + data
+            columns=len(header), rows=len(sprint.tasks) + 1, text=header + data
         )
+        mdfile.new_line()
 
     mdfile.new_header(level=1, title="Definition of Done")
     for d in state.dod:

@@ -1,5 +1,6 @@
-from typing import Literal
+from typing import Annotated, Literal
 from pydantic import BaseModel, Field
+import operator
 
 
 class Critery(BaseModel):
@@ -30,17 +31,28 @@ class Asignee(BaseModel):
     name: str
 
 
-class PhaseTask(BaseModel):
+class SprintTask(BaseModel):
     title: str
     description: str
     asignee: Asignee
     effort_hours: float
 
 
+class SprintDraft(BaseModel):
+    goal: str
+    description: str
+    duration_weeks: int
+
+
+class Sprint(BaseModel):
+    data: SprintDraft
+    tasks: list[SprintTask] = Field(min_length=3, max_length=6)
+
+
 class Phase(BaseModel):
     title: str
     duration_days: int
-    tasks: list[PhaseTask] = Field(min_length=3, max_length=6)
+    tasks: list[SprintTask] = Field(min_length=3, max_length=6)
 
 
 class DocumentData(BaseModel):
@@ -63,4 +75,5 @@ class Document(BaseModel):
     data: DocumentData | None
     pbi: list[PBI] | None
     dod: list[DOD] | None
-    phases: list[Phase] | None
+    draft_sprints: list[SprintDraft] | None
+    completed_sprints: Annotated[list[Sprint], operator.add]
