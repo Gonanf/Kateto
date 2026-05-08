@@ -27,7 +27,6 @@ class Agent:
             model=model,
             base_url=self.base_url,
             api_key=self.api_key,
-            max_tokens=16384,
             streaming=True,
             reasoning=reasoning,
         )
@@ -66,15 +65,15 @@ AGENTS = dict(
     TALKER=Agent("KatetoTalker", "kateto-charlatan.md"),
     DREAMER=Agent("KatetoDreamer", "kateto-soñador.md"),
     PRODUCT_OWNER=Agent(
-        "KatetoMockOwner",
+        "KatetoProductOwner",
         "kateto-product-owner.md",
     ),
     DOD=Agent(
-        "KatetoMockOwner",
+        "KatetoProductOwner",
         "kateto-dod.md",
     ),
     PHASES=Agent(
-        "KatetoMockOwner",
+        "KatetoProductOwner",
         "kateto-phases.md",
     ),
 )
