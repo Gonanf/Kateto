@@ -152,7 +152,7 @@ Each sprint MUST have:
     result = structured_model.invoke(prompt)
     sprints = result.sprints
 
-    print(f"Generated {len(sprints.sprints)} Sprints")
+    print(f"Generated {len(sprints)} Sprints")
 
     return {"draft_sprints": sprints}
 

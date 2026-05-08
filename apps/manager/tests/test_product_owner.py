@@ -15,7 +15,8 @@ def test_project_creation():
             data=None,
             pbi=None,
             dod=None,
-            phases=None,
+            draft_sprints=None,
+            completed_sprints=[],
         ),
         {"configurable": {"thread_id": 1}},
     )

@@ -6,7 +6,6 @@ from modules.product_owner.agents.project_creation import (
     ProductOwnerAgent,
     ProductBacklogItemAgent,
     DODAgent,
-    PhasesAgent,
     IsBusyAgent,
     SprintAgent,
     SprintState,
