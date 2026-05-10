@@ -77,7 +77,10 @@ function _decodeProjectRequest(bb: ByteBuffer): ProjectRequest {
 }
 
 export interface ProjectResponse {
-  id?: string;
+  stage?: string;
+  message?: string;
+  data_json?: string;
+  markdown?: string;
 }
 
 export function encodeProjectResponse(message: ProjectResponse): Uint8Array {
@@ -87,11 +90,32 @@ export function encodeProjectResponse(message: ProjectResponse): Uint8Array {
 }
 
 function _encodeProjectResponse(message: ProjectResponse, bb: ByteBuffer): void {
-  // optional string id = 1;
-  let $id = message.id;
-  if ($id !== undefined) {
+  // optional string stage = 1;
+  let $stage = message.stage;
+  if ($stage !== undefined) {
     writeVarint32(bb, 10);
-    writeString(bb, $id);
+    writeString(bb, $stage);
+  }
+
+  // optional string message = 2;
+  let $message = message.message;
+  if ($message !== undefined) {
+    writeVarint32(bb, 18);
+    writeString(bb, $message);
+  }
+
+  // optional string data_json = 3;
+  let $data_json = message.data_json;
+  if ($data_json !== undefined) {
+    writeVarint32(bb, 26);
+    writeString(bb, $data_json);
+  }
+
+  // optional string markdown = 4;
+  let $markdown = message.markdown;
+  if ($markdown !== undefined) {
+    writeVarint32(bb, 34);
+    writeString(bb, $markdown);
   }
 }
 
@@ -109,9 +133,27 @@ function _decodeProjectResponse(bb: ByteBuffer): ProjectResponse {
       case 0:
         break end_of_message;
 
-      // optional string id = 1;
+      // optional string stage = 1;
       case 1: {
-        message.id = readString(bb, readVarint32(bb));
+        message.stage = readString(bb, readVarint32(bb));
+        break;
+      }
+
+      // optional string message = 2;
+      case 2: {
+        message.message = readString(bb, readVarint32(bb));
+        break;
+      }
+
+      // optional string data_json = 3;
+      case 3: {
+        message.data_json = readString(bb, readVarint32(bb));
+        break;
+      }
+
+      // optional string markdown = 4;
+      case 4: {
+        message.markdown = readString(bb, readVarint32(bb));
         break;
       }
 

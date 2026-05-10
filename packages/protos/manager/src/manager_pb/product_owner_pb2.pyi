@@ -17,7 +17,13 @@ class ProjectRequest(_message.Message):
     def __init__(self, idea: _Optional[str] = ..., disponibility: _Optional[str] = ..., team: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ProjectResponse(_message.Message):
-    __slots__ = ("id",)
-    ID_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    def __init__(self, id: _Optional[str] = ...) -> None: ...
+    __slots__ = ("stage", "message", "data_json", "markdown")
+    STAGE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    DATA_JSON_FIELD_NUMBER: _ClassVar[int]
+    MARKDOWN_FIELD_NUMBER: _ClassVar[int]
+    stage: str
+    message: str
+    data_json: str
+    markdown: str
+    def __init__(self, stage: _Optional[str] = ..., message: _Optional[str] = ..., data_json: _Optional[str] = ..., markdown: _Optional[str] = ...) -> None: ...

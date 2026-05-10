@@ -7,20 +7,19 @@
 ## Description
 
 
-This project aims to provide a comprehensive technical comparison of Unity, Godot, and Unreal Engine 5 to help developers make informed engine selection decisions. It will evaluate key metrics such as rendering capabilities, scripting languages, performance overhead, and learning curve across different project scales. The final output will include benchmark data and suitability recommendations for various use cases.
+This project conducts a comprehensive technical and ecosystem comparison of Unity, Godot, and Unreal Engine 5 to help developers select the optimal tool for specific game development needs. It evaluates key factors such as rendering capabilities, scripting languages, asset pipelines, and community support to provide actionable insights for indie developers and studios.
 ## Values
 
-- [ ] Reduces decision fatigue for indie developers and studios choosing a game engine
-- [ ] Provides objective performance benchmarks for specific hardware configurations
-- [ ] Highlights unique strengths of each engine to match project requirements
-- [ ] Serves as an educational resource for developers transitioning between engines
+- [ ] Enables informed technology stack decisions based on project scale and team expertise
+- [ ] Highlights trade-offs between performance, ease of use, and licensing costs
+- [ ] Provides a structured framework for evaluating engine suitability across different genres
 
 ## Dependencies
 
-- [ ] Access to Unity, Godot, and Unreal Engine 5 development environments
-- [ ] Standardized test scenes or projects for consistent benchmarking
-- [ ] Hardware specifications for target testing machines
-- [ ] Knowledge of C#, GDScript, and C++ for implementation
+- [ ] Access to latest stable versions of Unity, Godot, and Unreal Engine 5
+- [ ] Basic proficiency in C#, GDScript, and C++
+- [ ] Understanding of core game development concepts and 3D/2D rendering principles
+- [ ] Project management tools for tracking comparison metrics and documentation
 
 # Team capacity
 
@@ -31,198 +30,193 @@ This project aims to provide a comprehensive technical comparison of Unity, Godo
 
 # Product Backlog Items
 
-## Establish Standardized Benchmarking Infrastructure
+## Comprehensive Engine Comparison Framework
 
 
-Set up the hardware environment and create identical 'Hello World' to complex scene test cases for Unity, Godot, and Unreal Engine 5. This epic covers the preparation of test machines, installation of engine versions, and creation of the baseline assets (models, textures, scripts) that will be used across all three engines to ensure fair comparison.
+Establish the overall structure and methodology for comparing Unity, Godot, and Unreal Engine 5. This epic covers the definition of evaluation criteria, setup of test environments, and creation of the final reporting dashboard to help developers select the optimal tool.
 
 Score: 13/13
 
 Priority: 1/5
 |Given|When|Then|
 | :---: | :---: | :---: |
-|The testing hardware is configured|The test scenes are imported into Unity, Godot, and UE5|The visual output and scene structure must be identical across all three engines.|
-|The benchmarking tools are installed|The test scenes are run|Then the system must log FPS, memory usage, and CPU/GPU load automatically.|
+|The project scope is defined|The comparison matrix is created|It must include rendering, scripting, asset pipeline, and community support metrics.|
+|The evaluation framework is established|A developer reviews the document|They can clearly identify which engine suits their specific project scale and team expertise.|
 
 
-Requires coordination between Chaos and Kateto to ensure asset parity across engines. Hardware specs must be documented.
-## As an indie developer, I want to compare the initial setup and learning curve of each engine
+This is the foundational epic that drives all subsequent tasks. Requires coordination between Chaos (Human) for strategic direction and Kateto (Agent) for data collection.
+## Compare Rendering Capabilities and Performance
 
 
-Evaluate and document the time required to set up a basic 3D project in Unity, Godot, and UE5. Include metrics on IDE responsiveness, documentation clarity, and the ease of creating a basic camera and character controller.
+As a technical lead, I want to understand the rendering differences between Unity, Godot, and UE5 so that I can choose the engine that best handles our visual fidelity requirements without compromising performance.
+
+Score: 8/13
+
+Priority: 2/5
+|Given|When|Then|
+| :---: | :---: | :---: |
+|The rendering systems of all three engines are tested|We analyze frame rates and visual quality in complex scenes|The report highlights the trade-offs between ease of use and high-end graphical fidelity.|
+|The performance metrics are collected|We compare UE5's Lumen/Nanite against Unity's HDRP|The output clearly states which engine offers the best out-of-the-box solution for next-gen graphics.|
+
+
+Focus on comparing Forward vs Deferred rendering, Lumen/Nanite in UE5 vs Unity HDRP vs Godot's Vulkan renderer.
+## Evaluate Scripting Languages and Developer Experience
+
+
+Conduct a detailed comparison of C# (Unity), GDScript (Godot), and C++ (UE5). Assess learning curve, performance overhead, and IDE integration to determine the best fit for teams with varying levels of programming expertise.
 
 Score: 5/13
 
 Priority: 2/5
 |Given|When|Then|
 | :---: | :---: | :---: |
-|A new developer opens each engine|They create a new 3D project and add a basic character controller|Then the time taken and number of steps required must be recorded and compared.|
-|The developer consults documentation|They attempt to implement a basic movement script|Then the clarity and availability of examples must be rated on a scale of 1-5.|
+|A simple game mechanic is implemented in all three engines|We measure the time taken and code complexity|The results show the relative productivity of C#, GDScript, and C++ for rapid prototyping.|
+|The IDE experience is evaluated|Debugging and refactoring are performed|The comparison highlights differences in tooling stability and IntelliSense quality.|
 
 
-Focus on the 'Day 1' experience for a new developer.
-## Implement and Profile Rendering Benchmarks for High-Density Scenes
+Kateto should generate code snippets for common tasks in each language to demonstrate verbosity and ease of use.
+## Analyze Asset Pipelines and Ecosystem
 
 
-Create a scene with 10,000 instances of a complex mesh with dynamic lighting in each engine. Profile the rendering performance using built-in profilers (Unity Profiler, Godot Visual Profiler, Unreal Insights) to gather frame times and draw call counts.
+As a studio manager, I want to evaluate the asset import workflows and marketplace ecosystems of each engine to ensure seamless integration with our existing art assets and third-party plugins.
 
 Score: 8/13
+
+Priority: 3/5
+|Given|When|Then|
+| :---: | :---: | :---: |
+|Standard 3D models and textures are imported|We process them through each engine's pipeline|We identify bottlenecks or extra steps required for optimization in each engine.|
+|The marketplace content is reviewed|We assess the availability and quality of plugins|The report indicates which engine has the most robust support for common game genres.|
+
+
+Include analysis of the Unity Asset Store, Unreal Marketplace, and Godot Asset Library.
+## Assess Licensing Costs and Business Models
+
+
+As a business analyst, I want to compare the licensing structures (Unity's Runtime Fee controversy, Unreal's revenue threshold, Godot's MIT license) to determine the long-term financial implications for indie developers and studios.
+
+Score: 5/13
 
 Priority: 1/5
 |Given|When|Then|
 | :---: | :---: | :---: |
-|The high-density scene is loaded|The camera moves through the scene|Then the minimum, average, and maximum frame times must be recorded for each engine.|
-|The profiling session ends|The data is exported|Then the draw call count and memory footprint must be documented.|
+|The revenue thresholds and fee structures are analyzed|We calculate costs for a hypothetical successful game|The output provides a clear cost-benefit analysis for different revenue tiers.|
+|The license terms are reviewed|We check for restrictions on redistribution|We confirm that Godot remains free for commercial use without royalties, unlike UE5 and Unity.|
 
 
-Ensure lighting settings are normalized (e.g., same shadow quality, same post-processing stack).
-## As a studio lead, I want to compare scripting language productivity and performance
+Critical for decision-making. Must include current legal terms and community sentiment analysis.
+## Document Community Support and Learning Resources
 
 
-Compare the implementation of a complex game mechanic (e.g., a state machine for AI behavior) using C# (Unity), GDScript (Godot), and C++ (UE5). Evaluate code verbosity, execution speed, and memory overhead.
-
-Score: 8/13
-
-Priority: 2/5
-|Given|When|Then|
-| :---: | :---: | :---: |
-|The AI state machine is implemented|1000 AI agents run simultaneously|Then the CPU usage and script execution time per frame must be measured.|
-|A feature is added to the AI logic|The developer modifies the code|Then the time taken to compile/reload and the number of lines of code must be compared.|
-
-
-Focus on both developer experience (DX) and runtime performance.
-## Analyze Mobile vs. Desktop Performance Discrepancies
-
-
-Run the standardized test scenes on a mid-range desktop PC and a mid-range mobile device (or mobile emulator). Analyze the performance drop-off in each engine to determine suitability for cross-platform development.
-
-Score: 5/13
-
-Priority: 3/5
-|Given|When|Then|
-| :---: | :---: | :---: |
-|The test scene is built for mobile|It is deployed to the target device|Then the frame rate stability and battery consumption must be recorded.|
-|The build is complete|The build size is checked|Then the final APK/IPA/EXE file size must be compared.|
-
-
-Godot and Unity have strong mobile support; UE5 is heavier. This is a critical differentiator.
-## As a technical artist, I want to compare asset pipeline integration
-
-
-Evaluate how easily 3D assets exported from Blender can be imported and optimized in each engine. Measure the time to import, material conversion issues, and texture compression options.
-
-Score: 5/13
-
-Priority: 3/5
-|Given|When|Then|
-| :---: | :---: | :---: |
-|A FBX model with custom shaders is exported|It is imported into each engine|Then any manual adjustments required to make it look correct must be logged.|
-|Textures are imported|The engine compresses them|Then the resulting visual quality and file size must be evaluated.|
-
-
-Focus on the friction points in the art workflow.
-## Compile Final Comparative Report and Recommendations
-
-
-Synthesize all benchmark data, user story results, and task outcomes into a comprehensive report. Create a decision matrix that helps developers choose the right engine based on project type (2D, 3D, Mobile, AAA, Indie).
+Gather data on the size and activity of the developer communities for Unity, Godot, and UE5. Evaluate the availability of tutorials, forums, and official documentation to support onboarding and problem-solving.
 
 Score: 3/13
 
+Priority: 3/5
+|Given|When|Then|
+| :---: | :---: | :---: |
+|Community metrics are gathered|We compare forum response times and tutorial availability|The report highlights which engine offers the best support for beginners versus experts.|
+|The documentation quality is assessed|We attempt to find solutions for common errors|We rate the clarity and completeness of official docs for each engine.|
+
+
+Kateto can scrape forum activity metrics and tutorial counts.
+## Generate Final Recommendation Report
+
+
+As a game developer, I want a synthesized report that recommends the best engine based on specific project types (e.g., 2D mobile, AAA 3D, VR) so that I can make an informed technology stack decision.
+
+Score: 8/13
+
 Priority: 1/5
 |Given|When|Then|
 | :---: | :---: | :---: |
-|All data is collected|The report is generated|Then it must include clear recommendations for at least 5 distinct use cases.|
-|The report is reviewed|It is published|Then it must be accessible to the target audience of indie developers and studio leads.|
+|All comparison data is compiled|The final report is generated|It provides clear recommendations for different genres and team sizes.|
+|The report is reviewed by stakeholders|They ask for justification on the top choice|The report cites specific data points from rendering, scripting, and cost analyses.|
 
 
-This is the final deliverable. Ensure all data is visually represented in charts/graphs.
+This is the deliverable that provides actionable insights. Must be structured for easy reading.
 # Phases
 
-## 1. Establish Infrastructure and Evaluate Developer Experience
+## 1. Establish Foundation and Analyze Technical Core
 
 
-Description: In this initial sprint, the team focuses on laying the groundwork for the comparison. Chaos and Kateto will configure the standardized hardware environment and create the baseline 'Hello World' to complex scene test cases (PBI: Establish Standardized Benchmarking Infrastructure). Simultaneously, they will evaluate the 'Day 1' experience for indie developers by measuring setup time, IDE responsiveness, and documentation clarity across Unity, Godot, and UE5 (PBI: Compare initial setup and learning curve). This ensures that the testing environment is ready and the subjective developer experience metrics are captured early.
-
-Duration: 2 Weeks
-|Title|Description|Asignee|Effort|
-| :---: | :---: | :---: | :---: |
-|Configure Standardized Hardware Environment and Install Engines|Chaos will set up the test machine with the specified hardware specs, install Unity, Godot, and Unreal Engine 5, and configure the benchmarking tools for automatic logging of FPS, memory, and CPU/GPU load. This ensures the infrastructure is ready for fair comparison.|Chaos(Human)|12.0 Hours|
-|Create and Validate Baseline 'Hello World' Test Scenes|Kateto (Agent) will generate the baseline assets (models, textures, scripts) and create identical 'Hello World' to complex scene test cases in all three engines. Chaos will verify that the visual output and scene structure are identical across Unity, Godot, and UE5 to ensure asset parity.|Chaos(Human)|16.0 Hours|
-|Execute Initial Setup and Learning Curve Evaluation|Chaos will simulate the 'Day 1' experience for a new indie developer. This includes measuring the time to set up a basic 3D project, creating a basic camera and character controller, and rating documentation clarity on a scale of 1-5 for each engine.|Chaos(Human)|10.0 Hours|
-|Automate Baseline Benchmark Data Collection|Kateto (Agent) will run the baseline test scenes created in the previous task and automatically log the system metrics (FPS, memory usage, CPU/GPU load) using the installed benchmarking tools. This data will serve as the control group for future comparisons.|Kateto(Agent)|8.0 Hours|
-|Document IDE Responsiveness and Setup Metrics|Chaos will compile the results from the initial setup evaluation, documenting IDE responsiveness, step counts, and time metrics. This report will be formatted for the final sprint deliverable and shared with the team for review.|Chaos(Human)|6.0 Hours|
-|Verify Hardware Configuration and Asset Parity|Chaos will perform a final audit of the hardware configuration and the baseline assets to ensure they meet the criteria defined in the 'Establish Standardized Benchmarking Infrastructure' PBI. Any discrepancies in visual output or scene structure must be corrected before the next sprint.|Chaos(Human)|5.0 Hours|
-
-
-## 2. Execute Technical Benchmarks and Pipeline Analysis
-
-
-Description: With the infrastructure established, the team will execute the core technical comparisons. This includes implementing and profiling rendering benchmarks for high-density scenes to gather frame times and draw call data (PBI: Implement and Profile Rendering Benchmarks). Concurrently, they will compare scripting language productivity by implementing a complex AI state machine in C#, GDScript, and C++, measuring both code verbosity and runtime performance (PBI: Compare scripting language productivity). Finally, the art workflow friction will be assessed by importing Blender assets and analyzing material conversion and texture compression issues (PBI: Compare asset pipeline integration).
-
-Duration: 3 Weeks
-|Title|Description|Asignee|Effort|
-| :---: | :---: | :---: | :---: |
-|Implement High-Density Rendering Benchmark Scene|Create the standardized test scene containing 10,000 instances of a complex mesh with dynamic lighting. Ensure lighting settings (shadow quality, post-processing) are normalized across Unity, Godot, and UE5 to guarantee fair comparison. Export the scene assets and project structures for profiling.|Chaos(Human)|12.0 Hours|
-|Execute Rendering Benchmarks and Profile Performance|Run the high-density scene in all three engines using their respective built-in profilers (Unity Profiler, Godot Visual Profiler, Unreal Insights). Record minimum, average, and maximum frame times, draw call counts, and memory footprint. Export raw data for analysis.|Kateto(Agent)|10.0 Hours|
-|Implement AI State Machine in C#, GDScript, and C++|Develop a complex AI behavior state machine in Unity (C#), Godot (GDScript), and UE5 (C++). The implementation must support 1000 simultaneous agents. Focus on clean architecture to measure code verbosity and execution speed effectively.|Chaos(Human)|16.0 Hours|
-|Profile AI Scripting Performance and Verbosity|Run the AI state machine implementation with 1000 agents in each engine. Measure CPU usage, script execution time per frame, and compile/reload times. Document the number of lines of code and developer experience friction points for each language.|Kateto(Agent)|10.0 Hours|
-|Setup Blender Asset Pipeline for Cross-Engine Import|Prepare a standard FBX model with custom shaders and textures from Blender. Define the import settings and material conversion workflows for Unity, Godot, and UE5. Identify potential friction points in the art workflow.|Chaos(Human)|8.0 Hours|
-|Analyze Asset Import Friction and Texture Compression|Import the Blender assets into all three engines. Log any manual adjustments required for visual parity. Evaluate texture compression options, resulting file sizes, and visual quality degradation. Compile findings on pipeline efficiency.|Kateto(Agent)|12.0 Hours|
-
-
-## 3. Analyze Cross-Platform Performance and Finalize Report
-
-
-Description: The final sprint focuses on cross-platform viability and synthesis. The team will run the standardized test scenes on both mid-range desktop and mobile devices to analyze performance discrepancies, frame rate stability, and build sizes (PBI: Analyze Mobile vs. Desktop Performance Discrepancies). All collected data from previous sprints will be synthesized into a comprehensive comparative report, including a decision matrix for different project types, ensuring clear recommendations for indie developers and studio leads (PBI: Compile Final Comparative Report and Recommendations).
+Description: Sprint 1 focuses on setting up the evaluation framework and conducting the initial deep-dive technical comparisons. Chaos (Human) will define the scope and criteria, while Kateto (Agent) executes the performance testing for rendering and the scripting productivity experiments. This sprint delivers the raw data for the two most critical technical pillars: Rendering and Scripting.
 
 Duration: 2 Weeks
 |Title|Description|Asignee|Effort|
 | :---: | :---: | :---: | :---: |
-|Execute Mobile Benchmarking on Mid-Range Devices|Deploy the standardized test scenes (established in previous sprints) to a mid-range mobile device (or high-fidelity emulator). Run the high-density rendering scene and the AI state machine simulation. Record frame rate stability, battery consumption, and final build sizes (APK/IPA) for Unity, Godot, and UE5. Compare these metrics against the desktop results to identify performance discrepancies.|Kateto(Agent)|24.0 Hours|
-|Analyze Mobile vs. Desktop Performance Data|Process the raw data collected from the mobile benchmarks. Calculate the performance drop-off percentages for CPU, GPU, and memory usage between desktop and mobile builds. Evaluate the trade-offs in build size and battery life. Document findings specifically regarding cross-platform viability, highlighting where Godot and Unity outperform UE5 on mobile constraints.|Chaos(Human)|16.0 Hours|
-|Synthesize Cross-Platform Findings into Decision Matrix|Integrate the mobile performance analysis with previous sprint data (rendering, scripting, asset pipeline). Create a comprehensive decision matrix that categorizes engine suitability for specific use cases (e.g., Mobile Indie, Desktop AAA, 2D Mobile, etc.). Ensure the matrix clearly visualizes the trade-offs between performance overhead and development speed for each engine.|Chaos(Human)|20.0 Hours|
-|Generate Final Comparative Report with Visualizations|Compile all benchmark data, user story results, and the new mobile analysis into the final comparative report. Generate clear charts and graphs to represent FPS, memory usage, and build sizes. Write the executive summary and detailed recommendations for indie developers and studio leads, ensuring the report is accessible and actionable.|Chaos(Human)|25.0 Hours|
-|Automate Report Data Formatting and Publication|Assist in the final formatting of the report by automating the insertion of benchmark data into the template. Ensure all charts are correctly linked to the source data. Perform a final quality check to ensure the report meets the criteria of being accessible to the target audience and includes recommendations for at least 5 distinct use cases.|Kateto(Agent)|12.0 Hours|
+|Define Evaluation Criteria and Test Scenarios|Establish the comprehensive comparison matrix as defined in the Epic. Chaos will define specific metrics for rendering (e.g., draw calls, memory usage), scripting (e.g., lines of code, execution time), and asset pipeline bottlenecks. Create the test scenarios for the 'simple game mechanic' and 'complex scene' benchmarks.|Chaos(Human)|12.0 Hours|
+|Setup Test Environments and Project Templates|Create identical starter projects in Unity, Godot, and Unreal Engine 5. Configure the build settings for consistent performance testing (e.g., same target platform, resolution, and quality settings). Prepare the base assets for rendering and scripting tests.|Chaos(Human)|10.0 Hours|
+|Execute Rendering Performance Benchmarks|Kateto will run the predefined complex scene benchmarks across all three engines. Collect data on frame rates, memory consumption, and rendering pipeline overhead. Compare UE5's Lumen/Nanite against Unity HDRP and Godot's Vulkan renderer, noting any out-of-the-box configuration differences.|Kateto(Agent)|24.0 Hours|
+|Conduct Scripting Productivity Experiments|Kateto will implement the 'simple game mechanic' in C# (Unity), GDScript (Godot), and C++ (UE5). Measure the code verbosity, compile times, and IDE responsiveness. Generate code snippets for the report to demonstrate developer experience differences.|Kateto(Agent)|20.0 Hours|
+|Compile Initial Technical Data and Render Comparison|Chaos will review the raw data collected by Kateto for rendering and scripting. Validate the metrics against the defined criteria. Draft the initial sections of the comparison report focusing on the technical core findings, highlighting trade-offs between performance and ease of use.|Chaos(Human)|15.0 Hours|
+|Review and Refine Benchmark Methodology|Chaos and Kateto will review the initial findings. If any anomalies are detected in the performance metrics or scripting tests, adjust the test parameters and re-run specific benchmarks. Ensure the data is ready for the next sprint's asset pipeline analysis.|Chaos(Human)|16.0 Hours|
+
+
+## 2. Evaluate Ecosystem, Costs, and Community
+
+
+Description: Sprint 2 shifts focus to the business and operational aspects of the engines. The team will analyze asset pipelines, marketplace ecosystems, and licensing structures. Kateto will gather community metrics and documentation quality data. This sprint ensures that the technical choices are viable within the context of business constraints and developer support.
+
+Duration: 2 Weeks
+|Title|Description|Asignee|Effort|
+| :---: | :---: | :---: | :---: |
+|Analyze Asset Pipelines and Marketplace Ecosystems|Conduct a comparative analysis of asset import workflows (3D models, textures) and marketplace availability for Unity, Godot, and UE5. Identify bottlenecks in pipelines and assess the quality/quantity of third-party plugins for common genres. This directly addresses the 'Analyze Asset Pipelines and Ecosystem' User Story.|Chaos(Human)|12.0 Hours|
+|Evaluate Licensing Costs and Business Models|Perform a detailed cost-benefit analysis of licensing structures (Unity's Runtime Fee, UE5 revenue threshold, Godot MIT license). Calculate hypothetical costs for different revenue tiers and assess legal restrictions on redistribution. This addresses the 'Assess Licensing Costs and Business Models' User Story.|Chaos(Human)|10.0 Hours|
+|Scrape and Quantify Community Support Metrics|Automate the collection of community data including forum activity levels, tutorial counts, and documentation coverage for all three engines. Use this data to generate initial metrics on support availability for beginners vs experts. This supports the 'Document Community Support and Learning Resources' Task.|Kateto(Agent)|18.0 Hours|
+|Assess Documentation Quality and Developer Experience|Evaluate the clarity and completeness of official documentation for each engine by attempting to solve common errors. Rate the tooling stability and IntelliSense quality. This complements the community metrics by focusing on the quality of the learning resources.|Chaos(Human)|8.0 Hours|
+|Synthesize Business and Community Data for Sprint Report|Compile the findings from asset pipeline analysis, licensing evaluation, and community metrics into a structured section for the final recommendation report. Ensure actionable insights are provided regarding business viability and developer support.|Chaos(Human)|15.0 Hours|
+|Validate Community Data Accuracy|Review the data collected by Kateto regarding community metrics and documentation. Verify sample data points against manual checks to ensure accuracy before finalizing the report.|Kateto(Agent)|6.0 Hours|
+
+
+## 3. Synthesize Data into Actionable Recommendations
+
+
+Description: Sprint 3 is dedicated to consolidation and delivery. Chaos and Kateto will compile all data from previous sprints into a final comparative report. The goal is to generate clear, genre-specific recommendations (e.g., 2D Mobile vs. AAA 3D) based on the aggregated rendering, scripting, cost, and community data, providing a definitive guide for engine selection.
+
+Duration: 1 Weeks
+|Title|Description|Asignee|Effort|
+| :---: | :---: | :---: | :---: |
+|Synthesize Rendering and Performance Data into Genre-Specific Recommendations|Consolidate the data from the 'Compare Rendering Capabilities' PBI. Analyze the trade-offs between UE5's Lumen/Nanite, Unity HDRP, and Godot's Vulkan renderer. Create specific recommendations for different project types (e.g., 'UE5 for AAA 3D', 'Godot for lightweight 2D/3D') based on visual fidelity vs. performance metrics.|Chaos(Human)|12.0 Hours|
+|Aggregate Scripting, Asset Pipeline, and Community Data for Final Report|Compile findings from the 'Scripting Languages', 'Asset Pipelines', and 'Community Support' PBIs. Structure the data to highlight developer experience (DX) factors, such as IDE stability and learning curves, alongside ecosystem robustness. Prepare the narrative sections of the final report that explain *why* certain engines are better suited for specific team sizes and expertise levels.|Chaos(Human)|10.0 Hours|
+|Generate Financial Cost-Benefit Analysis for Licensing Models|Execute the 'Assess Licensing Costs' PBI requirements. Calculate total cost of ownership for hypothetical revenue tiers (indie vs. studio) for Unity, Unreal, and Godot. Clearly document the implications of Unity's runtime fees vs. Unreal's revenue threshold vs. Godot's MIT license to provide a definitive financial recommendation.|Kateto(Agent)|8.0 Hours|
+|Compile and Format Final Comparative Report|Assemble all synthesized data, financial analyses, and community metrics into the final 'Generate Final Recommendation Report'. Ensure the document is structured for easy reading, includes clear executive summaries for each genre (2D Mobile, AAA 3D, VR), and cites specific data points to justify the top choices.|Kateto(Agent)|10.0 Hours|
+|Final Review and Stakeholder Validation of Recommendations|Review the generated report for consistency and accuracy. Verify that all criteria from the 'Comprehensive Engine Comparison Framework' epic are met. Ensure that the recommendations are actionable and that the justification for each engine choice is clearly supported by the underlying data.|Chaos(Human)|8.0 Hours|
 
 
 # Definition of Done
 
 ## Code Quality
 
-- [ ] All source code (C# for Unity, GDScript for Godot, C++ for UE5) has passed peer review by at least one other team member.
-- [ ] Code adheres to the official style guides for each respective engine/language (e.g., Unity C# Style Guide, Google C++ Style Guide for UE5).
-- [ ] Static analysis tools (e.g., SonarQube for C#, Clang-Tidy for C++, LSP servers for GDScript) report zero critical or high-severity issues.
-- [ ] No unused variables, methods, or assets remain in the codebase after profiling and cleanup.
-- [ ] All engine-specific scripts are modularized and avoid tight coupling to ensure maintainability and ease of comparison.
+- [ ] All code snippets generated for C# (Unity), GDScript (Godot), and C++ (UE5) must pass respective language linters (e.g., C# Roslyn Analyzers, GDScript linter, Clang-Tidy for C++) without errors or warnings.
+- [ ] Code reviews must be conducted for all implementation examples to ensure adherence to best practices for each engine's specific ecosystem (e.g., Unity's Component pattern, UE5's Actor system, Godot's Node hierarchy).
+- [ ] Static analysis tools must be run on all custom scripts to detect potential memory leaks, particularly in C++ (UE5) and C# (Unity) implementations.
+- [ ] Code style guides specific to each engine (e.g., Unity's Scripting API guidelines, Unreal Engine's Coding Standard) must be followed and verified.
 
 ## Testing
 
-- [ ] Automated benchmarks for 'Hello World' and high-density scenes have been executed and logged for all three engines.
-- [ ] Integration tests confirm that the standardized test scenes produce visually identical outputs across Unity, Godot, and UE5 (verified via screenshot diffing or pixel-perfect comparison tools).
-- [ ] Unit tests for the AI state machine implementation verify logic correctness and edge cases for all three scripting languages.
-- [ ] Test coverage thresholds are met for core logic modules (e.g., >80% coverage for the AI behavior tree logic).
-- [ ] Cross-platform builds (Desktop vs. Mobile/Emulator) have been tested, and performance discrepancies are documented and acceptable within defined tolerances.
+- [ ] Unit tests must verify the correctness of the comparison matrix data structure and the logic used to calculate cost-benefit analyses for licensing.
+- [ ] Integration tests must confirm that the test scenes (rendering, scripting, asset pipeline) load and run correctly in all three engine versions (Unity, Godot, UE5) within the defined test environment.
+- [ ] Test coverage for the data collection scripts (scraping forum metrics, parsing license terms) must be at least 80% to ensure data integrity.
+- [ ] Performance benchmarks must be recorded and validated to ensure consistency across multiple runs for each engine to minimize variance in results.
 
 ## Documentation
 
-- [ ] A comprehensive README.md is updated with instructions on how to reproduce the benchmarks, including hardware specs and engine versions used.
-- [ ] Inline comments explain complex optimization techniques and engine-specific quirks identified during the rendering and scripting comparisons.
-- [ ] API documentation for any custom helper scripts or benchmarking tools is generated and accessible.
-- [ ] The 'Learning Curve' evaluation includes documented steps, screenshots of IDE setup, and ratings for documentation clarity for each engine.
-- [ ] The final Comparative Report includes a decision matrix with clear recommendations for at least 5 distinct use cases (2D, 3D, Mobile, AAA, Indie).
+- [ ] A comprehensive README must be updated with instructions on how to reproduce the comparison tests, including environment setup for Unity, Godot, and UE5.
+- [ ] Inline comments must be added to all code snippets to explain engine-specific constructs and highlight differences in verbosity or complexity.
+- [ ] API documentation must be generated for any custom tools or scripts created to automate the data collection or analysis process.
+- [ ] The final recommendation report must include a clear methodology section detailing how metrics were collected and weighted, ensuring transparency for stakeholders.
 
 ## Deployment
 
-- [ ] All project builds (Unity, Godot, UE5) compile successfully without errors or warnings in their respective release configurations.
-- [ ] Deployment scripts or build pipelines are documented, allowing for automated reproduction of the final deliverables.
-- [ ] Environment configurations for the testing hardware are archived and version-controlled to ensure reproducibility.
-- [ ] Final binaries (EXE, APK, IPA) are generated and stored in a designated artifact repository with size metrics recorded.
-- [ ] The final report is published in a format accessible to the target audience (e.g., PDF, web page) and includes all raw benchmark data as appendices.
+- [ ] Build scripts must successfully compile the test projects for all three engines (Unity, Godot, UE5) on the target platforms specified in the project scope (e.g., Windows, Mobile, Web).
+- [ ] Deployment artifacts (e.g., compiled executables, web builds) must be stored in a version-controlled repository or artifact storage with clear labeling for each engine version and test scenario.
+- [ ] Environment configuration files must be documented to ensure that the test environments are reproducible by other developers or stakeholders.
+- [ ] Automated build pipelines must be configured to trigger on changes to the test scenes or code snippets, ensuring that the comparison data remains current.
 
 ## Performance
 
-- [ ] Rendering benchmarks include recorded minimum, average, and maximum frame times for high-density scenes (10,000 instances).
-- [ ] Draw call counts and memory footprints are documented and compared across all three engines for standardized scenes.
-- [ ] CPU usage and script execution time per frame are measured for the AI state machine with 1,000 simultaneous agents.
-- [ ] Mobile performance metrics include frame rate stability and battery consumption data, highlighting any significant drop-offs compared to desktop.
-- [ ] Build size metrics (APK/IPA/EXE) are recorded and compared to assess overhead and optimization levels.
+- [ ] Performance benchmarks for rendering (frame rates, draw calls) must be collected using standardized scenes and hardware configurations, with results documented in a comparative format.
+- [ ] Load testing must be performed to assess how each engine handles increasing complexity in scenes (e.g., number of objects, lighting effects) to identify performance bottlenecks.
+- [ ] Optimization checks must be conducted to evaluate the ease of applying performance improvements in each engine, documenting the steps and effort required.
+- [ ] Memory usage profiles must be analyzed for each engine during the test scenarios to identify potential memory management issues or leaks, particularly in long-running sessions.

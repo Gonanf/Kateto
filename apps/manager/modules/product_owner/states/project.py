@@ -77,3 +77,31 @@ class Document(BaseModel):
     dod: list[DOD] | None
     draft_sprints: list[SprintDraft] | None
     completed_sprints: Annotated[list[Sprint], operator.add]
+
+
+# ── LLM structured output schemas ──────────────────────────────────────────
+
+
+class DODList(BaseModel):
+    dods: list[DOD] = Field(min_length=5, max_length=6)
+
+
+class PBIList(BaseModel):
+    pbis: list[PBI] = Field(min_length=5, max_length=10)
+
+
+class SprintList(BaseModel):
+    sprints: list[SprintDraft] = Field(min_length=2, max_length=4)
+
+
+class SprintTasksList(BaseModel):
+    tasks: list[SprintTask] = Field(min_length=2, max_length=6)
+
+
+# ── Sub-state for fan-out to SprintTasksAgent ──────────────────────────────
+
+
+class SprintState(BaseModel):
+    document: Document
+    current: SprintDraft
+    week: int

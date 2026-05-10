@@ -139,7 +139,10 @@ let usedItems = new Set<string>();
 let allItems: SpinItem[] = await loadItems();
 
 const packageDefinition = protoLoader.loadSync(
-  join(__dirname, '../../packages/protos/manager/manager.proto'),
+  [
+    join(__dirname, '../../packages/protos/manager/manager.proto'),
+    join(__dirname, '../../packages/protos/manager/product_owner.proto'),
+  ],
   {
     keepCase: true,
     longs: String,
@@ -151,8 +154,14 @@ const packageDefinition = protoLoader.loadSync(
 
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
 const Manager = (protoDescriptor as any).manager.Manager;
+const ProductOwner = (protoDescriptor as any).manager.product_owner.ProductOwner;
 
 const grpcClient = new Manager(
+  MANAGER_GRPC_ADDR,
+  grpc.credentials.createInsecure()
+);
+
+const productOwnerClient = new ProductOwner(
   MANAGER_GRPC_ADDR,
   grpc.credentials.createInsecure()
 );
@@ -171,20 +180,24 @@ function callManagerPrompt(text: string): Promise<string> {
   });
 }
 
-function buildSprintPrompt(feature: string): string {
-  let prompt = { feature: feature, availability: "Full Time", team: ["Chaos"] };
-  try {
-    const c = configState;
-    if (c?.availability) {
-      prompt.availability = c.availability;
-    }
-    if (c?.teamPersons && c.teamPersons.length > 0) {
-      prompt.team = c.teamPersons;
-    }
-  } catch {
-    // ignore config read issues, fall back to feature only
-  }
-  return String(prompt);
+function callCreateProject(idea: string, disponibility: string, team: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const call = productOwnerClient.createProject(
+      { idea, disponibility, team },
+      { deadline: Date.now() + 7200000 }
+    );
+    let markdown = '';
+
+    call.on('data', (response: { stage: string; message: string; data_json: string; markdown: string }) => {
+      console.log(`[ProductOwner] Stage: ${response.stage} - ${response.message}`);
+      if (response.stage === 'done' && response.markdown) {
+        markdown = response.markdown;
+      }
+    });
+
+    call.on('end', () => resolve(markdown));
+    call.on('error', (err: Error) => reject(err));
+  });
 }
 
 function serveStaticFile(path: string): Response | null {
@@ -310,10 +323,11 @@ const server = serve({
     if (pathname === '/api/generate-sprint-doc' && req.method === 'POST') {
       const body = await req.json();
       const feature: string = body.feature;
+      const disponibility = configState.availability || 'Full Time';
+      const team = configState.teamPersons.length > 0 ? configState.teamPersons : ['Chaos'];
 
       try {
-        const prompt = buildSprintPrompt(feature);
-        const document = await callManagerPrompt(prompt);
+        const document = await callCreateProject(feature, disponibility, team);
         return Response.json({ document });
       } catch (err) {
         console.error('gRPC call failed:', err);
@@ -358,11 +372,13 @@ const server = serve({
     }
 
     // Reset all items and uncheck in AFFINE document as well
+    // TODO: Maybe delete
     if (pathname === '/api/reset' && req.method === 'POST') {
       usedItems.clear();
       if (ITEMS_METHOD === 'AFFINE') {
         const resp = await $`bunx mcporter call affine.read_doc docId:${process.env.AFFINE_DOC_ID} includeMarkdown:true`.quiet();
         const data = await resp.json() as { markdown: string };
+
         const newMd = (data.markdown ?? '').split('\n').map((ln) => ln.startsWith('- [x]') ? ln.replace('- [x]', '- [ ]') : ln).join('\n');
         await $`bunx mcporter call affine.replace_doc_with_markdown docId:${process.env.AFFINE_DOC_ID} markdown:${newMd}`.quiet();
         // refresh local items as unchecked

@@ -12,6 +12,9 @@ message ProjectRequest {
 }
 
 message ProjectResponse {
-  string id = 1;
+  string stage = 1;       // "project_info", "pbis", "dod", "sprints", "tasks", "document", "done", "error"
+  string message = 2;     // Human-readable progress message
+  string data_json = 3;   // JSON payload for this stage
+  string markdown = 4;    // Final markdown document (only on "done" stage)
 }
 
