@@ -21,6 +21,8 @@ _NODE_TO_STAGE = {
     "sprint_tasks": "tasks",
     "is_busy": "calendar",
     "create_affine": "document",
+    "read_openproject_context": "reading_context",
+    "sync_to_openproject": "openproject_sync",
 }
 
 _STAGE_MESSAGES = {
@@ -31,6 +33,8 @@ _STAGE_MESSAGES = {
     "sprint_tasks": "Breaking down sprint tasks...",
     "is_busy": "Checking calendar availability...",
     "create_affine": "Creating project document...",
+    "read_openproject_context": "Reading project context from OpenProject...",
+    "sync_to_openproject": "Synchronizing project to OpenProject...",
 }
 
 

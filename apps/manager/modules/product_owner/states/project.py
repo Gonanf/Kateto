@@ -1,4 +1,5 @@
 from typing import Annotated, Literal
+from modules.product_owner.openproject.models import OpenProjectReadContext
 from pydantic import BaseModel, Field
 import operator
 
@@ -77,6 +78,7 @@ class Document(BaseModel):
     dod: list[DOD] | None
     draft_sprints: list[SprintDraft] | None
     completed_sprints: Annotated[list[Sprint], operator.add]
+    openproject_context: OpenProjectReadContext | None = None
 
 
 # ── LLM structured output schemas ──────────────────────────────────────────
