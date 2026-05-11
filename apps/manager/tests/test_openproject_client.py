@@ -266,7 +266,7 @@ class TestCreateVersion:
             )
             assert result == 43
             call_args = mock_client.post.call_args
-            assert call_args[0][0] == "/api/v3/projects/5/versions"
+            assert call_args[0][0] == "projects/5/versions"
             payload = call_args[0][1]
             assert payload["startDate"] == "2026-06-01"
             assert payload["endDate"] == "2026-06-14"
@@ -380,12 +380,12 @@ class TestCreateWorkPackage:
     """Tests for create_work_package()."""
 
     def test_returns_id(self, config: ProjectConfig) -> None:
-        """Should create a work package and return its ID."""
+        """Should create a work package using the library method and return its ID."""
         with mock.patch(
             "modules.product_owner.openproject.client.ApiClient"
         ) as mock_api:
             mock_client = mock_api.return_value
-            mock_client.post.return_value = SimpleNamespace(id=100)
+            mock_client.create_workpackage.return_value = SimpleNamespace(id=100)
 
             client = OpenProjectClient(config)
             result = client.create_work_package(
@@ -395,15 +395,25 @@ class TestCreateWorkPackage:
                 type_id=1,
             )
             assert result == 100
-            mock_client.post.assert_called_once()
+            mock_client.create_workpackage.assert_called_once_with(
+                project_id=5,
+                subject="Implement login",
+                description="Add login page",
+                type_id=1,
+                assignee_id=None,
+                priority_id=None,
+                version_id=None,
+                parent_id=None,
+                estimated_time=None,
+            )
 
     def test_with_optional_fields(self, config: ProjectConfig) -> None:
-        """Should include assignee, priority, version, and parent in payload."""
+        """Should pass optional fields to the library method."""
         with mock.patch(
             "modules.product_owner.openproject.client.ApiClient"
         ) as mock_api:
             mock_client = mock_api.return_value
-            mock_client.post.return_value = SimpleNamespace(id=101)
+            mock_client.create_workpackage.return_value = SimpleNamespace(id=101)
 
             client = OpenProjectClient(config)
             result = client.create_work_package(
@@ -415,15 +425,20 @@ class TestCreateWorkPackage:
                 priority_id=1,
                 version_id=20,
                 parent_id=99,
+                estimated_hours=8,
             )
             assert result == 101
-            call_args = mock_client.post.call_args
-            payload = call_args[0][1]
-            assert "assignee" in payload
-            assert "priority" in payload
-            assert "version" in payload
-            assert "parent" in payload
-            assert payload["parent"]["href"] == "/api/v3/work_packages/99"
+            mock_client.create_workpackage.assert_called_once_with(
+                project_id=5,
+                subject="Fix bug",
+                description="Fix the bug",
+                type_id=2,
+                assignee_id=10,
+                priority_id=1,
+                version_id=20,
+                parent_id=99,
+                estimated_time="PT8H",
+            )
 
     def test_returns_none_on_failure(self, config: ProjectConfig) -> None:
         """Should return None when API call fails."""
@@ -431,7 +446,7 @@ class TestCreateWorkPackage:
             "modules.product_owner.openproject.client.ApiClient"
         ) as mock_api:
             mock_client = mock_api.return_value
-            mock_client.post.side_effect = RuntimeError("fail")
+            mock_client.create_workpackage.side_effect = RuntimeError("fail")
 
             client = OpenProjectClient(config)
             result = client.create_work_package(
@@ -452,16 +467,19 @@ class TestCreateRelation:
             "modules.product_owner.openproject.client.ApiClient"
         ) as mock_api:
             mock_client = mock_api.return_value
-            mock_client.create_relation.return_value = SimpleNamespace(id=200)
+            mock_client.post.return_value = SimpleNamespace(id=200)
 
             client = OpenProjectClient(config)
             result = client.create_relation(
                 from_id=10, to_id=20, relation_type="follows"
             )
             assert result == 200
-            mock_client.create_relation.assert_called_once_with(
-                10, 20, "follows"
-            )
+            mock_client.post.assert_called_once()
+            args, kwargs = mock_client.post.call_args
+            assert args[0] == "work_packages/10/relations"
+            payload = args[1]
+            assert payload["type"] == "follows"
+            assert payload["_links"]["to"]["href"] == "/api/v3/work_packages/20"
 
     def test_rejects_invalid_type(self, config: ProjectConfig) -> None:
         """Should return None for invalid relation type."""
@@ -477,16 +495,20 @@ class TestCreateRelation:
             "modules.product_owner.openproject.client.ApiClient"
         ) as mock_api:
             mock_client = mock_api.return_value
-            mock_client.create_relation.return_value = SimpleNamespace(id=201)
+            mock_client.post.return_value = SimpleNamespace(id=201)
 
             client = OpenProjectClient(config)
             result = client.create_relation(
                 from_id=10, to_id=20, relation_type="blocks", description="Because reasons"
             )
             assert result == 201
-            mock_client.create_relation.assert_called_once_with(
-                10, 20, "blocks", description="Because reasons"
-            )
+            mock_client.post.assert_called_once()
+            args, kwargs = mock_client.post.call_args
+            assert args[0] == "work_packages/10/relations"
+            payload = args[1]
+            assert payload["type"] == "blocks"
+            assert payload["description"] == "Because reasons"
+            assert payload["_links"]["to"]["href"] == "/api/v3/work_packages/20"
 
 
 class TestUserIdByEmail:

@@ -108,7 +108,7 @@ class OpenProjectClient:
         if end_date:
             payload["endDate"] = end_date
         try:
-            response = self.client.post(f"/api/v3/projects/{project_id}/versions", payload)
+            response = self.client.post(f"projects/{project_id}/versions", payload)
             return self._extract_id(response)
         except Exception as e:
             logger.error("Failed to create version '%s': %s", name, e)
@@ -126,7 +126,7 @@ class OpenProjectClient:
         if date:
             payload["endDate"] = date
         try:
-            response = self.client.post(f"/api/v3/projects/{project_id}/versions", payload)
+            response = self.client.post(f"projects/{project_id}/versions", payload)
             return self._extract_id(response)
         except Exception as e:
             logger.error("Failed to create milestone '%s': %s", name, e)
@@ -148,44 +148,49 @@ class OpenProjectClient:
     def create_work_package(self, project_id: int, subject: str, description: str,
                             type_id: int, assignee_id: int | None = None,
                             priority_id: int | None = None, version_id: int | None = None,
-                            parent_id: int | None = None) -> int | None:
-        """Create a work package, optionally with parent, assignee, priority, and version."""
+                            parent_id: int | None = None,
+                            estimated_hours: int | None = None) -> int | None:
+        """Create a work package using the library's built-in method."""
         try:
-            payload = {
-                "subject": subject,
-                "description": {"raw": description},
-                "_type": "WorkPackage",
-                "type": {"href": f"/api/v3/types/{type_id}"},
-                "project": {"href": f"/api/v3/projects/{project_id}"},
-            }
-            if assignee_id:
-                payload["assignee"] = {"href": f"/api/v3/users/{assignee_id}"}
-            if priority_id:
-                payload["priority"] = {"href": f"/api/v3/priorities/{priority_id}"}
-            if version_id:
-                payload["version"] = {"href": f"/api/v3/versions/{version_id}"}
-            if parent_id:
-                payload["parent"] = {"href": f"/api/v3/work_packages/{parent_id}"}
-
-            response = self.client.post(f"/api/v3/projects/{project_id}/work_packages", payload)
-            return self._extract_id(response)
+            estimated_time = f"PT{estimated_hours}H" if estimated_hours is not None else None
+            wp = self.client.create_workpackage(
+                project_id=project_id,
+                subject=subject,
+                description=description,
+                type_id=type_id,
+                assignee_id=assignee_id,
+                priority_id=priority_id,
+                version_id=version_id,
+                parent_id=parent_id,
+                estimated_time=estimated_time,
+            )
+            return wp.id if wp else None
         except Exception as e:
             logger.error("Failed to create work package '%s': %s", subject, e)
             return None
 
     def create_relation(self, from_id: int, to_id: int, relation_type: str,
                         description: str | None = None) -> int | None:
-        """Create a relation between two work packages."""
+        """Create a relation between two work packages.
+
+        Uses direct POST to /api/v3/work_packages/{from_id}/relations
+        since the library's generic 'relations' endpoint is not valid.
+        """
         VALID_TYPES = {"precedes", "follows", "blocks", "blocked", "relates", "requires", "required"}
         if relation_type not in VALID_TYPES:
             logger.error("Invalid relation type: %s", relation_type)
             return None
         try:
-            kwargs = {}
+            body = {
+                "type": relation_type,
+                "_links": {
+                    "to": {"href": f"/api/v3/work_packages/{to_id}"},
+                },
+            }
             if description is not None:
-                kwargs["description"] = description
-            response = self.client.create_relation(from_id, to_id, relation_type, **kwargs)  # type: ignore[arg-type]
-            return response.id if response else None
+                body["description"] = description
+            response = self.client.post(f"work_packages/{from_id}/relations", body)
+            return self._extract_id(response)
         except Exception as e:
             logger.error("Failed to create relation %s->%s: %s", from_id, to_id, e)
             return None
@@ -248,7 +253,7 @@ class OpenProjectClient:
             team_members=[],
         )
         try:
-            project = self.client.get(f"/api/v3/projects/{project_id}")
+            project = self.client.get(f"projects/{project_id}")
             if project:
                 context.project_name = getattr(project, "name", "")
                 raw_desc = getattr(project, "description", None)
@@ -261,7 +266,7 @@ class OpenProjectClient:
             if wps:
                 context.existing_work_packages = [vars(wp) for wp in wps]  # type: ignore[assignment]
 
-            versions_resp = self.client.get(f"/api/v3/projects/{project_id}/versions")
+            versions_resp = self.client.get(f"projects/{project_id}/versions")
             if versions_resp is not None:
                 try:
                     versions_iter = cast(Iterable, versions_resp)
@@ -276,7 +281,7 @@ class OpenProjectClient:
 
             # wiki may 404 if wiki module disabled
             try:
-                wiki = self.client.get(f"/api/v3/projects/{project_id}/wiki")
+                wiki = self.client.get(f"projects/{project_id}/wiki")
                 if wiki:
                     wiki_text = getattr(wiki, "text", None)
                     if isinstance(wiki_text, dict):
@@ -289,7 +294,7 @@ class OpenProjectClient:
                 logger.info("Wiki module not available for project %s", project_id)
 
             try:
-                members_resp = self.client.get(f"/api/v3/projects/{project_id}/members")
+                members_resp = self.client.get(f"projects/{project_id}/members")
                 if members_resp is not None:
                     try:
                         members_iter = cast(Iterable, members_resp)
