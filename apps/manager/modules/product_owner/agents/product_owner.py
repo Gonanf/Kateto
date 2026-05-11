@@ -18,10 +18,11 @@ def ProductOwnerAgent(state: Document):
     if not state.team:
         state.team = [Asignee(type="Human", name="Chaos")]
     if not state.data:
+        context_prompt = f"\n        Additional context: {state.description}" if state.description else ""
         prompt = f"""
         You are a product owner creating a new project.
 
-        Project title: {state.title}
+        Project title: {state.title}{context_prompt}
 
         Return JSON with:
         - "description": 2-3 sentence project description

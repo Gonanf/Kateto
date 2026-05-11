@@ -45,6 +45,7 @@ class ProductOwnerServicer(manager_pb.ProductOwnerServicer):
         team = [Asignee(type="Human", name=name) for name in request.team]
         initial_state = Document(
             title=request.idea,
+            description=request.description or None,
             team=team,
             data=None,
             pbi=None,

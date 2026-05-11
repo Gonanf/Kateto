@@ -9,6 +9,7 @@ message ProjectRequest {
   string idea = 1;
   string disponibility = 2;
   repeated string team = 3;
+  optional string description = 4;
 }
 
 message ProjectResponse {

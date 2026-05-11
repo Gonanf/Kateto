@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13product_owner.proto\x12\x15manager.product_owner\"C\n\x0eProjectRequest\x12\x0c\n\x04idea\x18\x01 \x01(\t\x12\x15\n\rdisponibility\x18\x02 \x01(\t\x12\x0c\n\x04team\x18\x03 \x03(\t\"V\n\x0fProjectResponse\x12\r\n\x05stage\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x11\n\tdata_json\x18\x03 \x01(\t\x12\x10\n\x08markdown\x18\x04 \x01(\t2p\n\x0cProductOwner\x12`\n\rCreateProject\x12%.manager.product_owner.ProjectRequest\x1a&.manager.product_owner.ProjectResponse0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13product_owner.proto\x12\x15manager.product_owner\"m\n\x0eProjectRequest\x12\x0c\n\x04idea\x18\x01 \x01(\t\x12\x15\n\rdisponibility\x18\x02 \x01(\t\x12\x0c\n\x04team\x18\x03 \x03(\t\x12\x18\n\x0b\x64\x65scription\x18\x04 \x01(\tH\x00\x88\x01\x01\x42\x0e\n\x0c_description\"V\n\x0fProjectResponse\x12\r\n\x05stage\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x11\n\tdata_json\x18\x03 \x01(\t\x12\x10\n\x08markdown\x18\x04 \x01(\t2p\n\x0cProductOwner\x12`\n\rCreateProject\x12%.manager.product_owner.ProjectRequest\x1a&.manager.product_owner.ProjectResponse0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,9 +32,9 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'product_owner_pb2', _global
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_PROJECTREQUEST']._serialized_start=46
-  _globals['_PROJECTREQUEST']._serialized_end=113
-  _globals['_PROJECTRESPONSE']._serialized_start=115
-  _globals['_PROJECTRESPONSE']._serialized_end=201
-  _globals['_PRODUCTOWNER']._serialized_start=203
-  _globals['_PRODUCTOWNER']._serialized_end=315
+  _globals['_PROJECTREQUEST']._serialized_end=155
+  _globals['_PROJECTRESPONSE']._serialized_start=157
+  _globals['_PROJECTRESPONSE']._serialized_end=243
+  _globals['_PRODUCTOWNER']._serialized_start=245
+  _globals['_PRODUCTOWNER']._serialized_end=357
 # @@protoc_insertion_point(module_scope)

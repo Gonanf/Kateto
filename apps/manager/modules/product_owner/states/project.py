@@ -72,6 +72,7 @@ class DocumentData(BaseModel):
 
 class Document(BaseModel):
     title: str
+    description: str | None = None
     team: list[Asignee] | None
     data: DocumentData | None
     pbi: list[PBI] | None
