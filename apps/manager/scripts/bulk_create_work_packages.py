@@ -32,8 +32,12 @@ PRIORITY_IMMEDIATE = 10
 PROJECT_SUMMARIES: dict[int, tuple[str, str]] = {
     3: ("KATETO - Infrastructure & Cross-cutting",
         "Master work package tracking all infrastructure and cross-cutting TODO items for the KATETO platform."),
-    10: ("Manager - Product Owner & Tools",
-         "Master work package tracking all Manager and Product Owner TODO items."),
+    9: ("Product Owner - Product Owner & Tools",
+         "Master work package tracking all Product Owner TODO items."),
+    10: ("Manager - Manager-specific Tools",
+         "Master work package tracking all Manager-specific TODO items."),
+    11: ("Core - Infrastructure & Cross-cutting",
+         "Master work package tracking all Core infrastructure TODO items."),
     14: ("Orchestator - ASR, Discord & Noctalia",
          "Master work package tracking all Orchestator TODO items."),
     13: ("Classifier - Model Experiments",
@@ -48,10 +52,21 @@ PROJECT_SUMMARIES: dict[int, tuple[str, str]] = {
 
 # Each child: (subject, description, type_id, priority_id, estimated_hours)
 CHILDREN: dict[int, list[tuple[str, str, int, int, int]]] = {
-    3: [  # KATETO (id=3) — 13 items
+    3: [  # KATETO (id=3) — 4 items
         ("Fix Flash Attention 2 with ROCm setup",
          "Flash Attention 2 has compatibility issues with ROCm 7.2 on AMD GPU. Needs investigation and patching to work with the current torch ROCm setup.",
          TYPE_BUG, PRIORITY_HIGH, 12),
+        ("Deep Researcher: New agent for deep research",
+         "Create a dedicated Deep Researcher agent that performs thorough multi-source research (DuckDuckGo, MemPalace, Context7) before generating responses.",
+         TYPE_EPIC, PRIORITY_HIGH, 32),
+        ("XAVIER: Philosophical conversational agent",
+         "Create XAVIER agent specialized in philosophical dialogue, moodboards, brainstorming, and LaTeX document generation.",
+         TYPE_EPIC, PRIORITY_LOW, 32),
+        ("Automation: Search TODOs -> OpenProject with AI descriptions",
+         "Automate scanning all TODO.md files across the monorepo and creating detailed OpenProject work packages with AI-generated descriptions.",
+         TYPE_FEATURE, PRIORITY_NORMAL, 20),
+    ],
+    11: [  # Core (id=11) — 9 items
         ("Core: Allow MCPs (mempalace, Context7, DDG, i_have_time, affine, cronometer)",
          "Enable MCP tool integration for the core agent system: MemPalace memory, Context7 docs, DuckDuckGo search, i-have-time calendar, AFFiNE docs, and cronometer.",
          TYPE_FEATURE, PRIORITY_HIGH, 20),
@@ -61,9 +76,6 @@ CHILDREN: dict[int, list[tuple[str, str, int, int, int]]] = {
         ("Core: Talker/Dreamer -> cronometer",
          "Connect Talker and Dreamer agents to cronometer for time-aware execution planning and hour assignment.",
          TYPE_FEATURE, PRIORITY_NORMAL, 12),
-        ("Deep Researcher: New agent for deep research",
-         "Create a dedicated Deep Researcher agent that performs thorough multi-source research (DuckDuckGo, MemPalace, Context7) before generating responses.",
-         TYPE_EPIC, PRIORITY_HIGH, 32),
         ("Core: Integrate Deep Researcher",
          "Wire the new Deep Researcher agent into the core LangGraph as a callable sub-agent.",
          TYPE_FEATURE, PRIORITY_NORMAL, 12),
@@ -76,12 +88,6 @@ CHILDREN: dict[int, list[tuple[str, str, int, int, int]]] = {
         ("Core: Vision tool for screen/window",
          "Add vision capability to capture, analyze, and understand screen/window content using a custom model.",
          TYPE_FEATURE, PRIORITY_HIGH, 32),
-        ("XAVIER: Philosophical conversational agent",
-         "Create XAVIER agent specialized in philosophical dialogue, moodboards, brainstorming, and LaTeX document generation.",
-         TYPE_EPIC, PRIORITY_LOW, 32),
-        ("Automation: Search TODOs -> OpenProject with AI descriptions",
-         "Automate scanning all TODO.md files across the monorepo and creating detailed OpenProject work packages with AI-generated descriptions.",
-         TYPE_FEATURE, PRIORITY_NORMAL, 20),
         ("Core: OBS replay via websockets",
          "Integrate OBS Studio replay buffer control via websockets for clip capture (last N seconds).",
          TYPE_FEATURE, PRIORITY_NORMAL, 20),
@@ -89,7 +95,7 @@ CHILDREN: dict[int, list[tuple[str, str, int, int, int]]] = {
          "When the agent is busy, send Discord reminders and handle cancel/reschedule workflows.",
          TYPE_FEATURE, PRIORITY_NORMAL, 20),
     ],
-    10: [  # Manager (id=10) — 6 items
+    9: [  # Product Owner (id=9) — 6 items
         ("PO: Complete Is Busy incremental scheduling",
          "Complete the Is Busy incremental scheduling feature for the Product Owner agent including work hours, personal events, and event updates.",
          TYPE_FEATURE, PRIORITY_HIGH, 20),
@@ -176,28 +182,29 @@ CHILDREN: dict[int, list[tuple[str, str, int, int, int]]] = {
 # Format: (from_project_id, from_child_index, to_project_id, to_child_index)
 # "precedes" means from_item must be completed before to_item
 PRECEDES: list[tuple[int, int, int, int]] = [
-    # === Intra-project: KATETO ===
-    (3, 1, 3, 4),   # MCPs (idx 1) -> Deep Researcher (idx 4) — needs MCP tools first
-    (3, 1, 3, 6),   # MCPs (idx 1) -> Discord (idx 6) — needs MCP framework
-    (3, 4, 3, 5),   # Deep Researcher (idx 4) -> Integrate (idx 5) — create before integrating
-    (3, 6, 3, 7),   # Discord (idx 6) -> Multi-speaker (idx 7) — needs Discord first
-    (3, 6, 3, 12),  # Discord (idx 6) -> Is Busy reminders (idx 12) — needs Discord first
-    (3, 2, 3, 3),   # Node in graph (idx 2) -> Talker/Dreamer cronometer (idx 3) — needs the node first
-    # === Intra-project: Manager ===
-    (10, 1, 10, 5), # PO CRUD (idx 1) -> UML workflow (idx 5) — needs CRUD first
+    # === Intra-project: Core (11) ===
+    (11, 0, 11, 4),  # Core:MCPs (idx 0) -> Core:Discord (idx 4) — needs MCP framework
+    (11, 4, 11, 5),  # Core:Discord (idx 4) -> Core:Multi-speaker (idx 5) — needs Discord first
+    (11, 4, 11, 8),  # Core:Discord (idx 4) -> Core:Is Busy reminders (idx 8) — needs Discord first
+    (11, 1, 11, 2),  # Core:Node in graph (idx 1) -> Core:T/D cronometer (idx 2) — needs the node first
+    # === Intra-project: KATETO (3) ===
+    (3, 1, 11, 3),   # Deep Researcher (idx 1) -> Core:Integrate Deep Researcher (Core idx 3) — create before integrating
+    # === Intra-project: Product Owner (9) ===
+    (9, 1, 9, 5),    # PO:CRUD (idx 1) -> PO:UML workflow (idx 5) — needs CRUD first
     # === Intra-project: Orchestator ===
-    (14, 0, 14, 1), # Custom ASR (idx 0) -> Multi-speaker (idx 1) — needs ASR first
-    (14, 2, 14, 3), # Noctalia halt (idx 2) -> Noctalia work mode (idx 3) — halt before work mode
+    (14, 0, 14, 1),  # Custom ASR (idx 0) -> Multi-speaker (idx 1) — needs ASR first
+    (14, 2, 14, 3),  # Noctalia halt (idx 2) -> Noctalia work mode (idx 3) — halt before work mode
     # === Intra-project: Spin The Wheel ===
-    (12, 1, 12, 0), # Fix progress (idx 1) -> Config tab (idx 0) — fix before config tab
-    (12, 0, 12, 8), # Config tab (idx 0) -> Connect to PO (idx 8) — needs config first
+    (12, 1, 12, 0),  # Fix progress (idx 1) -> Config tab (idx 0) — fix before config tab
+    (12, 0, 12, 8),  # Config tab (idx 0) -> Connect to PO (idx 8) — needs config first
     # === Intra-project: Frontend ===
-    (15, 0, 15, 1), # Windows (idx 0) -> Avatar (idx 1) — windows layout before avatar
+    (15, 0, 15, 1),  # Windows (idx 0) -> Avatar (idx 1) — windows layout before avatar
     # === Cross-project ===
-    (3, 5, 10, 4),  # Integrate Deep Researcher (KATETO idx 5) -> PO Integrate Deep Researcher (Manager idx 4)
-    (3, 0, 10, 0),  # ROCm fix (KATETO idx 0) -> PO Is Busy (Manager idx 0) — needs GPU compute
-    (3, 0, 14, 0),  # ROCm fix (KATETO idx 0) -> Custom ASR (Orchestator idx 0) — needs GPU compute
-    (12, 8, 10, 1), # Connect to PO (Spin Wheel idx 8) -> PO CRUD (Manager idx 1) — needs the API
+    (11, 0, 3, 1),   # Core:MCPs (Core idx 0) -> Deep Researcher (KATETO idx 1) — needs MCP tools first
+    (11, 3, 9, 4),   # Core:Integrate Deep Researcher (Core idx 3) -> PO:Integrate Deep Researcher (PO idx 4)
+    (3, 0, 9, 0),    # ROCm fix (KATETO idx 0) -> PO:Is Busy (PO idx 0) — needs GPU compute
+    (3, 0, 14, 0),   # ROCm fix (KATETO idx 0) -> Custom ASR (Orchestator idx 0) — needs GPU compute
+    (12, 8, 9, 1),   # Connect to PO (Spin Wheel idx 8) -> PO:CRUD (PO idx 1) — needs the API
 ]
 
 

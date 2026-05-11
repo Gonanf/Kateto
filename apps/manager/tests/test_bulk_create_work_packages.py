@@ -40,7 +40,7 @@ class TestCreateAllSummaries:
             client = OpenProjectClient(config)
             result = create_all(client)
 
-            assert len(result["summaries"]) == 7
+            assert len(result["summaries"]) == 9
             for pid in PROJECT_SUMMARIES:
                 assert pid in result["summaries"]
 
@@ -55,7 +55,7 @@ class TestCreateAllSummaries:
             create_all(client)
 
             summary_calls = _summary_calls(mock_wp)
-            assert len(summary_calls) == 7
+            assert len(summary_calls) == 9
             for _args, kwargs in summary_calls:
                 assert kwargs.get("type_id") == TYPE_SUMMARY
 
