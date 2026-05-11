@@ -6,14 +6,14 @@ import pytest
 import threading
 import time
 
-import modules.mock_prompt
-import modules.prompt
-from modules.server import Manager
+import modules.core.testing.mock_prompt
+import modules.core.prompt
+from modules.core.server import Manager
 
 
 @pytest.fixture
 def start_mock_server():
-    server = Manager(modules.mock_prompt.PromptFunction)
+    server = Manager(modules.core.testing.mock_prompt.PromptFunction)
 
     server.start()
 
@@ -26,7 +26,7 @@ def start_mock_server():
 
 @pytest.fixture
 def start_server():
-    server = Manager(modules.prompt.PromptFunction)
+    server = Manager(modules.core.prompt.PromptFunction)
 
     server.start()
 
@@ -53,18 +53,19 @@ class Client:
 
 def test_mock_prompt(start_mock_server):
     stream = Client().Prompt("Amogas")
-    print(stream)
+
     buffer = ""
     for i in stream:
         print(i)
         buffer += i.token + " "
     buffer = buffer[:-1]
-    assert buffer == modules.mock_prompt.MOCK_DATA
+    assert buffer == modules.core.testing.mock_prompt.MOCK_DATA
 
 
 def test_prompt(start_server):
     stream = Client().Prompt("Amogas")
     buffer = ""
+    print(stream, type(stream))
     for i in stream:
         print(i)
         buffer += i.token
@@ -76,6 +77,7 @@ def test_kateto_prompt(start_server):
     stream = Client().Agent(0).Prompt("Kateto, insulta todo lo que puedas.")
     buffer = ""
     for i in stream:
+        print(i)
         buffer += i.token
     print("PRINT:", buffer)
     assert len(buffer) > 0

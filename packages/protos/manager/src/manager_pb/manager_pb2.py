@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rmanager.proto\x12\x07manager\"L\n\rPromptRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\x12#\n\x05\x61gent\x18\x02 \x01(\x0e\x32\x0f.manager.AgentsH\x00\x88\x01\x01\x42\x08\n\x06_agent\"\x1f\n\x0ePromptResponse\x12\r\n\x05token\x18\x01 \x01(\t*4\n\x06\x41gents\x12\n\n\x06TALKER\x10\x00\x12\x0b\n\x07\x44REAMER\x10\x01\x12\x11\n\rPRODUCT_OWNER\x10\x02\x32\x46\n\x07Manager\x12;\n\x06Prompt\x12\x16.manager.PromptRequest\x1a\x17.manager.PromptResponse0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rmanager.proto\x12\x07manager\"L\n\rPromptRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\x12#\n\x05\x61gent\x18\x02 \x01(\x0e\x32\x0f.manager.AgentsH\x00\x88\x01\x01\x42\x08\n\x06_agent\"\x1f\n\x0ePromptResponse\x12\r\n\x05token\x18\x01 \x01(\t*!\n\x06\x41gents\x12\n\n\x06TALKER\x10\x00\x12\x0b\n\x07\x44REAMER\x10\x01\x32\x46\n\x07Manager\x12;\n\x06Prompt\x12\x16.manager.PromptRequest\x1a\x17.manager.PromptResponse0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,11 +32,11 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'manager_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_AGENTS']._serialized_start=137
-  _globals['_AGENTS']._serialized_end=189
+  _globals['_AGENTS']._serialized_end=170
   _globals['_PROMPTREQUEST']._serialized_start=26
   _globals['_PROMPTREQUEST']._serialized_end=102
   _globals['_PROMPTRESPONSE']._serialized_start=104
   _globals['_PROMPTRESPONSE']._serialized_end=135
-  _globals['_MANAGER']._serialized_start=191
-  _globals['_MANAGER']._serialized_end=261
+  _globals['_MANAGER']._serialized_start=172
+  _globals['_MANAGER']._serialized_end=242
 # @@protoc_insertion_point(module_scope)

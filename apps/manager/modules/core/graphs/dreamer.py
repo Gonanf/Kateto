@@ -1,20 +1,20 @@
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, END, START
 from langgraph.checkpoint.memory import InMemorySaver
-from modules.agents import AGENTS
+from modules.core.agents import AGENTS
 
 
-class TalkerState(TypedDict):
+class DreamerState(TypedDict):
     input: str
     output: str
 
 
-graph = StateGraph(TalkerState)
+graph = StateGraph(DreamerState)
 
-graph.add_node("llm_node", AGENTS["TALKER"].invoke)
+graph.add_node("llm_node", AGENTS["DREAMER"].invoke)
 graph.add_edge(START, "llm_node")
 graph.add_edge("llm_node", END)
 
 checkpointer = InMemorySaver()
 
-TALKER = graph.compile(checkpointer=checkpointer)
+DREAMER = graph.compile(checkpointer=checkpointer)

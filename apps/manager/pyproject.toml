@@ -5,13 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-  "bert",
+  "asyncio>=4.0.0",
+  "fastmcp>=3.2.4",
   "grpcio>=1.80.0",
   "grpcio-tools>=1.80.0",
+  "i_have_time",
   "langchain>=1.2.15",
   "langchain-openai>=1.2.1",
   "langgraph>=1.1.10",
   "manager-pb",
+  "mdutils>=1.8.1",
   "pytest>=9.0.3",
   "pytest-asyncio>=1.3.0",
   "pytest-fixtures>=0.1.0",
@@ -23,4 +26,4 @@ venv = ".venv"
 
 [tool.uv.sources]
 manager-pb = { workspace = true }
-bert = { workspace = true }
+i-have-time = { workspace = true }

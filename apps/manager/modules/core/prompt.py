@@ -10,25 +10,24 @@ from langchain_openai import ChatOpenAI
 import subprocess
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain_core.messages import HumanMessage, SystemMessage
-from modules.server import Manager
-from modules.agents import AGENTS
-from modules.graphs import GRAPHS
+from modules.core.server import Manager
+from modules.core.agents import AGENTS
+from modules.core.graphs.kateto import KATETO
+import manager_pb
 
 logger = logging.getLogger(__name__)
 
 
 def PromptFunction(request, context) -> Generator[manager_pb.PromptResponse]:
-    stream = GRAPHS[request.agent].stream(
-        {"input": request.text},
-        {"configurable": {"thread_id": "1"}},
+    stream = KATETO.stream(
+        {"input": request.text, "agent": manager_pb.Agents.Name(request.agent)},
+        {"configurable": {"thread_id": 1}},
         stream_mode=["messages"],
         version="v2",
     )
-
+    print("STREAM", stream)
+    # for token in stream:
+    #     yield manager_pb.PromptResponse(token=token.text)
     for token in stream:
         message_chunk, metadata = token["data"]
-
-        for block in message_chunk.content:
-            print("BLOCK:", block)
-            if block["type"] == "text":
-                yield manager_pb.PromptResponse(token=block["text"])
+        yield manager_pb.PromptResponse(token=message_chunk.content)

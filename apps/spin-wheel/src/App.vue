@@ -15,10 +15,12 @@ const winner = ref<string | null>(null);
 const sprintDoc = ref('');
 const sprintLoading = ref(false);
 const isProcessing = ref(false);
+const pendingWinner = ref<string | null>(null);
 const wheelRef = ref<InstanceType<typeof WheelComponent> | null>(null);
 
 const availableItems = computed(() => items.value.filter(i => !i.checked));
-const canSpin = computed(() => availableItems.value.length > 0 && !isProcessing.value);
+const hasPending = computed(() => pendingWinner.value !== null);
+const canSpin = computed(() => availableItems.value.length > 0 && !isProcessing.value && !hasPending.value);
 
 async function loadItems() {
   try {
@@ -29,25 +31,31 @@ async function loadItems() {
   }
 }
 
-async function handleSpinRest(winnerIndex: number) {
+function handleSpinRest(winnerIndex: number) {
   const avail = availableItems.value;
   const win = avail[winnerIndex];
   if (!win) return;
 
-  isProcessing.value = true;
   winner.value = win.label;
+  pendingWinner.value = win.label;
+}
+
+async function onConfirm() {
+  const label = pendingWinner.value;
+  if (!label) return;
+
+  pendingWinner.value = null;
+  isProcessing.value = true;
 
   try {
-    const spinResult = await recordSpin(win.label);
-    items.value = items.value.map(i => i.label === win.label ? { ...i, checked: true } : i);
+    const spinResult = await recordSpin(label);
+    items.value = items.value.map(i => i.label === label ? { ...i, checked: true } : i);
 
-    if (spinResult.remaining === 0) {
-      return
-    }
+    if (spinResult.remaining === 0) return;
 
     sprintDoc.value = '';
     sprintLoading.value = true;
-    const doc = await generateSprintDoc(win.label);
+    const doc = await generateSprintDoc(label);
     sprintDoc.value = doc;
   } catch (err) {
     console.error('Spin processing failed:', err);
@@ -82,6 +90,7 @@ async function onRemoveItem(id: string) {
 }
 
 async function onReset() {
+  pendingWinner.value = null;
   try {
     await resetUsed();
     items.value = items.value.map(i => ({ ...i, checked: false }));
@@ -149,7 +158,8 @@ onMounted(() => {
           </div>
           <div class="flex gap-3 justify-center">
             <Button size="lg" :disabled="!canSpin" @click="doSpin">Girar!</Button>
-            <Button variant="outline" size="lg" @click="onReset">Resetear/Cancelar</Button>
+            <Button v-if="hasPending" variant="default" size="lg" @click="onConfirm">Confirmar</Button>
+            <Button variant="outline" size="lg" @click="onReset">{{ hasPending ? 'Cancelar' : 'Resetear' }}</Button>
           </div>
           <div class="text-center text-xs text-slate-500">
             O apreta <kbd class="px-1 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px]">Space</kbd> o <kbd
@@ -161,7 +171,7 @@ onMounted(() => {
         <div class="space-y-4">
           <ItemsPanel :items="items" @add="onAddItem" @remove="onRemoveItem" />
           <ResultPanel :winner="winner" />
-          <!-- <SprintDocPanel :doc="sprintDoc" :loading="sprintLoading" /> -->
+          <SprintDocPanel :doc="sprintDoc" :loading="sprintLoading" />
           <ConfigPanel />
         </div>
       </div>

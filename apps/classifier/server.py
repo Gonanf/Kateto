@@ -1,7 +1,10 @@
+import collections
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 import classifier_pb
 import grpc
 from concurrent import futures
+import json
+from datetime import datetime
 
 
 class ClassifierServicer(classifier_pb.ClassifierServicer):
@@ -17,10 +20,18 @@ class ClassifierServicer(classifier_pb.ClassifierServicer):
         self.classifier = pipeline(
             "text-classification", model=self.model, tokenizer=self.tokenizer
         )
+        self.queue = collections.deque(maxlen=3)
+        self.history = []
 
     def Classify(self, request, context):
-        response = self.classifier(request.prompt)
+        self.queue.append(request.prompt)
+        response = self.classifier("\n".join(self.queue))
+        self.history.append({"text": request.prompt, "response": response[0]})
         return classifier_pb.BertResponse(label=response[0]["label"])
+
+    def Save(self):
+        with open(f"data/{datetime.today()}.json", "w") as file:
+            json.dump(self.history, file)
 
 
 # model = AutoModelForSequenceClassification.from_pretrained(
@@ -37,7 +48,11 @@ class ClassifierServicer(classifier_pb.ClassifierServicer):
 # print("RESULT:", result[0]["label"])
 #
 server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-classifier_pb.add_ClassifierServicer_to_server(ClassifierServicer(), server)
+servicer = ClassifierServicer()
+classifier_pb.add_ClassifierServicer_to_server(servicer, server)
 server.add_insecure_port("[::]:50053")
 server.start()
-server.wait_for_termination()
+try:
+    server.wait_for_termination()
+except KeyboardInterrupt:
+    servicer.Save()

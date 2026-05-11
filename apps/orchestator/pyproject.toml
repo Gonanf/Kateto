@@ -11,6 +11,7 @@ dependencies = [
   "grpcio>=1.80.0",
   "manager_pb",
   "tts-pb",
+  "torchcodec>=0.11.1",
 ]
 
 [tool.uv.sources]
