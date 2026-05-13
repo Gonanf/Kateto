@@ -1,0 +1,466 @@
+{
+  "title": "KATETO: making the deep researcher",
+  "description": "The Deep researcher is a new agent that will be made to be used with other agents, its role is for creating reports about what the agent wants to know, and the agent will search with the MCPs Duck Duck Go, Context 7, Mempalace, even files of a folder to find information. It will also support 3 modes: Simple (Will search fast, and try the MCPs with most chance to get information), Medium (Will divide the topic into 5 subtopics, search them and then add all into a report), Ultra (Will loop -> make a series of questions -> Search the questions -> Is the original topic resolved? -No-> Make more questions -> Continue). The deep researcher will tell the agent what sources it got it from",
+  "team": [
+    {
+      "type": "Human",
+      "name": "Chaos"
+    },
+    {
+      "type": "Agent",
+      "name": "Kateto"
+    }
+  ],
+  "data": {
+    "description": "KATETO is an autonomous research agent designed to generate comprehensive reports by leveraging multiple MCP tools including DuckDuckGo, Context 7, MemPalace, and local file systems. It operates in three distinct modes—Simple, Medium, and Ultra—to balance speed and depth, ensuring thorough information retrieval and source attribution for downstream agents.",
+    "project_values": [
+      "Enhances decision-making accuracy through multi-source validation and deep-dive research capabilities",
+      "Increases operational efficiency by automating complex information gathering and synthesis tasks",
+      "Provides transparent and traceable insights with explicit source citation for all generated reports"
+    ],
+    "dependencies": [
+      "MCP (Model Context Protocol) server infrastructure",
+      "Integration with external search APIs (DuckDuckGo, Context 7)",
+      "Access to MemPalace for memory and knowledge base retrieval",
+      "Local file system read permissions for internal document analysis"
+    ]
+  },
+  "pbi": [
+    {
+      "type": "Epic",
+      "title": "KATETO Core Research Engine Implementation",
+      "description": "Establish the foundational architecture for KATETO to autonomously execute research tasks across Simple, Medium, and Ultra modes. This epic encompasses the integration of MCP tools, the orchestration logic for multi-source validation, and the synthesis engine for report generation.",
+      "score": 13,
+      "priority": 1,
+      "notes": "This is the highest priority epic as it blocks all downstream features. Requires close collaboration between Chaos (Human) and Kateto (Agent).",
+      "criteries": [
+        {
+          "given_clause": "The KATETO agent is initialized with a research query",
+          "when_clause": "The system selects the appropriate mode (Simple, Medium, or Ultra)",
+          "then_clause": "The agent invokes the correct MCP tool chain and returns a structured report draft"
+        },
+        {
+          "given_clause": "The agent is operating in Ultra mode",
+          "when_clause": "It encounters conflicting information from different sources",
+          "then_clause": "Then it must perform multi-source validation and flag the discrepancy in the report"
+        },
+        {
+          "given_clause": "The research task is complete",
+          "when_clause": "The final report is generated",
+          "then_clause": "Then all claims must be accompanied by explicit source citations"
+        }
+      ]
+    },
+    {
+      "type": "User Story",
+      "title": "As a downstream agent, I want KATETO to retrieve web data via DuckDuckGo and Context 7",
+      "description": "Enable KATETO to use MCP tools for external information gathering. DuckDuckGo provides broad search capabilities, while Context 7 offers deeper contextual data. This ensures comprehensive initial data collection for the research agent.",
+      "score": 5,
+      "priority": 2,
+      "notes": "Requires stable API integration with DuckDuckGo and Context 7. Chaos needs to define the fallback strategy if one tool fails.",
+      "criteries": [
+        {
+          "given_clause": "KATETO receives a query requiring external web data",
+          "when_clause": "It calls the DuckDuckGo MCP tool",
+          "then_clause": "Then it receives a list of relevant search results with snippets"
+        },
+        {
+          "given_clause": "The search results are insufficient",
+          "when_clause": "KATETO calls the Context 7 MCP tool",
+          "then_clause": "Then it retrieves detailed contextual information from the specified context"
+        },
+        {
+          "given_clause": "Both external tools fail to return data",
+          "when_clause": "KATETO attempts to proceed with the research",
+          "then_clause": "Then it logs an error and attempts local file system retrieval as a fallback"
+        }
+      ]
+    },
+    {
+      "type": "Task",
+      "title": "Integrate MemPalace for persistent memory and knowledge base retrieval",
+      "description": "Implement the connection to MemPalace to allow KATETO to store and retrieve historical research data. This supports the 'deep researcher' capability by leveraging past insights and maintaining context across long-running research sessions.",
+      "score": 8,
+      "priority": 2,
+      "notes": "Chaos to define the schema for storing research metadata in MemPalace. Kateto to implement the retrieval logic.",
+      "criteries": [
+        {
+          "given_clause": "A new research session begins",
+          "when_clause": "KATETO queries MemPalace for relevant past reports",
+          "then_clause": "Then it receives a set of historically relevant documents"
+        },
+        {
+          "given_clause": "A research session concludes successfully",
+          "when_clause": "KATETO saves the new report and metadata to MemPalace",
+          "then_clause": "Then the data is indexed and retrievable for future queries"
+        },
+        {
+          "given_clause": "MemPalace is unreachable",
+          "when_clause": "KATETO attempts to access memory",
+          "then_clause": "Then it continues operation without memory augmentation and logs the warning"
+        }
+      ]
+    },
+    {
+      "type": "User Story",
+      "title": "As a user, I want KATETO to analyze local files for internal document research",
+      "description": "Allow KATETO to read and analyze local file systems to incorporate internal company documents or private datasets into its research reports. This enhances the 'deep researcher' aspect by combining external and internal knowledge.",
+      "score": 5,
+      "priority": 3,
+      "notes": "Requires strict permission controls to ensure KATETO only accesses authorized local directories.",
+      "criteries": [
+        {
+          "given_clause": "The user specifies a local directory path",
+          "when_clause": "KATETO scans the directory for relevant documents",
+          "then_clause": "Then it indexes the content for semantic search"
+        },
+        {
+          "given_clause": "KATETO finds relevant information in local files",
+          "when_clause": "It synthesizes this with external data",
+          "then_clause": "Then it includes the local data in the final report with proper attribution"
+        },
+        {
+          "given_clause": "KATETO attempts to access a restricted file",
+          "when_clause": "The system checks file permissions",
+          "then_clause": "Then it skips the file and logs a permission denied warning"
+        }
+      ]
+    },
+    {
+      "type": "Task",
+      "title": "Implement report synthesis and source citation engine",
+      "description": "Develop the logic for KATETO to synthesize information from multiple sources (web, memory, local) into a coherent report. This includes ensuring every claim is backed by a citation and the report structure adapts to the selected mode (Simple, Medium, Ultra).",
+      "score": 8,
+      "priority": 1,
+      "notes": "Critical for delivering on the value proposition of 'transparent and traceable insights'.",
+      "criteries": [
+        {
+          "given_clause": "KATETO has gathered data from multiple sources",
+          "when_clause": "It generates the final report",
+          "then_clause": "Then every factual claim includes a citation to the specific source"
+        },
+        {
+          "given_clause": "The mode is set to 'Simple'",
+          "when_clause": "KATETO synthesizes the information",
+          "then_clause": "Then the report is concise and focuses on key findings only"
+        },
+        {
+          "given_clause": "The mode is set to 'Ultra'",
+          "when_clause": "KATETO synthesizes the information",
+          "then_clause": "Then the report includes detailed analysis, counter-arguments, and comprehensive source lists"
+        }
+      ]
+    },
+    {
+      "type": "Bug",
+      "title": "KATETO fails to handle MCP tool timeout during Ultra mode research",
+      "description": "When operating in Ultra mode, KATETO occasionally hangs when one of the MCP tools (e.g., Context 7) times out, preventing the report from being generated. This needs to be fixed to ensure operational efficiency.",
+      "score": 3,
+      "priority": 2,
+      "notes": "High impact on reliability. Chaos to investigate the timeout handling logic in the agent loop.",
+      "criteries": [
+        {
+          "given_clause": "KATETO is running in Ultra mode",
+          "when_clause": "An MCP tool call exceeds the timeout threshold",
+          "then_clause": "Then the agent catches the timeout and retries or falls back to another source"
+        },
+        {
+          "given_clause": "All retry attempts fail",
+          "when_clause": "KATETO proceeds to synthesis",
+          "then_clause": "Then it generates the report with available data and notes the missing information"
+        },
+        {
+          "given_clause": "A timeout occurs",
+          "when_clause": "The agent logs the event",
+          "then_clause": "Then a warning is logged with the specific tool and query that timed out"
+        }
+      ]
+    },
+    {
+      "type": "User Story",
+      "title": "As a user, I want to select between Simple, Medium, and Ultra research modes",
+      "description": "Provide a mechanism for the user or downstream system to specify the depth of research required. This balances speed and depth, allowing for quick answers (Simple) or comprehensive deep dives (Ultra).",
+      "score": 3,
+      "priority": 3,
+      "notes": "This feature directly supports the 'Increases operational efficiency' project value.",
+      "criteries": [
+        {
+          "given_clause": "The user specifies 'Simple' mode",
+          "when_clause": "KATETO executes the research",
+          "then_clause": "Then it limits the number of sources and depth of analysis"
+        },
+        {
+          "given_clause": "The user specifies 'Medium' mode",
+          "when_clause": "KATETO executes the research",
+          "then_clause": "Then it performs a balanced search with moderate source validation"
+        },
+        {
+          "given_clause": "The user specifies 'Ultra' mode",
+          "when_clause": "KATETO executes the research",
+          "then_clause": "Then it performs exhaustive search, memory retrieval, and local file analysis"
+        }
+      ]
+    }
+  ],
+  "dod": [
+    {
+      "category": "Code Quality",
+      "dod_items": [
+        "All code changes have been peer-reviewed by at least one other developer, with specific attention to the orchestration logic in the Core Research Engine.",
+        "Code adheres to the project's style guide, including naming conventions for MCP tool integrations (DuckDuckGo, Context 7, MemPalace).",
+        "Static analysis tools (e.g., SonarQube, pylint) show zero critical or major issues.",
+        "Linting checks pass with no errors or warnings.",
+        "Complexity metrics for the report synthesis engine are within acceptable limits (e.g., Cyclomatic Complexity < 10 for individual functions)."
+      ]
+    },
+    {
+      "category": "Testing",
+      "dod_items": [
+        "Unit tests cover 100% of the new logic for mode selection (Simple, Medium, Ultra) and fallback strategies.",
+        "Integration tests verify successful communication with DuckDuckGo, Context 7, and MemPalace MCP tools under normal conditions.",
+        "Integration tests verify correct fallback behavior when external tools fail or return insufficient data (e.g., switching to local file system).",
+        "Specific test cases simulate MCP tool timeouts in Ultra mode to ensure the agent catches the error, logs a warning, and proceeds with available data.",
+        "Test coverage for the entire KATETO module is maintained above 90% (or the project-defined threshold)."
+      ]
+    },
+    {
+      "category": "Documentation",
+      "dod_items": [
+        "API documentation is updated to reflect new or modified endpoints for the KATETO agent, including parameters for mode selection.",
+        "Inline comments explain the rationale for complex orchestration logic, particularly around multi-source validation and conflict flagging.",
+        "README.md is updated to include instructions for configuring MCP tool credentials and setting up local file system permissions.",
+        "Documentation details the schema for storing research metadata in MemPalace.",
+        "User guides are updated to explain the differences between Simple, Medium, and Ultra modes and their impact on report depth and speed."
+      ]
+    },
+    {
+      "category": "Deployment",
+      "dod_items": [
+        "The build pipeline passes successfully, including all unit and integration tests.",
+        "Deployment scripts are updated to include necessary environment variables for MCP server infrastructure and API keys.",
+        "Local file system read permissions are correctly configured in the deployment environment to ensure KATETO can access authorized directories.",
+        "Environment configurations for staging and production are validated to ensure connectivity to DuckDuckGo, Context 7, and MemPalace.",
+        "Rollback procedures are documented and tested in case of deployment failure."
+      ]
+    },
+    {
+      "category": "Performance",
+      "dod_items": [
+        "Performance benchmarks confirm that Simple mode completes research tasks within the target time limit (e.g., < 30 seconds).",
+        "Load testing verifies that the system can handle concurrent research requests without significant degradation in response time.",
+        "Optimization checks ensure that memory usage in MemPalace retrieval does not exceed defined thresholds.",
+        "The system handles MCP tool timeouts gracefully without hanging, ensuring operational efficiency in Ultra mode.",
+        "Report synthesis engine processes large volumes of data from multiple sources without excessive CPU or memory consumption."
+      ]
+    }
+  ],
+  "draft_sprints": [
+    {
+      "goal": "Establish Core Research Engine and Input Mechanisms",
+      "description": "This sprint focuses on the foundational architecture of KATETO. We will implement the core orchestration logic that handles the Simple, Medium, and Ultra modes (PBI: KATETO Core Research Engine Implementation). Concurrently, we will integrate the primary external data sources, DuckDuckGo and Context 7, to ensure the agent can retrieve web data (PBI: Retrieve web data via DuckDuckGo and Context 7). Additionally, we will implement the user interface for mode selection (PBI: Select research modes) to allow downstream systems to specify depth. This sets the stage for all subsequent deep research capabilities.",
+      "duration_weeks": 3
+    },
+    {
+      "goal": "Enable Persistent Memory and Local File Analysis",
+      "description": "With the core engine and external inputs established, this sprint expands KATETO's reach into internal data and historical context. We will integrate MemPalace for persistent memory and knowledge base retrieval, allowing the agent to leverage past insights (PBI: Integrate MemPalace). Simultaneously, we will implement the ability for KATETO to scan and analyze local file systems for internal documents, ensuring proper permission controls are in place (PBI: Analyze local files). These two PBIs significantly increase the 'deep researcher' capability by adding internal and historical dimensions to the data gathering phase.",
+      "duration_weeks": 3
+    },
+    {
+      "goal": "Implement Synthesis Engine and Ensure Reliability",
+      "description": "The final sprint focuses on output quality and operational stability. We will implement the report synthesis and source citation engine, ensuring that all claims are backed by explicit citations and the report structure adapts to the selected mode (PBI: Implement report synthesis and source citation engine). Crucially, we will also address the critical bug where KATETO fails to handle MCP tool timeouts during Ultra mode research (PBI: Handle MCP tool timeout). This ensures that the deep research capabilities are not only comprehensive but also reliable and robust against external failures.",
+      "duration_weeks": 2
+    }
+  ],
+  "completed_sprints": [
+    {
+      "data": {
+        "goal": "Establish Core Research Engine and Input Mechanisms",
+        "description": "This sprint focuses on the foundational architecture of KATETO. We will implement the core orchestration logic that handles the Simple, Medium, and Ultra modes (PBI: KATETO Core Research Engine Implementation). Concurrently, we will integrate the primary external data sources, DuckDuckGo and Context 7, to ensure the agent can retrieve web data (PBI: Retrieve web data via DuckDuckGo and Context 7). Additionally, we will implement the user interface for mode selection (PBI: Select research modes) to allow downstream systems to specify depth. This sets the stage for all subsequent deep research capabilities.",
+        "duration_weeks": 3
+      },
+      "tasks": [
+        {
+          "title": "Implement MCP Tool Orchestration Logic for Simple, Medium, and Ultra Modes",
+          "description": "Develop the core decision engine that determines which MCP tool chain to invoke based on the selected research mode (Simple, Medium, Ultra). This includes defining the execution flow for each mode and handling the initial query dispatch. This task directly addresses the 'KATETO Core Research Engine Implementation' Epic and the 'Select research modes' User Story.",
+          "asignee": {
+            "type": "Human",
+            "name": "Chaos"
+          },
+          "effort_hours": 24.0
+        },
+        {
+          "title": "Integrate DuckDuckGo and Context 7 MCP Tools for Data Retrieval",
+          "description": "Implement the integration logic for DuckDuckGo and Context 7 MCP tools. This involves setting up the API connections, defining the fallback strategy (if DuckDuckGo is insufficient, call Context 7), and handling the case where both external tools fail by logging errors. This covers the 'Retrieve web data via DuckDuckGo and Context 7' User Story.",
+          "asignee": {
+            "type": "Human",
+            "name": "Chaos"
+          },
+          "effort_hours": 20.0
+        },
+        {
+          "title": "Develop Mode Selection Interface and Configuration Handler",
+          "description": "Create the interface layer that allows downstream systems or users to specify the research mode (Simple, Medium, Ultra). Implement the configuration validation to ensure only valid modes are processed and passed to the orchestration logic. This supports the 'Select research modes' User Story and ensures the system is ready for downstream integration.",
+          "asignee": {
+            "type": "Agent",
+            "name": "Kateto"
+          },
+          "effort_hours": 12.0
+        },
+        {
+          "title": "Implement Timeout Handling and Retry Logic for MCP Tools",
+          "description": "Address the bug where KATETO hangs during Ultra mode research. Implement robust timeout handling, retry mechanisms, and fallback strategies for MCP tool calls (specifically Context 7). Ensure that if retries fail, the agent logs the warning and proceeds with available data. This addresses the 'KATETO fails to handle MCP tool timeout' Bug PBI.",
+          "asignee": {
+            "type": "Agent",
+            "name": "Kateto"
+          },
+          "effort_hours": 16.0
+        },
+        {
+          "title": "Define Structured Report Draft Format for Core Engine",
+          "description": "Design and implement the initial data structure for the 'structured report draft' returned by the core engine. This structure must accommodate the outputs from the different modes and prepare the data for the later synthesis phase. This supports the 'KATETO Core Research Engine Implementation' Epic by defining the contract between the retrieval engine and the future synthesis engine.",
+          "asignee": {
+            "type": "Agent",
+            "name": "Kateto"
+          },
+          "effort_hours": 8.0
+        },
+        {
+          "title": "Write Unit Tests for Mode Selection and Tool Invocation Logic",
+          "description": "Create comprehensive unit tests for the orchestration logic, mode selection, and MCP tool integration. Verify that the correct tools are called based on the mode, fallbacks work as expected, and timeout handling functions correctly. This ensures the reliability of the core research engine.",
+          "asignee": {
+            "type": "Human",
+            "name": "Chaos"
+          },
+          "effort_hours": 12.0
+        }
+      ]
+    },
+    {
+      "data": {
+        "goal": "Enable Persistent Memory and Local File Analysis",
+        "description": "With the core engine and external inputs established, this sprint expands KATETO's reach into internal data and historical context. We will integrate MemPalace for persistent memory and knowledge base retrieval, allowing the agent to leverage past insights (PBI: Integrate MemPalace). Simultaneously, we will implement the ability for KATETO to scan and analyze local file systems for internal documents, ensuring proper permission controls are in place (PBI: Analyze local files). These two PBIs significantly increase the 'deep researcher' capability by adding internal and historical dimensions to the data gathering phase.",
+        "duration_weeks": 3
+      },
+      "tasks": [
+        {
+          "title": "Define MemPalace metadata schema and integration interface",
+          "description": "Chaos to design the JSON schema for storing research metadata (query, sources, mode, timestamp) in MemPalace. Implement the client interface module that handles connection, authentication, and basic CRUD operations for storing and retrieving historical research data. This includes error handling for MemPalace unreachability to ensure graceful degradation.",
+          "asignee": {
+            "type": "Human",
+            "name": "Chaos"
+          },
+          "effort_hours": 12.0
+        },
+        {
+          "title": "Implement MemPalace retrieval and storage logic",
+          "description": "Kateto to implement the core logic for querying MemPalace at the start of a research session to retrieve relevant past reports. Implement the logic to save the new report and metadata to MemPalace upon session completion, ensuring data is indexed correctly for future retrieval. Include logging for warnings when memory augmentation is unavailable.",
+          "asignee": {
+            "type": "Agent",
+            "name": "Kateto"
+          },
+          "effort_hours": 16.0
+        },
+        {
+          "title": "Implement local file system scanner with permission controls",
+          "description": "Kateto to implement the file system scanning module that accepts a directory path, indexes content for semantic search, and strictly enforces permission controls. The module must skip restricted files, log permission denied warnings, and return a structured list of accessible documents for analysis.",
+          "asignee": {
+            "type": "Agent",
+            "name": "Kateto"
+          },
+          "effort_hours": 14.0
+        },
+        {
+          "title": "Integrate local file analysis into research synthesis pipeline",
+          "description": "Kateto to integrate the local file scanner results into the main research orchestration loop. Ensure that data retrieved from local files is synthesized with external data (DuckDuckGo/Context 7) and historical data (MemPalace). Ensure proper attribution in the final report for local sources.",
+          "asignee": {
+            "type": "Agent",
+            "name": "Kateto"
+          },
+          "effort_hours": 18.0
+        },
+        {
+          "title": "Develop and execute integration tests for memory and local file features",
+          "description": "Chaos to define the test scenarios for MemPalace integration (success, failure, empty state) and local file analysis (permission denied, valid paths, empty directories). Kateto to execute these tests, fix any edge cases discovered in the retrieval and scanning logic, and verify that the report synthesis engine correctly incorporates these new data sources.",
+          "asignee": {
+            "type": "Human",
+            "name": "Chaos"
+          },
+          "effort_hours": 10.0
+        },
+        {
+          "title": "Update documentation and API contracts for new capabilities",
+          "description": "Chaos to update the project documentation to reflect the new MemPalace and Local File capabilities. Define the API contract for downstream agents to specify local directory paths and memory queries. Kateto to update internal agent prompts to include instructions on how to utilize MemPalace history and local file data during the research phase.",
+          "asignee": {
+            "type": "Human",
+            "name": "Chaos"
+          },
+          "effort_hours": 8.0
+        }
+      ]
+    },
+    {
+      "data": {
+        "goal": "Implement Synthesis Engine and Ensure Reliability",
+        "description": "The final sprint focuses on output quality and operational stability. We will implement the report synthesis and source citation engine, ensuring that all claims are backed by explicit citations and the report structure adapts to the selected mode (PBI: Implement report synthesis and source citation engine). Crucially, we will also address the critical bug where KATETO fails to handle MCP tool timeouts during Ultra mode research (PBI: Handle MCP tool timeout). This ensures that the deep research capabilities are not only comprehensive but also reliable and robust against external failures.",
+        "duration_weeks": 2
+      },
+      "tasks": [
+        {
+          "title": "Implement citation logic and mode-based report structuring",
+          "description": "Develop the core synthesis engine logic that aggregates data from DuckDuckGo, Context 7, MemPalace, and local files. Implement the specific formatting rules for Simple, Medium, and Ultra modes. Ensure every factual claim is automatically tagged with its source citation. This directly addresses the 'Implement report synthesis and source citation engine' PBI.",
+          "asignee": {
+            "type": "Agent",
+            "name": "Kateto"
+          },
+          "effort_hours": 32.0
+        },
+        {
+          "title": "Design and implement MCP timeout fallback strategy",
+          "description": "Investigate and fix the issue where KATETO hangs during Ultra mode when MCP tools timeout. Implement a robust error handling mechanism that catches timeouts, logs warnings with specific tool/query details, and triggers a fallback to alternative sources or local data. This addresses the 'KATETO fails to handle MCP tool timeout' PBI.",
+          "asignee": {
+            "type": "Human",
+            "name": "Chaos"
+          },
+          "effort_hours": 16.0
+        },
+        {
+          "title": "Integrate timeout handling into Kateto's agent loop",
+          "description": "Update Kateto's execution loop to utilize the new timeout handling logic designed by Chaos. Ensure that when a timeout occurs, the agent gracefully degrades the output (noting missing info) rather than crashing. Verify that the retry logic respects the mode constraints (e.g., Ultra mode retries more aggressively than Simple).",
+          "asignee": {
+            "type": "Agent",
+            "name": "Kateto"
+          },
+          "effort_hours": 16.0
+        },
+        {
+          "title": "End-to-end testing of Synthesis and Reliability fixes",
+          "description": "Conduct comprehensive testing to verify that reports are generated correctly in all three modes with proper citations. Simulate MCP tool timeouts to ensure the fallback mechanisms work as expected and that the system remains stable. Validate that the 'transparent and traceable insights' value is met.",
+          "asignee": {
+            "type": "Human",
+            "name": "Chaos"
+          },
+          "effort_hours": 14.0
+        },
+        {
+          "title": "Refine citation formatting and report structure validation",
+          "description": "Review the output of the synthesis engine to ensure citations are formatted consistently and that the structural differences between Simple, Medium, and Ultra modes are clearly distinguishable. Perform manual review of sample reports to validate accuracy and completeness.",
+          "asignee": {
+            "type": "Agent",
+            "name": "Kateto"
+          },
+          "effort_hours": 12.0
+        },
+        {
+          "title": "Document synthesis logic and error handling procedures",
+          "description": "Create technical documentation for the new synthesis engine and the timeout handling strategy. Include examples of expected outputs for each mode and troubleshooting steps for common timeout scenarios. This ensures maintainability and supports the 'increases operational efficiency' value.",
+          "asignee": {
+            "type": "Human",
+            "name": "Chaos"
+          },
+          "effort_hours": 10.0
+        }
+      ]
+    }
+  ],
+  "openproject_context": null
+}

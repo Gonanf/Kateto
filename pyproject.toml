@@ -9,8 +9,10 @@ dependencies = [
   "torchaudio>=2.11.0",
   "triton-rocm",
   "pytorch-triton-rocm>=3.5.1; sys_platform == 'linux'",
-  "flash-attn>=2.5.0",
-
+  "aule-attention>=0.5.0",
+  "xformers>=0.0.35",
+  "bitsandbytes>=0.49.2",
+  "accelerate>=1.12.0",
 ]
 
 [tool.uv.workspace]
@@ -24,6 +26,7 @@ members = [
   "apps/manager",
   "packages/data",
   "packages/i_have_time",
+  "packages/op-client",
 ]
 exclude = ["**/node_modules", "**/__pycache__"]
 
@@ -35,6 +38,10 @@ no-build-isolation-package = ["flash-attn", "setuptools"]
 name = "pytorch-rocm"
 url = "https://download.pytorch.org/whl/rocm7.2"
 
+[[tool.uv.index]]
+name = "xformers"
+url = "https://download.pytorch.org/whl/rocm7.1"
+
 [tool.uv.sources]
 torch = { index = "pytorch-rocm" }
 torchaudio = { index = "pytorch-rocm" }
@@ -42,11 +49,6 @@ pytorch-triton-rocm = [
   { index = "pytorch-rocm", marker = "sys_platform == 'linux'" },
 ]
 triton-rocm = { index = "pytorch-rocm" }
-flash-attn = { git = "https://github.com/Dao-AILab/flash-attention", tag = "v2.8.3" }
-
-[tool.uv.extra-build-dependencies]
-flash-attn = ["setuptools"]
-
 
 [tool.pyright]
 venvPath = "./"

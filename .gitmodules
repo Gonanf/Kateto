@@ -1,3 +1,6 @@
 [submodule "packages/i_have_time"]
 	path = packages/i_have_time
 	url = https://github.com/Gonanf/i_have_time
+[submodule "packages/op-client"]
+	path = packages/op-client
+	url = https://github.com/Gonanf/op-client

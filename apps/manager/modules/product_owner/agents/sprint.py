@@ -95,7 +95,9 @@ def IsBusyAgent(state: Document):
         return
     acc = 0
     for sprint in state.completed_sprints:
-        date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(weeks=acc)
+        date = datetime.today().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) + timedelta(weeks=acc)
         sprint_calendar = Calendar().createScrumCeremonies(
             SprintConfig(
                 start_date=date,

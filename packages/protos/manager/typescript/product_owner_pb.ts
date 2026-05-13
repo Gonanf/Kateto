@@ -2,6 +2,7 @@ export interface ProjectRequest {
   idea?: string;
   disponibility?: string;
   team?: string[];
+  description?: string;
 }
 
 export function encodeProjectRequest(message: ProjectRequest): Uint8Array {
@@ -32,6 +33,13 @@ function _encodeProjectRequest(message: ProjectRequest, bb: ByteBuffer): void {
       writeVarint32(bb, 26);
       writeString(bb, value);
     }
+  }
+
+  // optional string description = 4;
+  let $description = message.description;
+  if ($description !== undefined) {
+    writeVarint32(bb, 34);
+    writeString(bb, $description);
   }
 }
 
@@ -65,6 +73,12 @@ function _decodeProjectRequest(bb: ByteBuffer): ProjectRequest {
       case 3: {
         let values = message.team || (message.team = []);
         values.push(readString(bb, readVarint32(bb)));
+        break;
+      }
+
+      // optional string description = 4;
+      case 4: {
+        message.description = readString(bb, readVarint32(bb));
         break;
       }
 

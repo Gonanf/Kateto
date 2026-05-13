@@ -4,12 +4,13 @@ These nodes are designed to be inserted into the project creation graph:
 - ``ReadOpenProjectContext`` reads current state from OpenProject before generation.
 - ``SyncToOpenProject`` writes generated project data back to OpenProject (replaces create_affine).
 """
+
 import logging
 
 from modules.product_owner.states.project import Document
-from modules.product_owner.openproject.config import get_openproject_config
-from modules.product_owner.openproject.client import OpenProjectClient
-from modules.product_owner.openproject.models import OpenProjectReadContext, SyncReport
+from op_client.config import get_openproject_config
+from op_client.models import OpenProjectReadContext, SyncReport
+from op_client.client import OpenProjectClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +38,13 @@ def ReadOpenProjectContext(state: Document) -> dict:
 
         project_id = client.discover_project_by_name(state.title)
         if project_id is None:
+            print("Not found")
             logger.info(
                 "No existing project found for '%s' — will create from scratch",
                 state.title,
             )
             return {"openproject_context": None}
+        print("Found:", project_id)
 
         context = client.read_project_context(project_id)
         logger.info(
@@ -108,19 +111,19 @@ def SyncToOpenProject(state: Document) -> dict:
     human_team = [m.name for m in (state.team or []) if m.type == "Human"]
     team_mapping = client.get_team_email_mapping(human_team)
 
-    # 5. Create versions (sprints)
+    # 5. Create sprints
     version_ids: list[int] = []
-    for sprint in state.draft_sprints or []:
+    for sprint in state.completed_sprints:
         vid = client.find_or_create_version(
             project_id=project_id,
-            name=sprint.goal,
-            description=sprint.description,
+            name=sprint.data.goal,
+            description=sprint.data.description,
         )
         if vid:
             version_ids.append(vid)
             report.versions_created.append(vid)
         else:
-            report.errors.append(f"Failed to create version: {sprint.goal}")
+            report.errors.append(f"Failed to create version: {sprint.data.goal}")
 
     # 6. Milestones — deferred (the agent does not generate milestone data yet)
 
@@ -152,7 +155,10 @@ def SyncToOpenProject(state: Document) -> dict:
             # Find parent PBI WP via title similarity
             parent_id: int | None = None
             for pbi in state.pbi or []:
-                if pbi.title.lower() in task.title.lower() or task.title.lower() in pbi.title.lower():
+                if (
+                    pbi.title.lower() in task.title.lower()
+                    or task.title.lower() in pbi.title.lower()
+                ):
                     parent_id = pbi_wp_ids.get(pbi.title)
                     break
 

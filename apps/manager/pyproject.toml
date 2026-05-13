@@ -15,6 +15,7 @@ dependencies = [
   "langgraph>=1.1.10",
   "manager-pb",
   "mdutils>=1.8.1",
+  "op-client",
   "openproject-api-client>=0.2.0",
   "pytest>=9.0.3",
   "pytest-asyncio>=1.3.0",
@@ -25,6 +26,13 @@ dependencies = [
 venvPath = "../../"
 venv = ".venv"
 
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
 [tool.uv.sources]
 manager-pb = { workspace = true }
 i-have-time = { workspace = true }
+op-client = { workspace = true }

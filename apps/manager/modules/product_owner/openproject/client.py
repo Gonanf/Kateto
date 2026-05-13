@@ -1,4 +1,5 @@
 """OpenProject API client wrapper for the Product Owner sync."""
+
 import logging
 from typing import Iterable, Optional, cast
 from openproject_api_client import ApiClient
@@ -33,7 +34,7 @@ class OpenProjectClient:
                 return None
             for project in projects:
                 pname = project.name or project.identifier or ""
-                if name.lower() in pname.lower():
+                if pname.lower() in name.lower():
                     return project.id
             return None
         except Exception as e:
@@ -94,8 +95,14 @@ class OpenProjectClient:
             return response.id
         return None
 
-    def create_version(self, project_id: int, name: str, description: str,
-                       start_date: str | None = None, end_date: str | None = None) -> int | None:
+    def create_version(
+        self,
+        project_id: int,
+        name: str,
+        description: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> int | None:
         """Create a version (sprint) in the project. Uses generic POST since create_version() is missing from the library."""
         payload = {
             "name": name,
@@ -114,8 +121,9 @@ class OpenProjectClient:
             logger.error("Failed to create version '%s': %s", name, e)
             return None
 
-    def create_milestone(self, project_id: int, name: str, description: str,
-                         date: str | None = None) -> int | None:
+    def create_milestone(
+        self, project_id: int, name: str, description: str, date: str | None = None
+    ) -> int | None:
         """Create a milestone as a version with milestone context."""
         payload = {
             "name": f"Milestone: {name}",
@@ -132,7 +140,9 @@ class OpenProjectClient:
             logger.error("Failed to create milestone '%s': %s", name, e)
             return None
 
-    def find_or_create_version(self, project_id: int, name: str, description: str) -> int | None:
+    def find_or_create_version(
+        self, project_id: int, name: str, description: str
+    ) -> int | None:
         """Find existing version by name, or create if not found (idempotent)."""
         try:
             versions = self.client.get_versions()
@@ -145,14 +155,23 @@ class OpenProjectClient:
             logger.warning("find_or_create_version failed: %s", e)
             return self.create_version(project_id, name, description)
 
-    def create_work_package(self, project_id: int, subject: str, description: str,
-                            type_id: int, assignee_id: int | None = None,
-                            priority_id: int | None = None, version_id: int | None = None,
-                            parent_id: int | None = None,
-                            estimated_hours: int | None = None) -> int | None:
+    def create_work_package(
+        self,
+        project_id: int,
+        subject: str,
+        description: str,
+        type_id: int,
+        assignee_id: int | None = None,
+        priority_id: int | None = None,
+        version_id: int | None = None,
+        parent_id: int | None = None,
+        estimated_hours: int | None = None,
+    ) -> int | None:
         """Create a work package using the library's built-in method."""
         try:
-            estimated_time = f"PT{estimated_hours}H" if estimated_hours is not None else None
+            estimated_time = (
+                f"PT{estimated_hours}H" if estimated_hours is not None else None
+            )
             wp = self.client.create_workpackage(
                 project_id=project_id,
                 subject=subject,
@@ -169,14 +188,27 @@ class OpenProjectClient:
             logger.error("Failed to create work package '%s': %s", subject, e)
             return None
 
-    def create_relation(self, from_id: int, to_id: int, relation_type: str,
-                        description: str | None = None) -> int | None:
+    def create_relation(
+        self,
+        from_id: int,
+        to_id: int,
+        relation_type: str,
+        description: str | None = None,
+    ) -> int | None:
         """Create a relation between two work packages.
 
         Uses direct POST to /api/v3/work_packages/{from_id}/relations
         since the library's generic 'relations' endpoint is not valid.
         """
-        VALID_TYPES = {"precedes", "follows", "blocks", "blocked", "relates", "requires", "required"}
+        VALID_TYPES = {
+            "precedes",
+            "follows",
+            "blocks",
+            "blocked",
+            "relates",
+            "requires",
+            "required",
+        }
         if relation_type not in VALID_TYPES:
             logger.error("Invalid relation type: %s", relation_type)
             return None
@@ -200,7 +232,9 @@ class OpenProjectClient:
         users = self.discover_users()
         return users.get(email)
 
-    def resolve_type_for_pbi(self, pbi_type: str, discovered_types: dict[str, int]) -> int | None:
+    def resolve_type_for_pbi(
+        self, pbi_type: str, discovered_types: dict[str, int]
+    ) -> int | None:
         """Map a PBI type string to an OpenProject type ID."""
         # Exact match (case-insensitive)
         for name, tid in discovered_types.items():
@@ -215,7 +249,9 @@ class OpenProjectClient:
             return next(iter(discovered_types.values()))
         return None
 
-    def resolve_priority(self, priority: int, discovered_priorities: dict[str, int]) -> int | None:
+    def resolve_priority(
+        self, priority: int, discovered_priorities: dict[str, int]
+    ) -> int | None:
         """Map numeric priority (1-5) to OpenProject priority ID."""
         mapping = {
             1: "Immediate",
