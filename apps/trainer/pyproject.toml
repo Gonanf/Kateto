@@ -32,6 +32,11 @@ url = "https://download.pytorch.org/whl/rocm7.2"
 [tool.uv.sources]
 torch = { index = "pytorch-rocm" }
 
+[tool.pytest.ini_options]
+markers = [
+    "gpu: Tests that require a GPU (skip with -m 'not gpu')",
+]
+
 [tool.pyright]
 venvPath = "../../"
 venv = ".venv"
