@@ -1,0 +1,12 @@
+# GGUF model files - too large for git
+*.gguf
+llama-models/*.gguf
+
+# Python egg-info
+*.egg-info/
+
+# Local output directories
+output/
+
+# Training artifacts
+**/checkpoint-*/

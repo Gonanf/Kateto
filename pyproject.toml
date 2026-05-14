@@ -24,6 +24,7 @@ members = [
   "packages/protos/*",
   "apps/lang_manager",
   "apps/manager",
+  "apps/trainer",
   "packages/data",
   "packages/i_have_time",
   "packages/op-client",
