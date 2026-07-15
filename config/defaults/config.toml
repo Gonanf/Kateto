@@ -1,0 +1,33 @@
+# Kateto — default configuration
+# Copies to ~/.config/kateto/config.toml on first run
+
+[system]
+name = "Kateto"
+language = "en"
+
+[audio]
+sample_rate = 16000
+silence_timeout = 1.5
+vad_model = "silero"
+
+[voice.jane]
+enabled = true
+skills = ["orchestrator"]
+
+[voice.doktor]
+enabled = true
+skills = ["backlog", "risk-analysis", "planning-poker"]
+
+[voice.conquest]
+enabled = true
+skills = ["backlog"]
+
+[mcp_servers]
+# MCP servers are defined here. The MCP Plugin discovers them and exposes their tools.
+# Example:
+# [mcp_servers.filesystem]
+# command = "uvx"
+# args = ["mcp-server-filesystem", "/home/chaos/proyectos"]
+
+[cli]
+allowlist = ["git", "ls", "pwd", "cat", "echo", "date"]
