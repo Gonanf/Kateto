@@ -25,6 +25,8 @@ from kateto.core.event import (
     TextChunk,
     TranscriptionData,
     VoiceIdleData,
+    VoiceStatus,
+    VoiceStatusData,
 )
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.providers import ChatMessage
@@ -158,6 +160,7 @@ class VoiceAgent(Plugin):
         self._skills: tuple[LoadedSkill, ...] = ()
         self._generation_task: asyncio.Task[None] | None = None
         self._interrupted = False
+        self._status: VoiceStatus | None = None
 
     @property
     def role(self) -> VoiceRole:
@@ -196,10 +199,14 @@ class VoiceAgent(Plugin):
             return
         manager.register_event("text_chunk", TextChunk)
         manager.register_event("voice_idle", VoiceIdleData)
+        manager.register_event("voice_status", VoiceStatusData)
         await self._memory.ensure_soul(self.profile.system_prompt)
         self._skills = load_skills(
             config_dir=self._config_dir, names=tuple(self._settings.skills)
         )
+
+    async def enable(self) -> None:
+        await self._set_status(VoiceStatus.IDLE)
 
     async def disable(self) -> None:
         task = self._generation_task
@@ -211,6 +218,7 @@ class VoiceAgent(Plugin):
             except asyncio.CancelledError:
                 pass
         self._generation_task = None
+        await self._set_status(VoiceStatus.IDLE)
 
     async def _enqueue(
         self, envelope: EventEnvelope[BaseModel], handler: EventHandler
@@ -218,6 +226,9 @@ class VoiceAgent(Plugin):
         match envelope.name, envelope.data:
             case "interrupt", InterruptData() as interrupt:
                 await self.on_interrupt(interrupt)
+            case "transcription", TranscriptionData():
+                await self._set_status(VoiceStatus.WAITING)
+                await super()._enqueue(envelope, handler)
             case _:
                 await super()._enqueue(envelope, handler)
 
@@ -232,12 +243,14 @@ class VoiceAgent(Plugin):
         if task is not None and not task.done():
             self._interrupted = True
             task.cancel()
+        await self._set_status(VoiceStatus.IDLE)
 
     async def on_generate(self, data: GenerateData) -> None:
         prompt = self._prompt_for(data)
         if prompt is None or not prompt.strip() or not self.is_relevant(prompt):
             return
         self._interrupted = False
+        await self._set_status(VoiceStatus.THINKING)
         generation = asyncio.create_task(
             self._stream_response(prompt), name=f"kateto-voice-{self.name}"
         )
@@ -279,6 +292,8 @@ class VoiceAgent(Plugin):
                 raise ProviderStreamError(
                     voice=self.name, reason="token must be a non-empty string"
                 )
+            if self._status is not VoiceStatus.TALKING:
+                await self._set_status(VoiceStatus.TALKING)
             if previous is not None:
                 await self._emit_chunk(previous, sequence, final=False)
                 sequence += 1
@@ -289,6 +304,19 @@ class VoiceAgent(Plugin):
         if manager is not None:
             await manager.emit(
                 "voice_idle", VoiceIdleData(voice=self.name), source=self.name
+            )
+        await self._set_status(VoiceStatus.IDLE)
+
+    async def _set_status(self, status: VoiceStatus) -> None:
+        if self._status is status:
+            return
+        self._status = status
+        manager = self.manager
+        if manager is not None:
+            await manager.emit(
+                "voice_status",
+                VoiceStatusData(voice=self.name, status=status),
+                source=self.name,
             )
 
     async def _messages_for(self, prompt: str) -> tuple[ChatMessage, ...]:

@@ -8,7 +8,15 @@ import pytest
 
 from kateto.core import PluginManager
 from kateto.core.config import VoiceSettings
-from kateto.core.event import GenerateData, PluginErrorData, TextChunk, TranscriptionData, VoiceIdleData
+from kateto.core.event import (
+    GenerateData,
+    PluginErrorData,
+    TextChunk,
+    TranscriptionData,
+    VoiceIdleData,
+    VoiceStatus,
+    VoiceStatusData,
+)
 from kateto.providers import ChatMessage as ProviderChatMessage
 from kateto.qa.voice_fixture import run_fixture
 from kateto.voices.base import GenerationRequest, ReferenceClipError, VoiceRole
@@ -106,6 +114,94 @@ async def test_voice_streams_provider_tokens_then_emits_idle(tmp_path: Path) -> 
         assert isinstance(provider.requests[0].messages[-1], ProviderChatMessage)
         assert provider.requests[0].reference_wav == tmp_path / "voices" / "jane" / "reference.wav"
         assert [event.data.voice for event in manager.get_events() if event.name == "voice_idle" and isinstance(event.data, VoiceIdleData)] == ["jane"]
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_voice_emits_typed_lifecycle_statuses_around_generation(tmp_path: Path) -> None:
+    # Given: an enabled Jane voice with a two-token provider response.
+    provider = RecordingProvider(("first", " second"))
+    _write_reference(tmp_path, "jane")
+    manager = PluginManager()
+    jane = Jane(config_dir=tmp_path, provider=provider)
+    await manager.enable_plugin(jane)
+
+    try:
+        # When: transcription is queued and then the batch generation trigger runs.
+        await manager.emit("transcription", TranscriptionData(text="coordinate a release"), source="fixture")
+        await manager.wait_for_idle()
+        await manager.emit("generate", GenerateData(prompt="coordinate a release"), source="fixture")
+        await manager.wait_for_idle()
+
+        # Then: typed status events identify each lifecycle transition in order.
+        statuses = [
+            event.data
+            for event in manager.get_events()
+            if event.name == "voice_status" and isinstance(event.data, VoiceStatusData)
+        ]
+        assert statuses == [
+            VoiceStatusData(voice="jane", status=VoiceStatus.IDLE),
+            VoiceStatusData(voice="jane", status=VoiceStatus.WAITING),
+            VoiceStatusData(voice="jane", status=VoiceStatus.THINKING),
+            VoiceStatusData(voice="jane", status=VoiceStatus.TALKING),
+            VoiceStatusData(voice="jane", status=VoiceStatus.IDLE),
+        ]
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_voice_interrupt_and_disable_return_to_idle_status(tmp_path: Path) -> None:
+    # Given: a voice whose provider remains active after its first token.
+    provider = PauseThenResumeProvider()
+    _write_reference(tmp_path, "jane")
+    manager = PluginManager()
+    jane = Jane(config_dir=tmp_path, provider=provider)
+    await manager.enable_plugin(jane)
+
+    try:
+        # When: an active generation is interrupted and the voice is later disabled.
+        await manager.emit("generate", GenerateData(prompt="coordinate a release"), source="fixture")
+        await provider.blocked.wait()
+        await manager.interrupt(target="jane", reason="new-speech")
+        await manager.wait_for_idle()
+        await manager.disable_plugin("jane")
+
+        # Then: the final typed lifecycle status is idle after both cancellation paths.
+        statuses = [
+            event.data.status
+            for event in manager.get_events()
+            if event.name == "voice_status" and isinstance(event.data, VoiceStatusData)
+        ]
+        assert statuses[-1] is VoiceStatus.IDLE
+        assert statuses.count(VoiceStatus.IDLE) >= 2
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_voice_disable_cancels_active_generation_to_idle(tmp_path: Path) -> None:
+    # Given: a voice with an active provider stream.
+    provider = PauseThenResumeProvider()
+    _write_reference(tmp_path, "jane")
+    manager = PluginManager()
+    jane = Jane(config_dir=tmp_path, provider=provider)
+    await manager.enable_plugin(jane)
+
+    try:
+        # When: the enabled voice is disabled while generation is waiting on the provider.
+        await manager.emit("generate", GenerateData(prompt="coordinate a release"), source="fixture")
+        await provider.blocked.wait()
+        await manager.disable_plugin("jane")
+
+        # Then: disabling an active voice leaves its typed status idle.
+        statuses = [
+            event.data.status
+            for event in manager.get_events()
+            if event.name == "voice_status" and isinstance(event.data, VoiceStatusData)
+        ]
+        assert statuses[-1] is VoiceStatus.IDLE
     finally:
         await manager.close()
 

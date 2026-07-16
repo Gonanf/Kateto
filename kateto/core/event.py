@@ -110,6 +110,18 @@ class VoiceIdleData(EventModel):
     voice: str
 
 
+class VoiceStatus(StrEnum):
+    IDLE = "idle"
+    WAITING = "waiting"
+    THINKING = "thinking"
+    TALKING = "talking"
+
+
+class VoiceStatusData(EventModel):
+    voice: str
+    status: VoiceStatus
+
+
 class TodoItemData(EventModel):
     voice: str = Field(min_length=1)
     task: str = Field(min_length=1)

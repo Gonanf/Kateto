@@ -12,6 +12,8 @@ from kateto.core.event import (
     EventEnvelope,
     TextChunk,
     TranscriptionData,
+    VoiceStatus,
+    VoiceStatusData,
 )
 
 
@@ -40,6 +42,7 @@ def test_event_payloads_are_pydantic_models() -> None:
         ClassificationData(text="hello", category=Classification.EXECUTE),
         TextChunk(text="hello", sequence=0, final=True),
         AudioOutput(samples=b"pcm", sample_rate=16_000, channels=1),
+        VoiceStatusData(voice="jane", status=VoiceStatus.IDLE),
     )
 
     assert all(isinstance(payload, BaseModel) for payload in payloads)
