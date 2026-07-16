@@ -15,14 +15,7 @@ Global workflows can be assigned to any voice at runtime. Per-voice workflows ar
 
 ```
 config/kateto/voices/{voice}/workflows/{workflow_name}/
-├── workflow.py       # Phases, instructions, deliverables, checkpoints
-├── scripts/          # Executable scripts for imperative phases (P1+)
-│   ├── generar_reporte.py
-│   ├── procesar_csv.sh
-│   └── notify_slack.py
-└── templates/        # Reference files, prompts, assets
-    ├── informe-semanal.md
-    └── checklist.csv
+└── workflow.py       # Literal phases, instructions, deliverables, checkpoints
 ```
 
 ## Format
@@ -83,51 +76,9 @@ INACTIVE → RUNNING (phase 1) → RUNNING (phase 2) → ... → COMPLETED
 
 All voices listen to these events, keeping the system informed of what each agent is doing.
 
-## Declarative vs Imperative Phases
+## Declarative phases only
 
-### Declarative (instructions) — default
-Voice receives instructions as natural language and uses its LLM to interpret and execute. Ideal for tasks requiring reasoning, negotiation, adaptation. This is the MVP mode — all phases are declarative.
-
-### Imperative (scripts) — P1+
-Phase executes a shell script from `scripts/`. System runs the command, captures stdout/stderr, result is available for subsequent phases.
-
-```python
-{
-    "id": "generar-reporte",
-    "name": "Generate structured weekly report",
-    "run": "python scripts/generar_reporte.py --semana {{context.semana}}"
-}
-```
-
-**Context available to scripts:**
-
-| Variable | Content |
-|---|---|
-| `KATETO_WORKFLOW` | Workflow name |
-| `KATETO_PHASE_ID` | Current phase ID |
-| `KATETO_VOICE` | Voice executing the workflow |
-| `KATETO_WORKSPACE` | Active workspace |
-| `KATETO_CONTEXT_JSON` | Full context as JSON |
-| `KATETO_OUTPUT_DIR` | Directory for outputs |
-
-### Hybrid — P1+
-A phase can have **instructions** for the voice to generate content AND a **script** to process it:
-
-```python
-{
-    "id": "redactar-y-publicar",
-    "name": "Write and publish report",
-    "instructions": [
-        "Analyze sprint progress",
-        "Write executive summary",
-        "Identify risks and recommendations"
-    ],
-    "run": "python scripts/estructurar_reporte.py",
-    "deliverables": ["reporte-publicado.md"]
-}
-```
-
-Voice generates analysis → script structures and writes with exact format.
+Every phase is declarative: the voice receives literal natural-language instructions and produces the listed deliverables. Workflow definitions are parsed as data and never imported or executed. A phase containing a `run` command, imports, calls, or other executable content is rejected at the definition boundary.
 
 ## Workflow Evolution
 

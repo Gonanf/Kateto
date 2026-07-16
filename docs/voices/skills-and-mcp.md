@@ -1,94 +1,37 @@
 # Skills & MCP Per Voice
 
-Each voice can have **MCP servers** and **skills** enabled specifically for it. This allows a voice to have access to tools that others don't, based on its role.
+Skills are enabled per voice. MCP access is also per voice, but only through explicit configuration: declared servers are not implicitly available, and an absent voice grant denies access.
 
-## Voice Configuration (`voice.yaml`)
+## MCP Configuration
 
-```yaml
-# Voices/Doktor/voice.yaml
-mcp_servers:
-  - name: "filesystem"
-    enabled: true
-  - name: "github"
-    enabled: true
-  - name: "calendar"
-    enabled: false
-
-skills:
-  - "backlog"
-  - "planning-poker"
-  - "risk-analysis"
-```
-
-```yaml
-# Voices/Jane/voice.yaml
-mcp_servers:
-  - name: "filesystem"
-    enabled: true
-  - name: "meet"
-    enabled: true
-  - name: "discord"
-    enabled: true
-
-skills:
-  - "orchestrator"
-  - "interrupt-handler"
-```
-
-## Global MCP Plugin
-
-The system has a **global MCP Plugin** that:
-1. Scans all available MCP servers (defined in `config.toml`)
-2. Exposes them as MCP tools
-3. Each voice can enable/disable specific servers in its `voice.yaml`
-4. If an MCP server is active in the system, it's added to the available list — the voice decides whether to enable it
+Servers are declared globally in `config.toml`:
 
 ```toml
-# config.toml
-[mcp_servers]
-[mcp_servers.filesystem]
-command = "uvx"
-args = ["mcp-server-filesystem", "/home/chaos/proyectos"]
-
-[mcp_servers.github]
-command = "uvx"
-args = ["mcp-server-github"]
-
-[mcp_servers.calendar]
+[mcp_servers.fixture]
 command = "python"
-args = ["-m", "mcp_server_calendar"]
-```
+args = ["-m", "example_mcp_server"]
 
-```toml
-# Voice config in config.toml
 [voice.doktor]
 enabled = true
-soul = "Voices/Doktor/SOUL.md"
-mcp_servers = ["filesystem", "github"]
+mcp_servers = ["fixture"]
 skills = ["backlog", "planning-poker"]
 ```
 
+The authorization boundary is deny-by-default:
+
+1. The server name must exist under `[mcp_servers.<name>]`.
+2. The requesting voice must list that exact name in `voice.<name>.mcp_servers`.
+3. Event tools are generated only from currently registered live event receivers.
+
+An undeclared server, an ungranted voice, or a voice with no `mcp_servers` entry is denied. Kateto does not scan installed or running MCP processes, and a voice does not inherit every declared server.
+
 ## Skills
 
-**Skills** are reusable abilities that voices can invoke — they are recipes, not code. A skill lives in a directory with markdown instructions that the voice reads and follows, optionally with templates and scripts.
+**Skills** are reusable knowledge, not executable MCP processes. A skill lives in a directory with markdown instructions that the voice reads and follows.
 
-```
+```text
 config/kateto/skills/{skill_name}/
-├── SKILL.md              # What this skill does and how to use it
-├── templates/            # Output templates
-└── scripts/              # Optional deterministic scripts
+└── SKILL.md
 ```
 
-Unlike MCP servers (external processes) or plugins (event bus participants), skills are **knowledge** — markdown that the LLM ingests as context. A voice uses a skill when a task requires it: "use the backlog skill to create a new task" means the voice reads `skills/backlog/SKILL.md` and follows its instructions.
-
-Each skill:
-- Is defined by a `SKILL.md` file with structured instructions
-- Can include templates for output formatting
-- Can include deterministic scripts for precise operations
-- Is enabled/disabled per voice via `config.toml`
-
-When a voice has skills enabled, the contents of each enabled skill's `SKILL.md` are injected into the system prompt at session start.
-
-## Auto-Discovery
-
-If an MCP server is installed and running on the system, the MCP Plugin detects it automatically and adds it to the list of available servers. Each voice then chooses which to enable in its config. If a voice has no `mcp_servers` configured, it inherits all available ones.
+Each skill is enabled per voice via `config.toml`; its `SKILL.md` contents are injected into that voice's system prompt at session start. Skills do not grant MCP access.

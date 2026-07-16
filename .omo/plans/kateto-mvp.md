@@ -71,112 +71,112 @@ Your next move: run `$start-work` to execute this plan, or request a high-accura
 ## Todos
 > Implementation + Test = ONE todo. Never separate.
 <!-- APPEND TASK BATCHES BELOW THIS LINE WITH edit/apply_patch - never rewrite the headers above. -->
-- [ ] 1. Bootstrap the uv project and locked runtime
+- [x] 1. Bootstrap the uv project and locked runtime
   What to do / Must NOT do: Change `pyproject.toml` to Python >=3.12 with `.python-version` 3.12, add the exact runtime/test dependencies and `kateto` console script, generate `uv.lock`, and create the target package/test directories. Do not add unrequested providers or leave version resolution floating.
   Parallelization: Wave 1 | Blocked by: none | Blocks: 2-4
   References (executor has NO interview context - be exhaustive): `SPEC.md:1-5,276-384`; `pyproject.toml:1-7`; `.python-version:1`; `docs/development/tooling.md:1-36`; `docs/development/tdd.md:1-13`.
   Acceptance criteria (agent-executable): `uv sync --locked` exits 0 on Python 3.12; `uv run python -c 'import kateto'` exits 0; `uv run kateto --help` prints the CLI usage; `uv build` creates a wheel.
   QA scenarios (name the exact tool + invocation): happy `uv run kateto --help` → exit 0 and usage text; failure `uv run python -c 'import sys; assert sys.version_info[:2] == (3, 12)'` → PASS on the pinned interpreter. Evidence `.omo/evidence/kateto-mvp/task-1/`.
   Commit: Y | build(bootstrap): initialize uv package and locked dependencies
-- [ ] 2. Define Pydantic event contracts and envelope semantics
+- [x] 2. Define Pydantic event contracts and envelope semantics
   What to do / Must NOT do: Implement BaseModel contracts for every MVP event, envelope metadata, timestamps, `source`, `target`, capabilities, `only_once`, `reply_to`, and `correlation_id`; reject malformed payloads. Do not use dataclasses for shipped event payloads.
   Parallelization: Wave 1 | Blocked by: 1 | Blocks: 3-8
   References (executor has NO interview context - be exhaustive): `SPEC.md:35-52,98-116,245-259,375-384`; `docs/architecture/event-system.md:3-103`.
   Acceptance criteria (agent-executable): `uv run pytest kateto/tests/test_event_contracts.py -q` proves valid serialization/deserialization, generated timestamp, and invalid payload rejection; all event models subclass `pydantic.BaseModel`.
   QA scenarios (name the exact tool + invocation): happy `uv run python -m kateto.qa.emit_fixture transcription --text hello` → JSON envelope contains `name`, `source`, `timestamp`; failure same command with missing `text` → nonzero exit and validation error, no event emitted. Evidence `.omo/evidence/kateto-mvp/task-2/`.
   Commit: Y | feat(core): add typed MVP event contracts
-- [ ] 3. Implement Plugin and PluginManager lifecycle, queues, filters, errors, and singleton access
+- [x] 3. Implement Plugin and PluginManager lifecycle, queues, filters, errors, and singleton access
   What to do / Must NOT do: Implement registration by `on_*`, streaming vs batch queues, enable/disable cleanup, broadcast/target/AND capabilities/deterministic only-once/self-delivery-off, fire-and-forget dispatch, error events, event history, and interrupt routing. Do not create a mediator separate from PluginManager.
   Parallelization: Wave 1 | Blocked by: 1-2 | Blocks: 5-8
   References (executor has NO interview context - be exhaustive): `SPEC.md:29-81`; `docs/architecture/plugin-manager.md:5-60`; `docs/architecture/event-system.md:3-103`.
   Acceptance criteria (agent-executable): `uv run pytest kateto/tests/test_event_bus.py kateto/tests/test_plugin_manager.py -q` covers every dispatch mode, self-delivery, only-once registration order, immediate emit return, plugin crash→error event, lifecycle and queue clearing.
   QA scenarios (name the exact tool + invocation): happy `uv run python -m kateto.qa.bus_fixture --mode broadcast` → two subscribers receive one event; failure `--mode target --target missing` → zero delivery and explicit trace, manager remains running. Evidence `.omo/evidence/kateto-mvp/task-3/`.
   Commit: Y | feat(core): implement plugin manager event bus
-- [ ] 4. Implement canonical config/bootstrap and safe file primitives
+- [x] 4. Implement canonical config/bootstrap and safe file primitives
   What to do / Must NOT do: Resolve XDG/APPDATA config paths, copy defaults on first run, normalize `[kateto]`, `[plugin.*]`, `[voice.*]`, `[mcp_servers.*]`, `[cli]`, load `.env`, validate endpoints/assets, and provide per-file asyncio locks plus atomic rename writes. Do not expose secrets in config.toml or permit arbitrary CLI commands.
   Parallelization: Wave 1 | Blocked by: 1-2 | Blocks: 5,9-13
   References (executor has NO interview context - be exhaustive): `SPEC.md:81-97,260-275`; `docs/architecture/config.md:1-81`; `config/defaults/config.toml:1-33`.
   Acceptance criteria (agent-executable): `uv run pytest kateto/tests/test_config.py kateto/tests/test_storage.py -q` proves first-run copy, schema validation, secret exclusion, concurrent atomic writes, and voice path isolation.
   QA scenarios (name the exact tool + invocation): happy `XDG_CONFIG_HOME=$(mktemp -d) uv run kateto config check` → creates config tree and exits 0; failure with `cli.allowlist=['rm']` or malformed TOML → exits nonzero and names the rejected setting. Evidence `.omo/evidence/kateto-mvp/task-4/`.
   Commit: Y | feat(core): add config bootstrap and atomic storage
-- [ ] 5. Add provider adapters for Whisper, classifier, OpenAI-compatible voice streaming, and Zonos HTTP
+- [x] 5. Add provider adapters for Whisper, classifier, OpenAI-compatible voice streaming, and Zonos HTTP
   What to do / Must NOT do: Implement lifecycle-managed `httpx.AsyncClient` adapters and streaming parsers for Whisper PCM, mmBERT three-way classification, local llama.cpp Chat Completions/OpenAI Responses, and Zonos sentence PCM; use fixture servers in tests. Do not load models in Python or assume local Responses support.
   Parallelization: Wave 2 | Blocked by: 3-4 | Blocks: 6-8,13 | Can parallelize with: 6,7
   References (executor has NO interview context - be exhaustive): `SPEC.md:98-109,162-188`; `docs/plugins/audio-processor.md:1-26`; `docs/plugins/audio-output.md:1-24`; external API research recorded in draft.
   Acceptance criteria (agent-executable): fixture HTTP tests prove request payloads, streamed chunks, timeout/cancellation, malformed upstream data, and client close; provider endpoints/config are injectable.
   QA scenarios (name the exact tool + invocation): happy `uv run python scripts/qa/fixture_models.py --scenario stream` → transcription/classification/token/audio chunks logged; failure `--scenario timeout` → bounded timeout event and no leaked client task. Evidence `.omo/evidence/kateto-mvp/task-5/`.
   Commit: Y | feat(inference): add streaming provider adapters
-- [ ] 6. Implement audio input microphone and Meet capture with VAD/interruption
+- [x] 6. Implement audio input microphone and Meet capture with VAD/interruption
   What to do / Must NOT do: Implement bounded PortAudio callback queues, 16 kHz mono PCM s16LE, Silero VAD silence segmentation, source tags, configured loopback/Meet device capture, immediate async resume, and `interrupt` on speech during playback. Do not block or perform network/event dispatch in callbacks.
   Parallelization: Wave 2 | Blocked by: 3-5 | Blocks: 7-8,13 | Can parallelize with: 5,7
   References (executor has NO interview context - be exhaustive): `SPEC.md:98-103`; `docs/plugins/audio-input.md:1-66`; `config/defaults/config.toml:8-10`.
   Acceptance criteria (agent-executable): audio fixture tests prove silence boundaries, format, <50ms async resume target, bounded queue behavior, source metadata, and unavailable-device error; real device preflight reports selected mic/loopback.
   QA scenarios (name the exact tool + invocation): happy `uv run python scripts/qa/audio_fixture.py --source mic --wav fixtures/utterance.wav` → one `audio_chunk` then resumed listener; failure `--source meet --device missing` → actionable startup error and no running capture task. Evidence `.omo/evidence/kateto-mvp/task-6/`.
   Commit: Y | feat(audio): add mic and Meet input plugins
-- [ ] 7. Implement voices, streaming generation, memory evolution, skills, and relevance self-filtering
+- [x] 7. Implement voices, streaming generation, memory evolution, skills, and relevance self-filtering
   What to do / Must NOT do: Add `VoiceAgent` batch queues, OpenAI-compatible streaming, Jane/Doktor/Conquest behavior, SOUL/JOURNAL/MEMORIES limits and safe writes, declarative skill loading, idle events, reference-clip selection, and defined self-filter outcomes. Do not add extra voices or per-voice classifier.
   Parallelization: Wave 2 | Blocked by: 3-5 | Blocks: 8,9-13 | Can parallelize with: 5,6
   References (executor has NO interview context - be exhaustive): `SPEC.md:118-221`; `docs/voices/overview.md:1-42`; `docs/voices/voice-agent.md:1-67`; `docs/voices/voice-evolution.md:1-40`; `docs/voices/skills-and-mcp.md:1-92`.
   Acceptance criteria (agent-executable): tests prove batch trigger only on `generate`, streamed tokens, `voice_idle`, interrupt cancellation, 500-word SOUL, 50-entry/3000-token JOURNAL, 1000-word MEMORIES, and exactly defined zero/one/multiple response behavior for fixture prompts.
   QA scenarios (name the exact tool + invocation): happy `uv run python scripts/qa/voice_fixture.py --prompt 'create a backlog task'` → named voice output and `voice_idle`; failure with missing reference WAV → only that voice reports configuration error while bus remains alive. Evidence `.omo/evidence/kateto-mvp/task-7/`.
   Commit: Y | feat(voices): implement MVP voice agents and memory
-- [ ] 8. Wire classifier, interrupt executor, TODO executor, and complete conversation-loop events
+- [x] 8. Wire classifier, interrupt executor, TODO executor, and complete conversation-loop events
   What to do / Must NOT do: Connect `audio_chunk→transcription→classification`; route EXECUTE to all active P0 voices; implement IGNORE categories, TODO.md creation/update, interrupt cancellation and resume. Do not silently drop errors or route ignored speech to voices.
   Parallelization: Wave 2 | Blocked by: 3-7 | Blocks: 9-13
   References (executor has NO interview context - be exhaustive): `SPEC.md:98-112`; `docs/plugins/executors.md:1-67`.
   Acceptance criteria (agent-executable): integration tests assert exact event sequence and recipients for EXECUTE/IGNORE_SELF_TALK/IGNORE_THIRD_PARTY, TODO detection, interruption during active stream, cancellation of LLM/TTS tasks, and acceptance of the next utterance.
   QA scenarios (name the exact tool + invocation): happy `uv run python scripts/qa/vertical_slice.py --fixture --prompt 'plan tomorrow standup'` → transcript, EXECUTE, three generate events, streamed response, audio chunks; failure `--prompt 'I am thinking aloud'` → classification ignored and no generate event. Evidence `.omo/evidence/kateto-mvp/task-8/`.
   Commit: Y | feat(pipeline): wire classification, TODOs, and interruption
-- [ ] 9. Implement canonical backlog plugin, MCP CRUD events, and calendar connector
+- [x] 9. Implement canonical backlog plugin, MCP CRUD events, and calendar connector
   What to do / Must NOT do: Make `product_backlog.json` the canonical source, add list/add/update CRUD with filters, lock+atomic writes, MCP-facing events, and Google Calendar OAuth cached-token getter/setter connector with `reply_to`. Do not duplicate backlog storage in MCP or expose tokens.
   Parallelization: Wave 3 | Blocked by: 4-8 | Blocks: 10,13 | Can parallelize with: 10-12
   References (executor has NO interview context - be exhaustive): `SPEC.md:107-112,260-269`; `docs/plugins/connectors.md:1-66`; `docs/voices/backlog.md:1-59`.
   Acceptance criteria (agent-executable): tests prove filters, CRUD validation, concurrent updates without corruption, calendar request/response correlation, token cache path, and connector failure events.
   QA scenarios (name the exact tool + invocation): happy `uv run python scripts/qa/backlog_fixture.py add --title 'Demo task' --priority Must` → one persisted JSON item; failure two concurrent updates with invalid status → no partial file and error events. Evidence `.omo/evidence/kateto-mvp/task-9/`.
   Commit: Y | feat(work): add backlog and calendar connectors
-- [ ] 10. Implement restricted CLI connector and TODO/backlog synchronization boundaries
+- [x] 10. Implement restricted CLI connector and TODO/backlog synchronization boundaries
   What to do / Must NOT do: Execute only normalized commands in the config allow-list, capture stdout/stderr as typed reply events, and synchronize completed voice TODO items to the canonical backlog. Do not shell-evaluate strings, expand arbitrary paths, or make TODO.md the canonical backlog.
   Parallelization: Wave 3 | Blocked by: 4-8 | Blocks: 13 | Can parallelize with: 9,11,12
   References (executor has NO interview context - be exhaustive): `SPEC.md:107,260-269`; `config/defaults/config.toml:31-33`; `docs/plugins/connectors.md:1-66`.
   Acceptance criteria (agent-executable): tests prove allow-listed command success, rejected command/path/argument, timeout, output capture, and backlog update event after TODO completion.
   QA scenarios (name the exact tool + invocation): happy `uv run python scripts/qa/cli_fixture.py --command 'echo kateto'` → exact stdout reply; failure `--command 'rm -rf /tmp/x'` → rejection before process spawn. Evidence `.omo/evidence/kateto-mvp/task-10/`.
   Commit: Y | feat(connector): add restricted CLI and TODO sync
-- [ ] 11. Implement declarative workflow engine and lifecycle events
+- [x] 11. Implement declarative workflow engine and lifecycle events
   What to do / Must NOT do: Load global/per-voice `workflow.py`, track phases/checkpoints/status, auto-advance on `voice_idle`, emit all lifecycle events, support `workflow_stop`, and hot-reload definitions without imperative scripts. Do not execute shell scripts from workflow phases.
   Parallelization: Wave 3 | Blocked by: 4-8 | Blocks: 13 | Can parallelize with: 9,10,12
   References (executor has NO interview context - be exhaustive): `SPEC.md:222-259`; existing defaults under `config/defaults/voices/*/workflows/`; `docs/voices/workflows.md:1-140`.
   Acceptance criteria (agent-executable): tests prove phase start/complete/checkpoint failure/stop/completion events, auto-advance only after idle and checkpoint success, per-voice/global discovery, and malformed definition rejection.
   QA scenarios (name the exact tool + invocation): happy `uv run python scripts/qa/workflow_fixture.py --workflow daily-standup --voice Conquest` → ordered lifecycle trace and deliverable path; failure checkpoint false → `workflow_checkpoint_fail` and no next phase. Evidence `.omo/evidence/kateto-mvp/task-11/`.
   Commit: Y | feat(workflow): add declarative workflow engine
-- [ ] 12. Implement config-declared MCP server with dynamic event-tool schemas and wait semantics
+- [x] 12. Implement config-declared MCP server with dynamic event-tool schemas and wait semantics
   What to do / Must NOT do: Add FastMCP server, config-only server discovery, explicit per-voice authorization, typed auto-discovered receiver schemas, `send_event(event_name,data,target,wait=False)`, correlation/reply matching, timeout, and cancellation. Do not discover installed/running processes implicitly or grant unconfigured voices all tools.
   Parallelization: Wave 3 | Blocked by: 3-8 | Blocks: 13 | Can parallelize with: 9-11
   References (executor has NO interview context - be exhaustive): `SPEC.md:110-112,371`; `docs/plugins/system.md:1-100`; `docs/voices/skills-and-mcp.md:1-92`.
   Acceptance criteria (agent-executable): MCP tests prove schema generation from registered BaseModels, authorized tool call, denied server/voice, wait correlation success, timeout, cancellation, and error event propagation.
   QA scenarios (name the exact tool + invocation): happy `uv run python scripts/qa/mcp_fixture.py send_event --event backlog_list --wait` → structured result before timeout; failure `--server undeclared` → authorization error and no subprocess. Evidence `.omo/evidence/kateto-mvp/task-12/`.
   Commit: Y | feat(mcp): expose authorized event bus tools
-- [ ] 13. Implement Textual TUI, plugin controls, event stream, and hot-reload integration
+- [x] 13. Implement Textual TUI, plugin controls, event stream, and hot-reload integration
   What to do / Must NOT do: Build the live plugin/event view from `get_plugins()`/`get_events()`, runtime enable/disable/manual event controls, voice/plugin statuses, and watchdog create/modify/delete handling bridged via `loop.call_soon_threadsafe`, graceful task cancellation and queue clearing. Do not create a second asyncio loop.
   Parallelization: Wave 3 | Blocked by: 5-12 | Blocks: 14-16
   References (executor has NO interview context - be exhaustive): `SPEC.md:61-80,112`; `docs/plugins/system.md:1-100`; `docs/architecture/hot-reload.md:1-34`.
   Acceptance criteria (agent-executable): Textual `run_test()` proves event rendering and controls; reload tests prove task cancellation, queue clearing, module/config replacement, debounce, and no stale subscribers.
   QA scenarios (name the exact tool + invocation): happy `node script/qa/web-terminal-visual-qa.mjs --title 'Kateto TUI' --command 'uv run kateto tui --fixture' --input '{Enter}' --evidence-dir .omo/evidence/kateto-mvp/task-13-tui` → screenshot shows plugin list and live event rows; failure create malformed watched workflow → TUI shows error event while process remains responsive. Evidence `.omo/evidence/kateto-mvp/task-13/`.
   Commit: Y | feat(ui): add Textual dashboard and hot reload
-- [ ] 14. Complete defaults, assets, README, CLI run modes, and demo runbook
+- [x] 14. Complete defaults, assets, README, CLI run modes, and demo runbook
   What to do / Must NOT do: Reconcile `config/defaults/` with the canonical schema, add all enabled MVP SKILL.md files and non-secret reference-clip placeholders/validation instructions, add `README.md` setup/troubleshooting, fixture/live-server preflight, and a <3 minute demo script covering loop/TUI/interruption/work. Do not commit real secrets, model weights, or copyrighted audio.
   Parallelization: Wave 4 | Blocked by: 1-13 | Blocks: 15-16 | Can parallelize with: 15
   References (executor has NO interview context - be exhaustive): `SPEC.md:192-221,276-384`; `config/defaults/config.toml:1-33`; `docs/development/build-week.md:1-80`; `docs/development/tooling.md:1-36`.
   Acceptance criteria (agent-executable): clean temp-config bootstrap succeeds; README commands work from a fresh clone; every configured skill resolves; demo runbook names provider preflight and fallback fixture commands.
   QA scenarios (name the exact tool + invocation): happy `XDG_CONFIG_HOME=$(mktemp -d) uv run kateto smoke --fixture` → exit 0 and documented artifact; failure missing endpoint/clip → startup reports exact path/remediation and does not expose secrets. Evidence `.omo/evidence/kateto-mvp/task-14/`.
   Commit: Y | docs(delivery): add defaults, setup, and demo runbook
-- [ ] 15. Execute full end-to-end fixture and optional live-provider acceptance gates
+- [x] 15. Execute full end-to-end fixture and optional live-provider acceptance gates
   What to do / Must NOT do: Run the complete fixture conversation loop, interruption/resume, TUI visual proof, MCP/backlog work action, workflow lifecycle, and live-server smoke only when health checks pass; collect logs/screenshots/transcripts and teardown every process/temp resource. Do not accept self-reported success or stale logs.
   Parallelization: Wave 4 | Blocked by: 1-14 | Blocks: 16 | Can parallelize with: 14
   References (executor has NO interview context - be exhaustive): `SPEC.md:10-16,98-116`; `docs/development/build-week.md:1-80`; all task acceptance criteria above.
   Acceptance criteria (agent-executable): `uv run pytest` passes; `uv run kateto smoke --fixture` records `audio_chunk`, `transcription`, `EXECUTE`, three `generate`, streamed output, TTS PCM, and idle; interrupt trace proves cancellation and next utterance; MCP action changes backlog JSON atomically; TUI screenshot exists.
   QA scenarios (name the exact tool + invocation): happy `uv run python scripts/qa/acceptance.py --fixture --evidence-dir .omo/evidence/kateto-mvp/task-15` → all named markers PASS; failure `--interrupt-at token:3` → cancellation marker PASS and next input marker PASS; cleanup receipt must show no remaining PID/port/temp dir. Evidence `.omo/evidence/kateto-mvp/task-15/`.
   Commit: Y | test(qa): capture MVP end-to-end acceptance evidence
-- [ ] 16. Run final quality gates and reconcile scope
+- [x] 16. Run final quality gates and reconcile scope
   What to do / Must NOT do: Run diagnostics, full tests/build/help, inspect diff against SPEC.md, verify excluded features are absent, redact evidence, and ensure no runtime QA state remains. Do not modify behavior during this verification todo except fixes required by a failed acceptance criterion, which must be recorded and re-tested.
   Parallelization: Wave 4 | Blocked by: 14-15 | Blocks: none
   References (executor has NO interview context - be exhaustive): `SPEC.md:375-384`; `pyproject.toml`; `.python-version`; `.omo/plans/kateto-mvp.md`; all changed files.

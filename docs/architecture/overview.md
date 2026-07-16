@@ -51,7 +51,7 @@ User speaks → AudioInput records → emits audio_chunk
 
 | Priority | Components |
 |---|---|
-| **P0** | Event Bus, PluginManager, Audio Input (Mic), Whisper, Zonos TTS, Classifier, Interrupt, Jane, Doktor, Conquest, TUI, MCP Server, Google Meet, Calendar |
-| **P1** | Narrador, Susurrante, VoiceClassifier, TODO List Executor, CLI Connector |
+| **P0** | Event Bus, PluginManager, Audio Input (Mic), Whisper, Zonos TTS, Classifier, Interrupt, Jane, Doktor, Conquest, TODO List Executor, CLI Connector, TUI, MCP Server, Google Meet, Calendar |
+| **P1** | Narrador, Susurrante, VoiceClassifier |
 | **P2** | Drakula, Xavier, Greedy, Informante, Germ, Business, Lovers, Discord, OpenProject, RandomTalk, Podcast, Avatars |
 | **P3** | Workspaces, VideoRAG, Remotion Tutorial Runner |

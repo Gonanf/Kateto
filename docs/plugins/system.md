@@ -26,11 +26,13 @@ Terminal UI using **Textual** with live visualization of the bus and plugin stat
 
 ## MCP Plugin (P0)
 
-Serves a **Model Context Protocol** server that exposes system events (getters and setters) with **auto-detected types and instructions** from the event registry.
+Serves a **Model Context Protocol** server that exposes authorized system events (getters and setters) with **auto-detected types and instructions** from the event registry.
+
+Access is config-only and deny-by-default: a server must be declared under `[mcp_servers.<name>]`, and a voice must explicitly list that server in `voice.<name>.mcp_servers`. Undeclared servers, unlisted voices, and absent grants are rejected; installed or running MCP processes are never discovered implicitly.
 
 ### Auto-Detection
 
-When a plugin module is imported, the system:
+Once an authorized, config-declared server is created, the system:
 1. Scans its class for `on_*` methods (events it receives)
 2. In `initialize()`, the plugin registers events it can emit (name + data type)
 3. The MCP Server uses this registry to dynamically generate:
@@ -44,4 +46,4 @@ When a plugin module is imported, the system:
 
 ### Purpose
 
-Allows external AI agents (Codex, Claude, etc.) to communicate with Kateto through the MCP protocol.
+Allows authorized external AI agents (Codex, Claude, etc.) to communicate with Kateto through the MCP protocol.

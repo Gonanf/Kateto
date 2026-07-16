@@ -40,17 +40,26 @@ Optional. Runs after the main Classifier (or standalone, but doesn't work 100% w
 
 Requires fine-tuned models with training data from `Voices/{name}/training/`.
 
-## executor_todo_list (P1)
+## executor_todo_list (P0)
 
 Detects when there is a need to organize tasks into a structured project plan.
 
+### MVP file contract
+
+The shipped MVP has one TODO file per voice: `config/kateto/voices/{voice}/TODO.md`.
+The executor creates or updates that file using Markdown task entries in the form
+`- [ ] task` or `- [x] task`. It does not create project subdirectories, maintain
+global TODO files, or treat `TODO.md` as the canonical backlog. The backlog remains
+the source of truth for backlog items; a completed TODO emits `todo_completed` so
+the backlog integration can synchronize it.
+
 ### Flow
-1. Agent has a `current_project` context variable (modifiable by any LLM)
-2. When the executor detects a need to organize tasks:
-   - Creates `config/kateto/voices/{voice}/{project}/`
-   - Creates/updates `TODO.md` there
-   - Enforces tasks by priority
-3. Global TODOs exist alongside project/voice-specific ones
+
+1. An `EXECUTE` classification is parsed for a supported task or completion command.
+2. The matching voice's `config/kateto/voices/{voice}/TODO.md` is read and updated
+   idempotently.
+3. `todo_updated` is emitted for a change; completing an existing task also emits
+   `todo_completed` for backlog synchronization.
 
 ## executor_random_talk (P2 — Postergated)
 

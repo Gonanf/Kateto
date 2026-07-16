@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "evidenceLayoutVersion": 2,
+  "createdAt": "2026-07-15T20:58:29.208Z",
+  "updatedAt": "2026-07-15T20:58:29.208Z",
+  "briefPath": ".omo/ulw-loop/019f678c-8a86-7162-9d5b-02ccc74b4949/brief.md",
+  "goalsPath": ".omo/ulw-loop/019f678c-8a86-7162-9d5b-02ccc74b4949/goals.json",
+  "ledgerPath": ".omo/ulw-loop/019f678c-8a86-7162-9d5b-02ccc74b4949/ledger.jsonl",
+  "codexGoalMode": "aggregate",
+  "goals": [
+    {
+      "id": "G001-kateto-recovery-production-audio-out",
+      "title": "Kateto recovery: production audio_output_zonos and audio_output_playe...",
+      "objective": "Kateto recovery: production audio_output_zonos and audio_output_player plus configured live conversation assembly and CLI run path; evidence-bound HEAVY implementation.",
+      "status": "pending",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: Kateto recovery: production audio_output_zonos and audio_output_player plus c...",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 1.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: Kateto recovery: production audio_output_zonos and audio_output_player plus c....",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: Kateto recovery: production audio_output_zonos and audio_output_player plus c....",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 0,
+      "createdAt": "2026-07-15T20:58:29.208Z",
+      "updatedAt": "2026-07-15T20:58:29.208Z"
+    }
+  ],
+  "codexObjective": "Complete the durable ulw-loop plan in .omo/ulw-loop/019f678c-8a86-7162-9d5b-02ccc74b4949/goals.json, including later accepted/appended stories, under the original brief constraints; use .omo/ulw-loop/019f678c-8a86-7162-9d5b-02ccc74b4949/ledger.jsonl as the audit trail."
+}

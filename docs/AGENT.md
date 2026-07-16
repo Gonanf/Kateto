@@ -2,7 +2,7 @@
 
 This directory documents the **complete Kateto specification** as defined in `SPEC.md`.
 
-**This is NOT the MVP.** The MVP (`MVP.md`) is a slimmed-down P0 vertical slice for Build Week delivery. These docs cover the full architecture — P0, P1, P2, and P3 — including features explicitly excluded from the MVP.
+`SPEC.md` is the canonical MVP reference; there is no separate `MVP.md`. These docs cover the broader architecture — MVP/P0 plus post-MVP P1, P2, and P3 material — and explicitly mark features that are outside the shipped MVP.
 
 ## What's Different From the MVP
 
@@ -12,7 +12,7 @@ This directory documents the **complete Kateto specification** as defined in `SP
 | VoiceClassifier | Not implemented (P1) | Per-voice routing via fine-tuned mmBERT |
 | Executors | Classifier, Interrupt, TODO List | + RandomTalk, Podcast (P2) |
 | Workflow phases | Declarative only | Declarative + Imperative (shell scripts, templates) |
-| MCP per voice | Global MCP only | Per-voice MCP server config + Skills system |
+| MCP per voice | Config-declared servers with explicit per-voice grants; deny by default | Broader per-voice MCP server configuration |
 | Connectors | Calendar, Meet, CLI | + Discord, OpenProject (P2) |
 | Workspaces | Not implemented (P3) | Isolated contexts per project/person |
 | Avatars | Not implemented (P3) | Puppet-mask SVG avatars + video overlay |
@@ -60,6 +60,6 @@ docs/
 | Badge | Meaning |
 |---|---|
 | **P0** | MVP — implemented during Build Week |
-| **P1** | Post-MVP, high priority |
+| **P1** | Post-MVP, not part of the shipped MVP |
 | **P2** | Nice to have |
 | **P3** | Future / excluded from v1 |

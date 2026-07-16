@@ -30,7 +30,7 @@ Google Meet integration.
 - Joins meetings
 - Captures meeting audio (routes through `audio_input_meet`)
 
-### `connector_cli` (P1)
+### `connector_cli` (P0)
 Terminal command execution.
 
 - Commands restricted to an **allow-list** in `config.toml`

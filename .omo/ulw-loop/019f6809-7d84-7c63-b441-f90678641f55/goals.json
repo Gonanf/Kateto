@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "evidenceLayoutVersion": 2,
+  "createdAt": "2026-07-15T23:10:18.620Z",
+  "updatedAt": "2026-07-15T23:10:35.948Z",
+  "briefPath": ".omo/ulw-loop/019f6809-7d84-7c63-b441-f90678641f55/brief.md",
+  "goalsPath": ".omo/ulw-loop/019f6809-7d84-7c63-b441-f90678641f55/goals.json",
+  "ledgerPath": ".omo/ulw-loop/019f6809-7d84-7c63-b441-f90678641f55/ledger.jsonl",
+  "codexGoalMode": "aggregate",
+  "goals": [
+    {
+      "id": "G001-task-make-the-default-live-path-runn",
+      "title": "TASK: Make the default live path runnable in the shipped package. GOA...",
+      "objective": "TASK: Make the default live path runnable in the shipped package. GOAL: declare required Silero VAD runtime dependencies (silero-vad and torch or supported official package set) in pyproject/uv lock, reconcile config/defaults/config.toml so plugin.executor_classifier is declared and live assembly reaches classifier/fan-out, preserve fixture mode and documented missing-provider remediation. STOP WHEN: uv sync/lock, default live construction probe, focused tests, build, and cleanup pass. EVIDENCE: .omo/evidence/kateto-mvp/recovery/live-packaging/DoneClaim.json and logs. Own pyproject/uv/config/live config/tests only.",
+      "status": "in_progress",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "happy path for: TASK: Make the default live path runnable in the shipped package. GOAL: decla...",
+          "userModel": "happy",
+          "expectedEvidence": "Replace via revise_criterion with observable happy-path proof for goal 1.",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "edge case (boundary/empty/malformed)",
+          "userModel": "edge",
+          "expectedEvidence": "Replace via revise_criterion with boundary or malformed-input proof for: TASK: Make the default live path runnable in the shipped package. GOAL: decla....",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "regression: adjacent surface still works",
+          "userModel": "regression",
+          "expectedEvidence": "Replace via revise_criterion with regression proof for neighboring behavior after: TASK: Make the default live path runnable in the shipped package. GOAL: decla....",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 1,
+      "createdAt": "2026-07-15T23:10:18.620Z",
+      "updatedAt": "2026-07-15T23:10:35.948Z",
+      "startedAt": "2026-07-15T23:10:35.948Z"
+    }
+  ],
+  "codexObjective": "Complete the durable ulw-loop plan in .omo/ulw-loop/019f6809-7d84-7c63-b441-f90678641f55/goals.json, including later accepted/appended stories, under the original brief constraints; use .omo/ulw-loop/019f6809-7d84-7c63-b441-f90678641f55/ledger.jsonl as the audit trail.",
+  "activeGoalId": "G001-task-make-the-default-live-path-runn"
+}

@@ -1,14 +1,35 @@
-# Kateto — default configuration
-# Copies to ~/.config/kateto/config.toml on first run
-
-[system]
+[kateto]
 name = "Kateto"
 language = "en"
+debug = false
+hot_reload = false
 
-[audio]
+[plugin.audio_input_mic]
+enabled = true
 sample_rate = 16000
 silence_timeout = 1.5
 vad_model = "silero"
+
+[plugin.audio_processor_whisper]
+enabled = true
+endpoint = "http://127.0.0.1:8090"
+
+[plugin.executor_classifier]
+enabled = true
+model_endpoint = "http://127.0.0.1:8091"
+model = "classifier"
+
+[plugin.voice_llm]
+enabled = true
+endpoint = "http://127.0.0.1:8092/v1"
+model = "voice"
+
+[plugin.audio_output_zonos]
+enabled = true
+endpoint = "http://127.0.0.1:8093"
+
+[plugin.audio_output_player]
+enabled = true
 
 [voice.jane]
 enabled = true
@@ -23,11 +44,5 @@ enabled = true
 skills = ["backlog"]
 
 [mcp_servers]
-# MCP servers are defined here. The MCP Plugin discovers them and exposes their tools.
-# Example:
-# [mcp_servers.filesystem]
-# command = "uvx"
-# args = ["mcp-server-filesystem", "/home/chaos/proyectos"]
-
 [cli]
 allowlist = ["git", "ls", "pwd", "cat", "echo", "date"]
