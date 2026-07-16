@@ -8,7 +8,7 @@ import pytest
 
 from kateto.core import Plugin, PluginManager
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioData, InterruptData
+from kateto.core.event import AudioData, AudioInputStatus, AudioInputStatusData, InterruptData
 from kateto.plugins.audio_input.base import (
     AudioDeviceError,
     AudioInputConfig,
@@ -182,6 +182,49 @@ async def test_meet_uses_configured_loopback_and_tags_its_source() -> None:
     envelope = next(event for event in manager.get_events() if event.name == "audio_chunk")
     assert envelope.source == "audio_input_meet/meet"
     assert factory.requests[0].device == "Meet Loopback"
+    await manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("plugin_type", "device", "source"),
+    [
+        (MicrophoneAudioInput, "fixture", "audio_input_mic/mic"),
+        (MeetAudioInput, "Meet Loopback", "audio_input_meet/meet"),
+    ],
+)
+async def test_audio_inputs_emit_typed_idle_and_recording_status(
+    plugin_type: type[MicrophoneAudioInput] | type[MeetAudioInput],
+    device: str,
+    source: str,
+) -> None:
+    # Given: an enabled microphone or Meet capture with deterministic VAD.
+    manager = PluginManager()
+    factory = FixtureCaptureFactory()
+    plugin = plugin_type(
+        make_settings(device=device, silence_timeout=0.1),
+        vad=make_vad([0.9, 0.1]),
+        capture_factory=factory,
+    )
+    await manager.enable_plugin(plugin)
+
+    # When: one speech frame reaches the capture, followed by the silence boundary.
+    capture = factory.captures[0]
+    capture.emit(SPEECH_FRAME)
+    capture.emit(SILENCE_FRAME)
+    await manager.wait_for_idle()
+
+    # Then: typed lifecycle events identify recording and return to idle from the same source.
+    statuses = [
+        event
+        for event in manager.get_events()
+        if event.name == "audio_input_status"
+    ]
+    assert [(event.source, event.data) for event in statuses] == [
+        (source, AudioInputStatusData(status=AudioInputStatus.IDLE)),
+        (source, AudioInputStatusData(status=AudioInputStatus.RECORDING)),
+        (source, AudioInputStatusData(status=AudioInputStatus.IDLE)),
+    ]
     await manager.close()
 
 

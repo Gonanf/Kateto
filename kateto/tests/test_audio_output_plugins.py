@@ -6,7 +6,7 @@ import pytest
 
 from kateto.core import Plugin, PluginManager
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, TextChunk
+from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, TextChunk
 from kateto.plugins.audio_output.player import AudioOutputPlayer
 from kateto.plugins.audio_output.zonos import ZonosAudioOutput
 
@@ -137,6 +137,11 @@ async def test_zonos_streams_pcm_audio_output_from_text_chunk_and_closes_provide
         ),
     ]
     assert [event.source for event in manager.get_events() if event.name == "audio_output"] == ["audio_output_zonos"] * 2
+    assert [event.data for event in manager.get_events() if event.name == "audio_output_status"] == [
+        AudioOutputStatusData(status=AudioOutputStatus.IDLE),
+        AudioOutputStatusData(status=AudioOutputStatus.PLAYING),
+        AudioOutputStatusData(status=AudioOutputStatus.IDLE),
+    ]
     await manager.close()
     assert provider.closed
 
@@ -175,4 +180,11 @@ async def test_player_consumes_pcm_and_stops_on_final_and_interrupt() -> None:
     assert factory.requests == [("Fixture Output", 24_000, 1), ("Fixture Output", 24_000, 1)]
     assert [stream.writes for stream in factory.streams] == [[b"\x01\x00"], [b"\x03\x00"]]
     assert all(stream.started and stream.stopped and stream.closed for stream in factory.streams)
+    assert [event.data for event in manager.get_events() if event.name == "audio_output_status"] == [
+        AudioOutputStatusData(status=AudioOutputStatus.IDLE),
+        AudioOutputStatusData(status=AudioOutputStatus.PLAYING),
+        AudioOutputStatusData(status=AudioOutputStatus.IDLE),
+        AudioOutputStatusData(status=AudioOutputStatus.PLAYING),
+        AudioOutputStatusData(status=AudioOutputStatus.IDLE),
+    ]
     await manager.close()

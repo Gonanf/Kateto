@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from typing import Protocol, Self, override
 
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, InterruptData, TextChunk
+from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData, TextChunk
 from kateto.core.plugin import Plugin, PluginManagerProtocol
 from kateto.providers import ZonosProvider
 
@@ -30,18 +30,22 @@ class ZonosAudioOutput(Plugin):
         self._provider_active: bool = False
         self._interrupted: bool = False
         self._stream_task: asyncio.Task[None] | None = None
+        self._playing = False
+        self._status_emitted = False
 
     @override
     async def initialize(self) -> None:
         manager = self._manager()
         manager.register_event("text_chunk", TextChunk)
         manager.register_event("audio_output", AudioOutput)
+        manager.register_event("audio_output_status", AudioOutputStatusData)
 
     @override
     async def enable(self) -> None:
         if not self._provider_active:
             _ = await self._provider.__aenter__()
             self._provider_active = True
+        await self._set_playing(False)
 
     @override
     async def disable(self) -> None:
@@ -64,6 +68,7 @@ class ZonosAudioOutput(Plugin):
         finally:
             if self._stream_task is task:
                 self._stream_task = None
+            await self._set_playing(False)
 
     async def on_interrupt(self, data: InterruptData) -> None:
         del data
@@ -74,6 +79,7 @@ class ZonosAudioOutput(Plugin):
         voice_id = data.voice_id
         if voice_id is None:
             return
+        await self._set_playing(True)
         async for output in self._provider.stream_sentence(data, voice_id=voice_id):
             _ = await self._manager().emit("audio_output", output, source=self.name)
 
@@ -86,6 +92,19 @@ class ZonosAudioOutput(Plugin):
             await task
         except asyncio.CancelledError:
             return
+
+    async def _set_playing(self, playing: bool) -> None:
+        if self._status_emitted and self._playing == playing:
+            return
+        self._playing = playing
+        self._status_emitted = True
+        await self._manager().emit(
+            "audio_output_status",
+            AudioOutputStatusData(
+                status=AudioOutputStatus.PLAYING if playing else AudioOutputStatus.IDLE,
+            ),
+            source=self.name,
+        )
 
     def _manager(self) -> PluginManagerProtocol:
         manager = self.manager

@@ -1,6 +1,10 @@
 from kateto.core.event import (
     AudioData,
+    AudioInputStatus,
+    AudioInputStatusData,
     AudioOutput,
+    AudioOutputStatus,
+    AudioOutputStatusData,
     BacklogAddData,
     BacklogItem,
     BacklogListData,
@@ -26,7 +30,11 @@ from kateto.core.event import (
 
 __all__ = [
     "AudioData",
+    "AudioInputStatus",
+    "AudioInputStatusData",
     "AudioOutput",
+    "AudioOutputStatus",
+    "AudioOutputStatusData",
     "BacklogAddData",
     "BacklogItem",
     "BacklogListData",
@@ -36,6 +44,7 @@ __all__ = [
     "GenerateData",
     "InterruptData",
     "Plugin",
+    "PluginEventHistory",
     "PluginErrorData",
     "PluginManager",
     "TextChunk",
@@ -58,7 +67,7 @@ __all__ = [
     "get_plugin_manager",
 ]
 
-from .manager import PluginManager, get_plugin_manager
+from .manager import PluginEventHistory, PluginManager, get_plugin_manager
 from .plugin import Plugin
 from .workflow import WorkflowCatalog, WorkflowDefinitionError, WorkflowPhaseStatus, WorkflowStatus
 from .workflow_engine import WorkflowEngine

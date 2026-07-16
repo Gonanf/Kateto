@@ -5,7 +5,7 @@ from typing import Protocol, override
 import sounddevice
 
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, InterruptData
+from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData
 from kateto.core.plugin import Plugin, PluginManagerProtocol
 
 from .base import AudioOutputDeviceError, AudioOutputFactory, AudioOutputFormatError, AudioOutputStream, PCM_S16LE
@@ -85,34 +85,45 @@ class AudioOutputPlayer(Plugin):
         self._factory: AudioOutputFactory = SoundDeviceOutputFactory() if player_factory is None else player_factory
         self._stream: AudioOutputStream | None = None
         self._stream_format: tuple[int, int] | None = None
+        self._playing = False
+        self._status_emitted = False
 
     @override
     async def initialize(self) -> None:
         self._manager().register_event("audio_output", AudioOutput)
+        self._manager().register_event("audio_output_status", AudioOutputStatusData)
+
+    @override
+    async def enable(self) -> None:
+        await self._set_playing(False)
 
     @override
     async def disable(self) -> None:
         self._close_stream()
+        await self._set_playing(False)
 
     async def on_audio_output(self, data: AudioOutput) -> None:
         _validate_pcm(data)
         if data.final:
             self._close_stream()
+            await self._set_playing(False)
             return
         if not data.samples:
             return
-        stream = self._stream_for(data)
+        stream = await self._stream_for(data)
         _ = stream.write(data.samples)
 
     async def on_interrupt(self, data: InterruptData) -> None:
         del data
         self._close_stream()
+        await self._set_playing(False)
 
-    def _stream_for(self, data: AudioOutput) -> AudioOutputStream:
+    async def _stream_for(self, data: AudioOutput) -> AudioOutputStream:
         requested_format = (data.sample_rate, data.channels)
         stream = self._stream
         if stream is not None and self._stream_format != requested_format:
             self._close_stream()
+            await self._set_playing(False)
             stream = None
         if stream is None:
             stream = self._factory.create(
@@ -123,6 +134,7 @@ class AudioOutputPlayer(Plugin):
             stream.start()
             self._stream = stream
             self._stream_format = requested_format
+            await self._set_playing(True)
         return stream
 
     def _close_stream(self) -> None:
@@ -132,6 +144,19 @@ class AudioOutputPlayer(Plugin):
         if stream is not None:
             stream.stop()
             stream.close()
+
+    async def _set_playing(self, playing: bool) -> None:
+        if self._status_emitted and self._playing == playing:
+            return
+        self._playing = playing
+        self._status_emitted = True
+        await self._manager().emit(
+            "audio_output_status",
+            AudioOutputStatusData(
+                status=AudioOutputStatus.PLAYING if playing else AudioOutputStatus.IDLE,
+            ),
+            source=self.name,
+        )
 
     def _manager(self) -> PluginManagerProtocol:
         manager = self.manager

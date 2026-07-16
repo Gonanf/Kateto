@@ -73,6 +73,24 @@ class AudioOutput(EventModel):
     final: bool = False
 
 
+class AudioInputStatus(StrEnum):
+    IDLE = "idle"
+    RECORDING = "recording"
+
+
+class AudioInputStatusData(EventModel):
+    status: AudioInputStatus
+
+
+class AudioOutputStatus(StrEnum):
+    IDLE = "idle"
+    PLAYING = "playing"
+
+
+class AudioOutputStatusData(EventModel):
+    status: AudioOutputStatus
+
+
 class InterruptData(EventModel):
     reason: str = "voice_activity"
 

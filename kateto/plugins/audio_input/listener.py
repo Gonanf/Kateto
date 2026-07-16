@@ -12,13 +12,12 @@ from asyncio import (  # noqa: ANYIO_OK
 from contextlib import suppress
 from time import monotonic
 
-from kateto.core.event import AudioData, AudioOutput
+from kateto.core.event import AudioData, AudioInputStatus, AudioInputStatusData, AudioOutput
 from kateto.core.plugin import Plugin, PluginManagerProtocol
 
 from .base import (
     PCM_FORMAT,
     AudioDeviceError,
-    AudioInputConfig,
     AudioInputIdentity,
     AudioInputLifecycleError,
     CallbackQueue,
@@ -57,6 +56,8 @@ class AudioInputPlugin(Plugin):
         self._capture_session = 0
         self._accepting_audio = False
         self._playback_active = False
+        self._recording_status_emitted = False
+        self._recording = False
         self._last_resume_gap_ms: float | None = None
 
     @property
@@ -73,12 +74,14 @@ class AudioInputPlugin(Plugin):
 
     async def initialize(self) -> None:
         self._require_manager().register_event("audio_chunk", AudioData)
+        self._require_manager().register_event("audio_input_status", AudioInputStatusData)
 
     async def enable(self) -> None:
         self._callback_queue.clear()
         self._queue_ready.clear()
         self._resumed_listening.clear()
         self._segmenter.reset()
+        self._recording = False
         self._last_resume_gap_ms = None
         self._capture_session += 1
         session = self._capture_session
@@ -100,6 +103,7 @@ class AudioInputPlugin(Plugin):
             self._drain_callback_queue(),
             name=f"kateto-audio-capture-{self.name}",
         )
+        await self._set_recording(False)
 
     async def disable(self) -> None:
         self._accepting_audio = False
@@ -118,6 +122,7 @@ class AudioInputPlugin(Plugin):
         self._callback_queue.clear()
         self._queue_ready.clear()
         self._segmenter.reset()
+        await self._set_recording(False)
         self._playback_active = False
         self._loop = None
 
@@ -163,9 +168,11 @@ class AudioInputPlugin(Plugin):
                     speech=self._vad.is_speech(samples),
                 )
                 if update.voice_started:
+                    await self._set_recording(True)
                     await self._interrupt_playback()
                 if update.samples is not None:
                     await self._emit_segment(update.samples)
+                    await self._set_recording(False)
             self._queue_ready.clear()
             if self._callback_queue.pending:
                 self._queue_ready.set()
@@ -195,6 +202,19 @@ class AudioInputPlugin(Plugin):
         )
         self._last_resume_gap_ms = (monotonic() - started_at) * 1_000
         self._resumed_listening.set()
+
+    async def _set_recording(self, recording: bool) -> None:
+        if self._recording_status_emitted and self._recording == recording:
+            return
+        self._recording = recording
+        self._recording_status_emitted = True
+        await self._require_manager().emit(
+            "audio_input_status",
+            AudioInputStatusData(
+                status=AudioInputStatus.RECORDING if recording else AudioInputStatus.IDLE,
+            ),
+            source=self._event_source,
+        )
 
     def _require_manager(self) -> PluginManagerProtocol:
         manager = self.manager
