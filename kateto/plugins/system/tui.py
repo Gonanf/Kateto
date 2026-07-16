@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK
+from collections import deque
 from pathlib import Path
 from typing import assert_never
 
@@ -120,7 +121,7 @@ class KatetoApp(App[None]):
         self.fixture = fixture
         self.config_dir = (Path.cwd() if config_dir is None else config_dir).resolve()
         self.replacement_factory = replacement_factory or (self._fixture_replacement_factory if fixture else None)
-        self._events: list[str] = []
+        self._events: deque[str] = deque(maxlen=1000)
         self._voice_status: dict[str, str] = {voice: "idle" for voice in runtime.workflow_voices}
         self._audio_status: dict[str, str] = {}
         self._selected_plugin: str | None = None

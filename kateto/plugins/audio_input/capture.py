@@ -52,6 +52,7 @@ class SoundDeviceCaptureFactory(CaptureFactory):
         callback: CaptureCallback,
     ) -> CaptureStream:
         device = None if config.device == "default" else config.device
+        self._validate_device(device, config)
         try:
             stream = sounddevice.RawInputStream(
                 device=device,
@@ -67,3 +68,22 @@ class SoundDeviceCaptureFactory(CaptureFactory):
                 reason=f"{error}; select an installed input device",
             ) from error
         return SoundDeviceCapture(stream=stream, config=config)
+
+    @staticmethod
+    def _validate_device(device: str | None, config: AudioInputConfig) -> None:
+        if device is None:
+            return
+        try:
+            info = sounddevice.query_devices(device=device, kind="input")
+        except (sounddevice.PortAudioError, ValueError) as error:
+            raise AudioDeviceError(
+                source=config.source,
+                device=config.device,
+                reason=f"device not found ({error}); select an installed input device",
+            ) from error
+        if info["max_input_channels"] < 1:
+            raise AudioDeviceError(
+                source=config.source,
+                device=config.device,
+                reason="device has no input channels; select a microphone or input device",
+            )

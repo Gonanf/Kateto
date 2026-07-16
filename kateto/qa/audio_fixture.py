@@ -58,7 +58,8 @@ class FixtureTimeInfo:
 
 
 class FixtureStatus:
-    pass
+    def __bool__(self) -> bool:
+        return False
 
 
 FIXTURE_TIME_INFO: Final[CaptureTimeInfo] = FixtureTimeInfo()

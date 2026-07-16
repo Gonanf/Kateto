@@ -151,9 +151,11 @@ def _default_dependencies(
         if input_settings.vad_threshold is None
         else input_settings.vad_threshold
     )
+    print("kateto: loading Silero VAD voice activity model…", flush=True)
     model = (
         load_silero_model()
         if silero_model_loader is None
         else silero_model_loader.load_model()
     )
+    print("kateto: Silero VAD model loaded", flush=True)
     return EventRuntimeDependencies(vad=SileroVad(model, threshold=threshold))

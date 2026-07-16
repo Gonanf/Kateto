@@ -82,6 +82,7 @@ class AudioInputPlugin(Plugin):
         self._resumed_listening.clear()
         self._segmenter.reset()
         self._recording = False
+        self._recording_status_emitted = False
         self._last_resume_gap_ms = None
         self._capture_session += 1
         session = self._capture_session
@@ -139,6 +140,8 @@ class AudioInputPlugin(Plugin):
             time_info: CaptureTimeInfo,
             status: CaptureStatus,
         ) -> None:
+            if status:
+                return
             self._enqueue_callback(session=session, samples=bytes(samples))
 
         return callback

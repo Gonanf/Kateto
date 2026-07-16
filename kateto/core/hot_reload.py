@@ -117,7 +117,7 @@ class HotReloadController:
             try:
                 self._validate_workflows(resolved)
                 config = self._load_config(resolved)
-                if config is not None and await self._refresh_discovered(config, path=resolved):
+                if self._should_refresh(resolved) and config is not None and await self._refresh_discovered(config, path=resolved):
                     return
                 for plugin in self._plugins_to_replace(resolved):
                     await self.manager.replace_plugin(plugin, self._replacement(plugin, path=resolved, config=config))
@@ -170,6 +170,9 @@ class HotReloadController:
         if config_path.is_file():
             return load_config(config_dir=self.watched_root)
         return None
+
+    def _should_refresh(self, path: Path) -> bool:
+        return path.name == "config.toml" or self._discovery_factory is not None and path.suffix.casefold() == ".py"
 
     def _is_watched(self, path: Path) -> bool:
         return any(path.is_relative_to(root) for root in (self.watched_root, *self.source_roots))
