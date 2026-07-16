@@ -9,7 +9,14 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Footer, Header, Input, Label, Static, TabbedContent, TabPane
 
-from kateto.core.event import EventEnvelope, EventModel, PluginErrorData
+from kateto.core.event import (
+    AudioInputStatusData,
+    AudioOutputStatusData,
+    EventEnvelope,
+    EventModel,
+    PluginErrorData,
+    VoiceStatusData,
+)
 from kateto.core.hot_reload import HotReloadController, ReloadContext, ReplacementFactory
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
@@ -87,6 +94,7 @@ class KatetoApp(App[None]):
         self._events: list[str] = []
         self._notifications: list[str] = []
         self._voice_status: dict[str, str] = {voice: "idle" for voice in runtime.workflow_voices}
+        self._audio_status: dict[str, str] = {}
         self._selected_plugin: str | None = None
         self._selected_event: str | None = None
         self._controller: HotReloadController | None = None
@@ -279,6 +287,7 @@ class KatetoApp(App[None]):
         if isinstance(envelope.data, PluginErrorData):
             self._notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}")
         self._update_voice_status(envelope)
+        self._update_audio_status(envelope)
 
     def _refresh_view_after_event(self) -> None:
         if self.is_mounted:
@@ -305,7 +314,11 @@ class KatetoApp(App[None]):
         return tuple(plugins.values())
 
     def _plugin_state(self) -> str:
-        return "\n".join(f"{plugin.name:<24} {'ON' if plugin.enabled else 'OFF'}" for plugin in self._available_plugins()) or "no plugins"
+        return "\n".join(
+            f"{plugin.name:<24} {'ON' if plugin.enabled else 'OFF'}"
+            f"{f' · {self._audio_status[plugin.name]}' if plugin.name in self._audio_status else ''}"
+            for plugin in self._available_plugins()
+        ) or "no plugins"
 
     def _history_text(self) -> str:
         name = self._selected_plugin
@@ -336,13 +349,14 @@ class KatetoApp(App[None]):
         return "\n".join(f"{voice} · {self._voice_status.get(voice, 'idle')}" for voice in self.runtime.workflow_voices) or "no voices"
 
     def _update_voice_status(self, envelope: EventEnvelope[BaseModel]) -> None:
-        data = envelope.data
-        voice = getattr(data, "voice", None) or getattr(data, "voice_id", None) or envelope.source
-        if voice not in self.runtime.workflow_voices:
-            return
-        status = {"voice_idle": "idle", "generate": "thinking", "workflow_run": "thinking", "workflow_started": "thinking", "text_chunk": "talking", "audio_output": "talking", "transcription": "waiting"}.get(envelope.name)
-        if status is not None:
-            self._voice_status[voice] = status
+        if isinstance(envelope.data, VoiceStatusData) and envelope.data.voice in self.runtime.workflow_voices:
+            self._voice_status[envelope.data.voice] = envelope.data.status.value
+
+    def _update_audio_status(self, envelope: EventEnvelope[BaseModel]) -> None:
+        status_data = envelope.data
+        if isinstance(status_data, AudioInputStatusData | AudioOutputStatusData):
+            plugin = envelope.source.split("/", maxsplit=1)[0]
+            self._audio_status[plugin] = status_data.status.value
 
     def _format_workflows(self) -> str:
         groups: list[str] = []

@@ -11,7 +11,17 @@ from watchdog.events import FileCreatedEvent, FileModifiedEvent
 from textual.widgets import Button, Input
 
 from kateto.core.hot_reload import HotReloadController, ReloadContext, _ReloadHandler
-from kateto.core.event import PluginErrorData, VoiceIdleData, WorkflowRunData
+from kateto.core.event import (
+    AudioInputStatus,
+    AudioInputStatusData,
+    AudioOutputStatus,
+    AudioOutputStatusData,
+    PluginErrorData,
+    VoiceIdleData,
+    VoiceStatus,
+    VoiceStatusData,
+    WorkflowRunData,
+)
 from kateto.core.plugin import Plugin
 from kateto.core.manager import PluginManager
 from kateto.core.workflow_engine import WorkflowEngine
@@ -470,5 +480,49 @@ async def test_tui_workspace_tabs_status_history_and_json_composer(tmp_path: Pat
         await manager.emit("error", PluginErrorData(plugin="fixture_plugin", event_name="tui_event", error_type="RuntimeError", message="boom"), source="fixture_plugin")
         await pilot.pause()
         assert "ERROR [fixture_plugin]: boom" in app._notifications
+
+    assert not runtime.is_started
+
+
+@pytest.mark.asyncio
+async def test_tui_maps_typed_voice_and_audio_status_events(tmp_path: Path) -> None:
+    # Given: a live TUI with one voice and input/output audio plugins.
+    manager = PluginManager()
+    input_plugin = _FixturePlugin()
+    input_plugin.name = "audio_input_mic"
+    output_plugin = _FixturePlugin()
+    output_plugin.name = "audio_output_player"
+    engine = WorkflowEngine(config_dir=tmp_path)
+    runtime = _RuntimeOwnerLike(
+        manager=manager,
+        runtime_plugins=(input_plugin, output_plugin, engine),
+        workflow_engine=engine,
+        workflow_voices=("Conquest",),
+    )
+    app = KatetoApp(runtime=runtime)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        # When: observed typed lifecycle events transition voice and audio state.
+        await manager.emit("voice_status", VoiceStatusData(voice="Conquest", status=VoiceStatus.WAITING), source="Conquest")
+        await manager.emit("voice_status", VoiceStatusData(voice="Conquest", status=VoiceStatus.THINKING), source="Conquest")
+        await manager.emit("voice_status", VoiceStatusData(voice="Conquest", status=VoiceStatus.TALKING), source="Conquest")
+        await manager.emit("audio_input_status", AudioInputStatusData(status=AudioInputStatus.RECORDING), source="audio_input_mic/mic")
+        await manager.emit("audio_output_status", AudioOutputStatusData(status=AudioOutputStatus.PLAYING), source="audio_output_player")
+        await pilot.pause()
+
+        # Then: each typed event's payload is the displayed status.
+        assert "Conquest · talking" in app._voice_text()
+        assert "ON · recording" in next(line for line in app.plugin_text.splitlines() if line.startswith("audio_input_mic"))
+        assert "ON · playing" in next(line for line in app.plugin_text.splitlines() if line.startswith("audio_output_player"))
+
+        await manager.emit("voice_status", VoiceStatusData(voice="Conquest", status=VoiceStatus.IDLE), source="Conquest")
+        await manager.emit("audio_input_status", AudioInputStatusData(status=AudioInputStatus.IDLE), source="audio_input_mic/mic")
+        await manager.emit("audio_output_status", AudioOutputStatusData(status=AudioOutputStatus.IDLE), source="audio_output_player")
+        await pilot.pause()
+        assert "Conquest · idle" in app._voice_text()
+        assert "ON · idle" in next(line for line in app.plugin_text.splitlines() if line.startswith("audio_input_mic"))
+        assert "ON · idle" in next(line for line in app.plugin_text.splitlines() if line.startswith("audio_output_player"))
 
     assert not runtime.is_started
