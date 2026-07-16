@@ -11,6 +11,7 @@ from kateto.core.plugin import Plugin
 from kateto.live import EventRuntimeConfigurationError, EventRuntimeDependencies
 from kateto.plugins.audio_input.base import AudioInputConfig, CaptureCallback
 from kateto.run_mode import RuntimeDependencies, RuntimeOwner, build_runtime_owner, run_event_runtime
+from kateto.plugins.system.tui_runtime import TuiPluginConfiguration
 
 
 class QuietVad:
@@ -151,6 +152,36 @@ def test_run_owner_reports_actionable_calendar_provider_unavailability_without_f
     assert "Google Calendar provider is unavailable" in failure.value.reason
     assert "credentials are missing" in failure.value.reason
     assert "google-calendar-credentials.json" in failure.value.reason
+
+
+@pytest.mark.asyncio
+async def test_run_owner_exposes_typed_audio_configuration_seam(tmp_path: Path) -> None:
+    # Given: a production runtime configured with microphone and speaker devices.
+    _write_run_config(tmp_path)
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            "[plugin.audio_output_player]\nenabled = true",
+            "[plugin.audio_output_player]\nenabled = true\ndevice = 'fixture-speaker'",
+        ),
+        encoding="utf-8",
+    )
+    captures = RecordingCaptureFactory()
+    assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, CalendarFactory()))
+
+    # When: the TUI runtime seam is queried and updated.
+    configurations = {item.plugin: item for item in assembly.plugin_configurations}
+    await assembly.configure_plugin(
+        "audio_input_mic",
+        TuiPluginConfiguration(plugin="audio_input_mic", microphone="updated-mic"),
+    )
+
+    # Then: typed controls expose both audio endpoints without starting or rebuilding audio plugins.
+    assert configurations["audio_input_mic"].microphone == "fixture-input"
+    assert configurations["audio_output_player"].speaker == "fixture-speaker"
+    updated = assembly.plugin_configuration("audio_input_mic")
+    assert updated is not None
+    assert updated.microphone == "updated-mic"
 
 
 @pytest.mark.asyncio

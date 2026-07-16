@@ -20,6 +20,7 @@ from kateto.live import (
 )
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
 from kateto.plugins.connector.calendar import CalendarFailure, build_google_calendar_connector
+from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration
 
 
 class CalendarConnectorFactory(Protocol):
@@ -41,16 +42,18 @@ class RuntimeComponents:
 
 
 @final
-class RuntimeOwner:
+class RuntimeOwner(TuiConfigurationRuntime):
     def __init__(
         self,
         *,
         event_runtime: EventRuntime,
         components: RuntimeComponents,
+        plugin_configurations: tuple[TuiPluginConfiguration, ...] = (),
     ) -> None:
         self._event_runtime = event_runtime
         self._components = components
         self._started = False
+        self._plugin_configurations = {item.plugin: item for item in plugin_configurations}
 
     @property
     def manager(self) -> PluginManager:
@@ -91,6 +94,20 @@ class RuntimeOwner:
     @property
     def is_started(self) -> bool:
         return self._started
+
+    @property
+    def plugin_configurations(self) -> tuple[TuiPluginConfiguration, ...]:
+        return tuple(self._plugin_configurations.values())
+
+    def plugin_configuration(self, name: str) -> TuiPluginConfiguration | None:
+        return self._plugin_configurations.get(name)
+
+    async def configure_plugin(self, name: str, configuration: TuiPluginConfiguration) -> None:
+        if configuration.plugin != name:
+            raise ValueError("plugin configuration name must match its key")
+        if name not in self._plugin_configurations:
+            raise ValueError(f"plugin configuration is not editable: {name}")
+        self._plugin_configurations[name] = configuration
 
     async def start(self) -> None:
         if self._started:
@@ -173,7 +190,18 @@ def build_runtime_owner(
                 if settings.enabled
             ),
         ),
+        plugin_configurations=_tui_plugin_configurations(config),
     )
+
+
+def _tui_plugin_configurations(config: LoadedConfig) -> tuple[TuiPluginConfiguration, ...]:
+    configurations: list[TuiPluginConfiguration] = []
+    for name, setting in config.settings.plugin.items():
+        if name.startswith("audio_input_"):
+            configurations.append(TuiPluginConfiguration(plugin=name, microphone=setting.device))
+        elif name == "audio_output_player":
+            configurations.append(TuiPluginConfiguration(plugin=name, speaker=setting.device))
+    return tuple(configurations)
 
 
 async def run_event_runtime(

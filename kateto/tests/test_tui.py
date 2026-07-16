@@ -8,7 +8,7 @@ import sys
 
 import pytest
 from watchdog.events import FileCreatedEvent, FileModifiedEvent
-from textual.widgets import Input
+from textual.widgets import Button, Input
 
 from kateto.core.hot_reload import HotReloadController, ReloadContext, _ReloadHandler
 from kateto.core.event import PluginErrorData, VoiceIdleData, WorkflowRunData
@@ -16,6 +16,7 @@ from kateto.core.plugin import Plugin
 from kateto.core.manager import PluginManager
 from kateto.core.workflow_engine import WorkflowEngine
 from kateto.plugins.system.tui import KatetoApp, TuiEventData
+from kateto.plugins.system.tui_runtime import TuiPluginConfiguration
 
 
 class _FixturePlugin(Plugin):
@@ -60,6 +61,7 @@ class _RuntimeOwnerLike:
         workflow_engine: WorkflowEngine,
         mcp_servers: tuple[_McpRuntime, ...] = (),
         workflow_voices: tuple[str, ...] = (),
+        plugin_configurations: tuple[TuiPluginConfiguration, ...] = (),
     ) -> None:
         self.manager = manager
         self.runtime_plugins = runtime_plugins
@@ -69,6 +71,17 @@ class _RuntimeOwnerLike:
         self.workflow_voices = workflow_voices
         self.hot_reload_controller = None
         self.is_started = False
+        self._plugin_configurations = {item.plugin: item for item in plugin_configurations}
+
+    @property
+    def plugin_configurations(self) -> tuple[TuiPluginConfiguration, ...]:
+        return tuple(self._plugin_configurations.values())
+
+    def plugin_configuration(self, name: str) -> TuiPluginConfiguration | None:
+        return self._plugin_configurations.get(name)
+
+    async def configure_plugin(self, name: str, configuration: TuiPluginConfiguration) -> None:
+        self._plugin_configurations[name] = configuration
 
     async def start(self) -> None:
         for plugin in self.runtime_plugins:
@@ -146,6 +159,41 @@ async def test_tui_renders_live_runtime_state_and_controls(tmp_path: Path) -> No
         assert "Jane · daily · ⚪ INACTIVE" in app.workflow_text
         assert "runtime ready" in app.event_text
         assert plugin.enabled
+
+    assert not runtime.is_started
+
+
+@pytest.mark.asyncio
+async def test_tui_uses_bounded_manager_history_and_applies_audio_configuration(tmp_path: Path) -> None:
+    # Given: a manager with a bounded history and typed device configuration controls.
+    manager = PluginManager(event_limit=2)
+    plugin = _FixturePlugin()
+    engine = WorkflowEngine(config_dir=tmp_path)
+    runtime = _RuntimeOwnerLike(
+        manager=manager,
+        runtime_plugins=(plugin, engine),
+        workflow_engine=engine,
+        plugin_configurations=(TuiPluginConfiguration(plugin="audio_input_mic", microphone="old"),),
+    )
+    app = KatetoApp(runtime=runtime)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await manager.emit("tui_event", TuiEventData(message="old"), source="fixture_plugin")
+        await manager.emit("tui_event", TuiEventData(message="middle"), source="fixture_plugin")
+        await manager.emit("tui_event", TuiEventData(message="new"), source="fixture_plugin")
+        await pilot.click("#select-fixture_plugin")
+        await pilot.pause()
+        assert "old" not in app._history_text()
+        assert "new" in app._history_text()
+
+        app.query_one("#microphone-audio_input_mic", Input).value = "configured-mic"
+        app.query_one("#apply-config-audio_input_mic", Button).press()
+        await pilot.pause()
+        configured = runtime.plugin_configuration("audio_input_mic")
+        assert configured is not None
+        assert configured.microphone == "configured-mic"
+        assert any(notification.startswith("CONFIGURED audio_input_mic") for notification in app._notifications)
 
     assert not runtime.is_started
 

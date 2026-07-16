@@ -86,7 +86,6 @@ class KatetoApp(App[None]):
         self.replacement_factory = replacement_factory or (self._fixture_replacement_factory if fixture else None)
         self._events: list[str] = []
         self._notifications: list[str] = []
-        self._plugin_history: dict[str, list[str]] = {}
         self._voice_status: dict[str, str] = {voice: "idle" for voice in runtime.workflow_voices}
         self._selected_plugin: str | None = None
         self._selected_event: str | None = None
@@ -126,6 +125,11 @@ class KatetoApp(App[None]):
                 for plugin in self._available_plugins():
                     yield self._plugin_controls(plugin)[0]
                 yield Static(id="plugin-config")
+                for configuration in self._configuration_items():
+                    yield Label(f"{configuration.plugin} device configuration", classes="section-title")
+                    yield Input(value=configuration.microphone or "", placeholder="microphone device", id=f"microphone-{configuration.plugin}")
+                    yield Input(value=configuration.speaker or "", placeholder="speaker device", id=f"speaker-{configuration.plugin}")
+                    yield Button("Apply device configuration", id=f"apply-config-{configuration.plugin}")
             with TabPane("Voices", id="voices-tab"):
                 yield Static("RUNTIME VOICES", classes="section-title")
                 yield Static(id="voice-state")
@@ -178,15 +182,22 @@ class KatetoApp(App[None]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id or ""
         if button_id == "send-event":
+            self.query_one("#composer-input", Input).focus()
             self.run_worker(self._submit_composer(), exclusive=False)
             return
         if button_id.startswith("select-"):
             self._selected_plugin = button_id.removeprefix("select-")
             self._refresh_view()
             return
+        if button_id.startswith("apply-config-"):
+            self.run_worker(self._configure_plugin(button_id.removeprefix("apply-config-")), exclusive=False)
+            return
         prefix, _, name = button_id.partition("-")
         if prefix in {"enable", "disable"} and name:
             self.run_worker(self._set_plugin(name, prefix == "enable"), exclusive=False)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        event.stop()
 
     async def _submit_composer(self) -> None:
         input_widget = self.query_one("#composer-input", Input)
@@ -232,25 +243,41 @@ class KatetoApp(App[None]):
             await self.manager.disable_plugin(name)
         self._refresh_view()
 
+    async def _configure_plugin(self, name: str) -> None:
+        if not isinstance(self.runtime, TuiConfigurationRuntime):
+            return
+        current = self.runtime.plugin_configuration(name)
+        if current is None:
+            self._notify(f"ERROR: unknown plugin configuration {name}")
+            self._refresh_view()
+            return
+        microphone = self.query_one(f"#microphone-{name}", Input).value.strip() or None
+        speaker = self.query_one(f"#speaker-{name}", Input).value.strip() or None
+        await self.runtime.configure_plugin(
+            name,
+            TuiPluginConfiguration(
+                plugin=name,
+                microphone=microphone,
+                speaker=speaker,
+                values=current.values,
+            ),
+        )
+        self._notify(f"CONFIGURED {name}: microphone={microphone or 'default'}, speaker={speaker or 'default'}")
+        self._refresh_view()
+
     @staticmethod
     def _fixture_replacement_factory(plugin: Plugin, _context: ReloadContext) -> Plugin:
         return _FixturePlugin(plugin.name)
 
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         self._record_event(envelope)
-        if isinstance(envelope.data, PluginErrorData):
-            self._notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}")
         self._refresh_view_after_event()
 
     def _record_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         formatted = self._format_event(envelope)
         self._events.append(formatted)
-        for plugin in self._available_plugins():
-            receives = any(plugin.name in registration.receivers for registration in self.manager.get_event_registrations() if registration.name == envelope.name)
-            if envelope.source.split("/", maxsplit=1)[0] == plugin.name:
-                self._plugin_history.setdefault(plugin.name, []).append(f"SENT  {formatted}")
-            elif receives:
-                self._plugin_history.setdefault(plugin.name, []).append(f"RECV  {formatted}")
+        if isinstance(envelope.data, PluginErrorData):
+            self._notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}")
         self._update_voice_status(envelope)
 
     def _refresh_view_after_event(self) -> None:
@@ -284,13 +311,21 @@ class KatetoApp(App[None]):
         name = self._selected_plugin
         if name is None:
             return "no plugin selected"
-        return f"{name}\n" + "\n".join(self._plugin_history.get(name, ()))
+        history = self.manager.get_plugin_event_history(name)
+        sent = (f"SENT  {self._format_event(event)}" for event in history.sent)
+        received = (f"RECV  {self._format_event(event)}" for event in history.received)
+        return f"{name}\n" + "\n".join((*sent, *received))
 
     def _configuration_text(self) -> str:
-        configurations = self.runtime.plugin_configurations if isinstance(self.runtime, TuiConfigurationRuntime) else ()
+        configurations = self._configuration_items()
         if not configurations:
             return "configuration: runtime has no editable plugin settings"
         return "CONFIGURATION\n" + "\n".join(self._format_configuration(item) for item in configurations)
+
+    def _configuration_items(self) -> tuple[TuiPluginConfiguration, ...]:
+        if not isinstance(self.runtime, TuiConfigurationRuntime):
+            return ()
+        return self.runtime.plugin_configurations
 
     @staticmethod
     def _format_configuration(configuration: TuiPluginConfiguration) -> str:
