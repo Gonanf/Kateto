@@ -5,6 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, Protocol
 
+import torch
+
 from .base import AudioInputConfigurationError, SAMPLE_RATE, SileroModel
 
 
@@ -64,11 +66,16 @@ class SileroModelAdapter:
             for index in range(0, len(samples), 2)
         )
         scores: list[float] = []
-        for start in range(0, len(pcm_values), SILERO_WINDOW_SAMPLES):
-            window = pcm_values[start : start + SILERO_WINDOW_SAMPLES]
-            if len(window) < SILERO_WINDOW_SAMPLES:
-                window += (0.0,) * (SILERO_WINDOW_SAMPLES - len(window))
-            scores.append(self._model(self._to_tensor(window), sample_rate).item())
+        # ponytail: torch.no_grad prevents the Silero VAD model's internal
+        # LSTM hidden state from chaining autograd graphs across calls.
+        # Without this, ~31 inferences/sec builds an ever-growing computation
+        # graph chain through the model's state, leaking memory until OOM.
+        with torch.no_grad():
+            for start in range(0, len(pcm_values), SILERO_WINDOW_SAMPLES):
+                window = pcm_values[start : start + SILERO_WINDOW_SAMPLES]
+                if len(window) < SILERO_WINDOW_SAMPLES:
+                    window += (0.0,) * (SILERO_WINDOW_SAMPLES - len(window))
+                scores.append(self._model(self._to_tensor(window), sample_rate).item())
         return max(scores)
 
 
