@@ -14,9 +14,9 @@ from kateto.core.config import (
     ConfigValidationError,
     load_config,
 )
-from kateto.live import LiveAssemblyConfigurationError
+from kateto.live import EventRuntimeConfigurationError
 from kateto.plugins.system.tui import run_tui
-from kateto.run_mode import run_live
+from kateto.run_mode import run_event_runtime
 
 _USAGE: Final = "usage: kateto [-h] | kateto config check | kateto run | kateto smoke --fixture | kateto tui [--fixture]\n"
 _RUN_USAGE: Final = "usage: kateto run\n"
@@ -40,7 +40,7 @@ def main() -> int:
             print(_RUN_USAGE, end="")
             return 0
         case ["run"]:
-            return _run_live()
+            return _run_event_runtime()
         case ["smoke", "--fixture"]:
             evidence = Path.cwd() / ".omo" / "evidence" / "kateto-mvp" / "recovery" / "smoke-cleanup"
             return subprocess.run(
@@ -68,11 +68,11 @@ def _check_config() -> int:
     return 0
 
 
-def _run_live() -> int:
+def _run_event_runtime() -> int:
     try:
         loaded = load_config()
-        asyncio.run(run_live(loaded))
-    except (*_CONFIG_ERRORS, LiveAssemblyConfigurationError) as error:
+        asyncio.run(run_event_runtime(loaded))
+    except (*_CONFIG_ERRORS, EventRuntimeConfigurationError) as error:
         print(f"run: {error}", file=sys.stderr)
         return 2
     return 0

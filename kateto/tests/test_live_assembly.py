@@ -6,7 +6,7 @@ import pytest
 
 from kateto.core.config import load_config
 from kateto.core.event import AudioOutput, TodoItemData
-from kateto.live import LiveDependencies, build_live_conversation
+from kateto.live import EventRuntimeDependencies, build_event_runtime
 from kateto.plugins.audio_input.base import (
     AudioDeviceError,
     AudioInputConfig,
@@ -180,7 +180,7 @@ def test_default_live_assembly_loads_and_invokes_injected_silero_model(tmp_path:
     loader: SileroModelLoader = RecordingSileroModelLoader(model)
 
     # When: the production live assembly resolves its default VAD and processes PCM.
-    assembly = build_live_conversation(
+    assembly = build_event_runtime(
         load_config(config_dir=tmp_path),
         silero_model_loader=loader,
     )
@@ -204,9 +204,9 @@ async def test_configured_live_assembly_starts_and_stops_production_plugins(tmp_
     write_live_config(tmp_path)
     capture_factory = RecordingCaptureFactory()
     output_factory = RecordingOutputFactory()
-    assembly = build_live_conversation(
+    assembly = build_event_runtime(
         load_config(config_dir=tmp_path),
-        dependencies=LiveDependencies(
+        dependencies=EventRuntimeDependencies(
             vad=QuietVad(),
             capture_factory=capture_factory,
             player_factory=output_factory,
@@ -251,9 +251,9 @@ async def test_configured_live_assembly_starts_and_stops_production_plugins(tmp_
 async def test_live_assembly_persists_completed_todo_through_cli_backlog_owner(tmp_path: Path) -> None:
     # Given: a configured non-fixture live assembly with a restricted CLI allowlist.
     write_live_config(tmp_path)
-    assembly = build_live_conversation(
+    assembly = build_event_runtime(
         load_config(config_dir=tmp_path),
-        dependencies=LiveDependencies(
+        dependencies=EventRuntimeDependencies(
             vad=QuietVad(),
             capture_factory=RecordingCaptureFactory(),
             player_factory=RecordingOutputFactory(),
@@ -288,9 +288,9 @@ async def test_live_start_failure_closes_opened_resources_and_workers(tmp_path: 
     # Given: providers and output plugins can open, but deterministic capture startup fails.
     write_live_config(tmp_path)
     capture_factory = RecordingCaptureFactory(fail_on_start=True)
-    assembly = build_live_conversation(
+    assembly = build_event_runtime(
         load_config(config_dir=tmp_path),
-        dependencies=LiveDependencies(
+        dependencies=EventRuntimeDependencies(
             vad=QuietVad(),
             capture_factory=capture_factory,
             player_factory=RecordingOutputFactory(),

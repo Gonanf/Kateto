@@ -36,7 +36,7 @@ async def _enable_pipeline(
 
 
 @pytest.mark.asyncio
-async def test_audio_to_execute_emits_ordered_transcript_classification_and_three_targeted_generates(tmp_path: Path) -> None:
+async def test_audio_to_execute_emits_ordered_transcript_classification_and_one_untargeted_generate(tmp_path: Path) -> None:
     # Given: the real event bus with active P0 voices and a fixture inference boundary.
     write_references(tmp_path)
     manager = PluginManager()
@@ -54,7 +54,8 @@ async def test_audio_to_execute_emits_ordered_transcript_classification_and_thre
         await manager.emit("audio_chunk", AudioData(samples=b"\x01\x00", format="pcm_s16le"), source="fixture")
         await manager.wait_for_idle()
 
-        # Then: its visible event prefix is stable and every active P0 voice gets its own trigger.
+        # Then: its visible event prefix is stable and the subscriber contract, not the classifier,
+        # chooses active voices.
         events = manager.get_events()
         assert [event.name for event in events[:3]] == ["audio_chunk", "transcription", "classification"]
         generate_events = [event for event in events if event.name == "generate"]
@@ -62,11 +63,7 @@ async def test_audio_to_execute_emits_ordered_transcript_classification_and_thre
             (event.source, event.target, event.data.prompt)
             for event in generate_events
             if isinstance(event.data, GenerateData)
-        ] == [
-            ("executor_classifier", "jane", "plan tomorrow standup"),
-            ("executor_classifier", "doktor", "plan tomorrow standup"),
-            ("executor_classifier", "conquest", "plan tomorrow standup"),
-        ]
+        ] == [("executor_classifier", None, "plan tomorrow standup")]
         assert transcriber.received[0].format == "pcm_s16le"
         assert classifier.received == ["plan tomorrow standup"]
         assert [event.data.voice_id for event in events if event.name == "text_chunk" and isinstance(event.data, TextChunk)] == [

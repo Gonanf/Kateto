@@ -12,11 +12,11 @@ from kateto.core.plugin import Plugin
 from kateto.core.workflow import WorkflowCatalog
 from kateto.core.workflow_engine import WorkflowEngine
 from kateto.live import (
-    LiveAssemblyConfigurationError,
-    LiveConversation,
-    LiveDependencies,
+    EventRuntime,
+    EventRuntimeConfigurationError,
+    EventRuntimeDependencies,
     ManagedProvider,
-    build_live_conversation,
+    build_event_runtime,
 )
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
 from kateto.plugins.connector.calendar import CalendarFailure, build_google_calendar_connector
@@ -28,7 +28,7 @@ class CalendarConnectorFactory(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class RuntimeDependencies:
-    live: LiveDependencies | None = None
+    event_runtime: EventRuntimeDependencies | None = None
     calendar_factory: CalendarConnectorFactory | None = None
 
 
@@ -41,25 +41,23 @@ class RuntimeComponents:
 
 @final
 class RuntimeOwner:
-    """Own the configured non-audio runtime components around a live conversation."""
-
     def __init__(
         self,
         *,
-        live: LiveConversation,
+        event_runtime: EventRuntime,
         components: RuntimeComponents,
     ) -> None:
-        self._live = live
+        self._event_runtime = event_runtime
         self._components = components
         self._started = False
 
     @property
     def manager(self) -> PluginManager:
-        return self._live.manager
+        return self._event_runtime.manager
 
     @property
     def providers(self) -> tuple[ManagedProvider, ...]:
-        return self._live.providers
+        return self._event_runtime.providers
 
     @property
     def runtime_plugins(self) -> tuple[Plugin, ...]:
@@ -93,7 +91,7 @@ class RuntimeOwner:
         if self._started:
             return
         try:
-            await self._live.start()
+            await self._event_runtime.start()
             for plugin in self.runtime_plugins:
                 await self.manager.enable_plugin(plugin)
             for server in self.mcp_servers:
@@ -117,7 +115,7 @@ class RuntimeOwner:
                 try:
                     await self._close_mcp_servers()
                 finally:
-                    await self._live.stop()
+                    await self._event_runtime.stop()
         finally:
             self._started = False
 
@@ -137,19 +135,29 @@ def build_runtime_owner(
     dependencies: RuntimeDependencies | None = None,
 ) -> RuntimeOwner:
     resolved_dependencies = RuntimeDependencies() if dependencies is None else dependencies
-    live = build_live_conversation(config, dependencies=resolved_dependencies.live)
+    event_runtime = build_event_runtime(
+        config,
+        dependencies=resolved_dependencies.event_runtime,
+    )
     runtime_plugins = (
         WorkflowEngine(config_dir=config.paths.config_dir),
         *_configured_calendar(config, resolved_dependencies),
     )
-    mcp_servers = _authorized_mcp_servers(live.manager, config)
+    mcp_servers = _authorized_mcp_servers(event_runtime.manager, config)
     controller = (
-        HotReloadController(manager=live.manager, watched_root=config.paths.config_dir)
+        HotReloadController(
+            manager=event_runtime.manager,
+            watched_root=config.paths.config_dir,
+            source_roots=(
+                Path(__file__).resolve().parent / "plugins",
+                Path(__file__).resolve().parent / "voices",
+            ),
+        )
         if config.settings.kateto.hot_reload
         else None
     )
     return RuntimeOwner(
-        live=live,
+        event_runtime=event_runtime,
         components=RuntimeComponents(
             plugins=runtime_plugins,
             mcp_servers=mcp_servers,
@@ -158,7 +166,7 @@ def build_runtime_owner(
     )
 
 
-async def run_live(
+async def run_event_runtime(
     config: LoadedConfig,
     *,
     dependencies: RuntimeDependencies | None = None,
@@ -186,14 +194,14 @@ def _configured_calendar(
                 endpoint=settings.endpoint,
             )
         except CalendarFailure as error:
-            raise LiveAssemblyConfigurationError(
+            raise EventRuntimeConfigurationError(
                 field="plugin.connector_calendar",
                 reason=f"Google Calendar provider is unavailable: {error}",
             ) from error
     else:
         connector = factory(config.paths.config_dir)
     if connector.name != "connector_calendar":
-        raise LiveAssemblyConfigurationError(
+        raise EventRuntimeConfigurationError(
             field="plugin.connector_calendar",
             reason="factory must return the connector_calendar plugin",
         )
@@ -214,7 +222,3 @@ def _authorized_mcp_servers(
         if voice.enabled
         for server_name in voice.mcp_servers
     )
-
-
-RunOwner = RuntimeOwner
-LiveRuntime = RuntimeOwner

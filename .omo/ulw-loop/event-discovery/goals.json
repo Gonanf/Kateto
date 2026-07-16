@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "evidenceLayoutVersion": 2,
+  "createdAt": "2026-07-16T13:14:54.202Z",
+  "updatedAt": "2026-07-16T13:16:53.265Z",
+  "briefPath": ".omo/ulw-loop/event-discovery/brief.md",
+  "goalsPath": ".omo/ulw-loop/event-discovery/goals.json",
+  "ledgerPath": ".omo/ulw-loop/event-discovery/ledger.jsonl",
+  "codexGoalMode": "aggregate",
+  "goals": [
+    {
+      "id": "G001-refactor-kateto-runtime-from-manual",
+      "title": "Refactor Kateto runtime from manual pipeline assembly to automatic ev...",
+      "objective": "Refactor Kateto runtime from manual pipeline assembly to automatic event-driven plugin discovery. live.py must no longer own an ordered audio->Whisper->classifier->voices->TTS/player pipeline or hard-coded P0 voice routing. Add a typed discovery/registry layer that imports configured plugin and voice modules, finds enabled Plugin subclasses/factories from config, instantiates them with dependency injection, registers them with PluginManager, and relies exclusively on each plugin on_<event> handlers for routing. Update ClassifierExecutor to emit a prompt/generate event without enumerating voice names; VoiceAgents subscribe to the prompt/generate contract; audio processor/output remain event subscribers. Discovery must be reusable by RunOwner and hot-reloadable: create/modify/delete of configured plugin/voice definitions updates subscriptions without a second event loop or stale instances. Preserve fixture injection and existing event contracts; no compatibility pipeline aliases. Goal invariant: event flow observable by manager registrations and passes with dynamically discovered plugin set whose order is shuffled. Stop only when red tests demonstrate current manual assembly/voice hard-coding, green tests prove discovery, shuffled event-driven end-to-end flow, dynamic add/remove reload, cancellation/cleanup, focused suite and scoped basedpyright pass. Preserve unrelated fixes (Silero deps, calendar, smoke, types) and do not revert them. Use anyio and typed implementation. Evidence must include .omo/evidence/kateto-mvp/recovery/event-discovery/DoneClaim.json, red/green logs, event registration trace, dynamic reload trace, cleanup receipt, and changed files.",
+      "status": "in_progress",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "Run the event-discovery fixture with enabled plugin and voice definitions in shuffled order; startup must dynamically instantiate and register only the configured Plugin subclasses/factories, then audio_chunk must yield transcription, classification, untargeted generate, voice text_chunk, audio_output, and player delivery through subscribers.",
+          "userModel": "happy",
+          "expectedEvidence": ".omo/evidence/ulw/event-discovery/G001-refactor-kateto-runtime-from-manual/a1/red-manual-assembly.log; .omo/evidence/ulw/event-discovery/G001-refactor-kateto-runtime-from-manual/a1/green-discovery-shuffled.log; .omo/evidence/ulw/event-discovery/G001-refactor-kateto-runtime-from-manual/a1/event-registration-trace.json",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C002",
+          "scenario": "With a running RuntimeOwner and watched config definitions, add then remove an enabled configured plugin/voice definition; reload must replace subscriptions on the existing manager/loop, cancel old work, clear old queues, and leave no stale receiver or instance.",
+          "userModel": "edge",
+          "expectedEvidence": ".omo/evidence/ulw/event-discovery/G001-refactor-kateto-runtime-from-manual/a1/dynamic-reload-trace.json; .omo/evidence/ulw/event-discovery/G001-refactor-kateto-runtime-from-manual/a1/cleanup-receipt.json",
+          "essential": true,
+          "capturedEvidence": null,
+          "status": "pending"
+        },
+        {
+          "id": "C003",
+          "scenario": "Run the focused runtime/manager/conversation/reload suite and scoped basedpyright for every changed Python file after the dynamic scenarios; records must preserve fixture injection and existing contracts without pipeline aliases.",
+          "userModel": "regression",
+          "expectedEvidence": ".omo/evidence/ulw/event-discovery/G001-refactor-kateto-runtime-from-manual/a1/focused-suite.log; .omo/evidence/ulw/event-discovery/G001-refactor-kateto-runtime-from-manual/a1/basedpyright.log; .omo/evidence/ulw/event-discovery/G001-refactor-kateto-runtime-from-manual/a1/changed-files.txt; .omo/evidence/ulw/event-discovery/G001-refactor-kateto-runtime-from-manual/a1/DoneClaim.json; .omo/evidence/kateto-mvp/recovery/event-discovery/DoneClaim.json",
+          "essential": false,
+          "capturedEvidence": null,
+          "status": "pending"
+        }
+      ],
+      "attempt": 1,
+      "createdAt": "2026-07-16T13:14:54.202Z",
+      "updatedAt": "2026-07-16T13:16:53.265Z",
+      "startedAt": "2026-07-16T13:15:04.277Z"
+    }
+  ],
+  "codexObjective": "Complete the durable ulw-loop plan in .omo/ulw-loop/event-discovery/goals.json, including later accepted/appended stories, under the original brief constraints; use .omo/ulw-loop/event-discovery/ledger.jsonl as the audit trail.",
+  "activeGoalId": "G001-refactor-kateto-runtime-from-manual"
+}

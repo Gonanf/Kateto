@@ -14,6 +14,7 @@ from kateto.core.storage import VoiceFileStore
 _CREATE_PATTERN: Final[re.Pattern[str]] = re.compile(r"^(?:plan|todo|task|remember)\s+(.+)$", re.IGNORECASE)
 _COMPLETE_PATTERN: Final[re.Pattern[str]] = re.compile(r"^(?:complete|done|finish)\s+(?:todo\s+)?(.+)$", re.IGNORECASE)
 _TODO_LINE: Final[re.Pattern[str]] = re.compile(r"^- \[([ x])\] (.+)$")
+_SHARED_VOICE: Final[str] = "shared"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,9 +37,10 @@ type TodoAction = CreateTodo | CompleteTodo
 
 
 class TodoListExecutor(Plugin):
-    def __init__(self, *, config_dir: Path, voice: str) -> None:
+    def __init__(self, *, config_dir: Path, voice: str | None = None) -> None:
         super().__init__("executor_todo_list")
-        self._store = VoiceFileStore.for_voice(config_dir=config_dir, voice=voice)
+        store_voice = _SHARED_VOICE if voice is None else voice
+        self._store = VoiceFileStore.for_voice(config_dir=config_dir, voice=store_voice)
 
     async def initialize(self) -> None:
         manager = self._manager()

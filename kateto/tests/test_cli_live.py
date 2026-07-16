@@ -8,7 +8,7 @@ import pytest
 from kateto import __main__ as cli
 
 
-def test_help_exposes_the_live_run_path() -> None:
+def test_help_exposes_the_event_runtime_path() -> None:
     # Given: the installed module entry point.
     command = [sys.executable, "-m", "kateto"]
 
@@ -23,18 +23,18 @@ def test_help_exposes_the_live_run_path() -> None:
     assert "usage: kateto run" in run_help.stdout
 
 
-def test_run_dispatches_to_the_live_runner_without_a_fixture_substitute(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_dispatches_to_the_event_runtime_without_a_fixture_substitute(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: a live runner probe and a configuration loader probe.
     calls: list[str] = []
 
     def load_config_probe() -> str:
         return "configured-live"
 
-    async def run_live_probe(config: str) -> None:
+    async def run_event_runtime_probe(config: str) -> None:
         calls.append(config)
 
     monkeypatch.setattr(cli, "load_config", load_config_probe)
-    monkeypatch.setattr(cli, "run_live", run_live_probe)
+    monkeypatch.setattr(cli, "run_event_runtime", run_event_runtime_probe)
     monkeypatch.setattr(sys, "argv", ["kateto", "run"])
 
     # When: the non-fixture run command is invoked.

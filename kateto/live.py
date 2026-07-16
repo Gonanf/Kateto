@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Final, Protocol, Self, override
+from typing import Protocol, Self
 
-from kateto.core.config import LoadedConfig, PluginSettings, VoiceSettings
+from kateto.core.config import LoadedConfig
+from kateto.core.discovery import (
+    DiscoveryContext,
+    DiscoveryDependencies,
+    LiveAssemblyConfigurationError,
+    PcmStreamingProvider,
+    PluginRegistry,
+    create_voice_provider,
+    discover_plugins,
+    first_enabled_input_settings,
+    required_plugin_settings,
+)
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
-from kateto.plugins.audio_input import MeetAudioInput, MicrophoneAudioInput
 from kateto.plugins.audio_input.base import (
     DEFAULT_VAD_THRESHOLD,
     CaptureFactory,
@@ -18,32 +27,20 @@ from kateto.plugins.audio_input.silero import (
     SileroModelLoader,
     load_silero_model,
 )
-from kateto.plugins.audio_processor import WhisperAudioProcessor
 from kateto.plugins.audio_output.base import AudioOutputFactory
-from kateto.plugins.audio_output.player import AudioOutputPlayer
-from kateto.plugins.audio_output.zonos import ZonosAudioOutput
-from kateto.plugins.connector.cli import CliConnector
-from kateto.plugins.executor import ClassifierExecutor, InterruptExecutor, TodoListExecutor
-from kateto.plugins.work.backlog import BacklogOwner
 from kateto.providers import ClassifierProvider, WhisperProvider
-from kateto.voices import Conquest, Doktor, Jane, OpenAICompatibleProvider, VoiceAgent
 
 
-_VOICE_TYPES: Final[tuple[tuple[str, type[VoiceAgent]], ...]] = (
-    ("jane", Jane),
-    ("doktor", Doktor),
-    ("conquest", Conquest),
-)
+EventRuntimeConfigurationError = LiveAssemblyConfigurationError
 
 
-@dataclass(frozen=True, slots=True)
-class LiveAssemblyConfigurationError(Exception):
-    field: str
-    reason: str
-
-    @override
-    def __str__(self) -> str:
-        return f"live assembly requires {self.field}: {self.reason}"
+__all__ = [
+    "EventRuntimeConfigurationError",
+    "EventRuntime",
+    "EventRuntimeDependencies",
+    "ManagedProvider",
+    "build_event_runtime",
+]
 
 
 class ManagedProvider(Protocol):
@@ -56,24 +53,24 @@ class ManagedProvider(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class LiveDependencies:
+class EventRuntimeDependencies:
     vad: VoiceActivityDetector
     capture_factory: CaptureFactory | None = None
     player_factory: AudioOutputFactory | None = None
+    zonos_provider: PcmStreamingProvider | None = None
 
 
-class LiveConversation:
+class EventRuntime:
     def __init__(
         self,
         *,
         manager: PluginManager,
-        plugins: tuple[Plugin, ...],
-        input_plugins: tuple[Plugin, ...],
+        registry: PluginRegistry,
         providers: tuple[ManagedProvider, ...],
     ) -> None:
         self.manager: PluginManager = manager
-        self._plugins: tuple[Plugin, ...] = plugins
-        self._input_plugins: tuple[Plugin, ...] = input_plugins
+        self._plugins: frozenset[Plugin] = registry.plugins
+        self._input_plugins: frozenset[Plugin] = registry.input_plugins
         self._providers: tuple[ManagedProvider, ...] = providers
         self._started: bool = False
 
@@ -87,7 +84,9 @@ class LiveConversation:
         try:
             for provider in self._providers:
                 _ = await provider.__aenter__()
-            for plugin in self._plugins:
+            for plugin in self._plugins - self._input_plugins:
+                await self.manager.enable_plugin(plugin)
+            for plugin in self._input_plugins:
                 await self.manager.enable_plugin(plugin)
         except BaseException:  # noqa: BROAD_EXCEPT_OK
             await self.stop()
@@ -103,42 +102,36 @@ class LiveConversation:
         self._started = False
 
 
-def build_live_conversation(
+def build_event_runtime(
     config: LoadedConfig,
     *,
-    dependencies: LiveDependencies | None = None,
+    dependencies: EventRuntimeDependencies | None = None,
     silero_model_loader: SileroModelLoader | None = None,
-) -> LiveConversation:
+) -> EventRuntime:
     resolved_dependencies = (
         _default_dependencies(config, silero_model_loader=silero_model_loader)
         if dependencies is None
         else dependencies
     )
-    settings = config.settings
-    whisper = WhisperProvider(_required_plugin(config, "audio_processor_whisper"))
-    classifier = ClassifierProvider(_required_plugin(config, "executor_classifier"))
-    voice_provider = _voice_provider(_required_plugin(config, "voice_llm"))
-    inputs = _audio_inputs(config, resolved_dependencies)
-    voices = _voices(config.paths.config_dir, settings.voice, voice_provider)
-    plugins = (
-        InterruptExecutor(),
-        WhisperAudioProcessor(provider=whisper),
-        ClassifierExecutor(classifier=classifier),
-        TodoListExecutor(config_dir=config.paths.config_dir, voice="doktor"),
-        CliConnector(settings=settings.cli, working_directory=config.paths.config_dir),
-        BacklogOwner(backlog_path=config.paths.config_dir / "product_backlog.json"),
-        *voices,
-        ZonosAudioOutput(_required_plugin(config, "audio_output_zonos")),
-        AudioOutputPlayer(
-            _required_plugin(config, "audio_output_player"),
-            player_factory=resolved_dependencies.player_factory,
+    whisper = WhisperProvider(required_plugin_settings(config, "audio_processor_whisper"))
+    classifier = ClassifierProvider(required_plugin_settings(config, "executor_classifier"))
+    registry = discover_plugins(
+        DiscoveryContext(
+            config=config,
+            dependencies=DiscoveryDependencies(
+                vad=resolved_dependencies.vad,
+                capture_factory=resolved_dependencies.capture_factory,
+                player_factory=resolved_dependencies.player_factory,
+                whisper_provider=whisper,
+                classifier=classifier,
+                voice_provider=create_voice_provider(config),
+                zonos_provider=resolved_dependencies.zonos_provider,
+            ),
         ),
-        *inputs,
     )
-    return LiveConversation(
+    return EventRuntime(
         manager=PluginManager(),
-        plugins=plugins,
-        input_plugins=inputs,
+        registry=registry,
         providers=(whisper, classifier),
     )
 
@@ -147,12 +140,8 @@ def _default_dependencies(
     config: LoadedConfig,
     *,
     silero_model_loader: SileroModelLoader | None = None,
-) -> LiveDependencies:
-    input_settings = next(
-        settings
-        for name in ("audio_input_mic", "audio_input_meet")
-        if (settings := config.settings.plugin.get(name)) is not None and settings.enabled
-    )
+) -> EventRuntimeDependencies:
+    input_settings = first_enabled_input_settings(config)
     threshold = (
         DEFAULT_VAD_THRESHOLD
         if input_settings.vad_threshold is None
@@ -163,63 +152,4 @@ def _default_dependencies(
         if silero_model_loader is None
         else silero_model_loader.load_model()
     )
-    return LiveDependencies(vad=SileroVad(model, threshold=threshold))
-
-
-def _required_plugin(config: LoadedConfig, name: str) -> PluginSettings:
-    settings = config.settings.plugin.get(name)
-    if settings is None:
-        raise LiveAssemblyConfigurationError(field=f"plugin.{name}", reason="must be configured")
-    if not settings.enabled:
-        raise LiveAssemblyConfigurationError(field=f"plugin.{name}.enabled", reason="must be true")
-    return settings
-
-
-def _audio_inputs(config: LoadedConfig, dependencies: LiveDependencies) -> tuple[Plugin, ...]:
-    plugins: list[Plugin] = []
-    mic_settings = config.settings.plugin.get("audio_input_mic")
-    if mic_settings is not None and mic_settings.enabled:
-        plugins.append(
-            MicrophoneAudioInput(
-                mic_settings,
-                vad=dependencies.vad,
-                capture_factory=dependencies.capture_factory,
-            ),
-        )
-    meet_settings = config.settings.plugin.get("audio_input_meet")
-    if meet_settings is not None and meet_settings.enabled:
-        plugins.append(
-            MeetAudioInput(
-                meet_settings,
-                vad=dependencies.vad,
-                capture_factory=dependencies.capture_factory,
-            ),
-        )
-    if not plugins:
-        raise LiveAssemblyConfigurationError(
-            field="plugin.audio_input_mic or plugin.audio_input_meet",
-            reason="at least one configured input must be enabled",
-        )
-    return tuple(plugins)
-
-
-def _voice_provider(settings: PluginSettings) -> OpenAICompatibleProvider:
-    model = settings.model
-    if model is None or not model.strip():
-        raise LiveAssemblyConfigurationError(field="plugin.voice_llm.model", reason="must be configured")
-    return OpenAICompatibleProvider(model=model, endpoint=settings.endpoint)
-
-
-def _voices(
-    config_dir: Path,
-    settings_by_name: dict[str, VoiceSettings],
-    provider: OpenAICompatibleProvider,
-) -> tuple[Plugin, ...]:
-    voices: list[Plugin] = []
-    for name, voice_type in _VOICE_TYPES:
-        settings = settings_by_name.get(name)
-        if settings is not None and settings.enabled:
-            voices.append(voice_type(config_dir=config_dir, provider=provider, settings=settings))
-    if not voices:
-        raise LiveAssemblyConfigurationError(field="voice", reason="at least one P0 voice must be enabled")
-    return tuple(voices)
+    return EventRuntimeDependencies(vad=SileroVad(model, threshold=threshold))

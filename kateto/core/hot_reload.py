@@ -6,7 +6,7 @@ from os import fsdecode
 import sys
 from asyncio import AbstractEventLoop
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
@@ -15,6 +15,7 @@ from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
 
 from .config import ConfigBootstrapError, ConfigReadError, ConfigTomlError, ConfigValidationError, LoadedConfig, load_config
+from .discovery import PluginRegistry, discovery_context_for, discover_plugins
 from .event import PluginErrorData
 from .manager import PluginManager
 from .plugin import Plugin
@@ -42,6 +43,7 @@ class HotReloadReplacementError(Exception):
 
 
 ReplacementFactory = Callable[[Plugin, ReloadContext], Plugin]
+DiscoveryFactory = Callable[[LoadedConfig], PluginRegistry | None]
 
 
 class HotReloadController:
@@ -52,11 +54,14 @@ class HotReloadController:
         *,
         manager: PluginManager,
         watched_root: Path,
+        source_roots: tuple[Path, ...] = (),
         loop: AbstractEventLoop | None = None,
         replacement_factory: ReplacementFactory | None = None,
+        discovery_factory: DiscoveryFactory | None = None,
     ) -> None:
         self.manager = manager
         self.watched_root = watched_root.resolve()
+        self.source_roots = tuple(root.resolve() for root in source_roots)
         self._observer: BaseObserver | None = None
         self._handler: _ReloadHandler | None = None
         self._reload_lock = asyncio.Lock()
@@ -64,6 +69,12 @@ class HotReloadController:
         self._closed = False
         self.loop = loop
         self._replacement_factory = replacement_factory
+        self._discovery_factory = discovery_factory
+        self._discovered_names = {
+            plugin.name
+            for plugin in manager.get_plugins()
+            if discovery_context_for((plugin,)) is not None
+        }
 
     async def start(self) -> None:
         if self._observer is not None:
@@ -75,7 +86,9 @@ class HotReloadController:
         self._observer = observer
         handler = _ReloadHandler(self)
         self._handler = handler
-        observer.schedule(handler, str(self.watched_root), recursive=True)
+        for root in (self.watched_root, *self.source_roots):
+            if root.is_dir():
+                observer.schedule(handler, str(root), recursive=True)
         observer.start()
 
     async def close(self) -> None:
@@ -96,7 +109,7 @@ class HotReloadController:
         if self._closed:
             return
         resolved = path.resolve()
-        if not resolved.is_relative_to(self.watched_root):
+        if not self._is_watched(resolved):
             return
         if resolved.suffix.casefold() not in _WATCHED_SUFFIXES:
             return
@@ -104,11 +117,10 @@ class HotReloadController:
             try:
                 self._validate_workflows(resolved)
                 config = self._load_config(resolved)
+                if config is not None and await self._refresh_discovered(config, path=resolved):
+                    return
                 for plugin in self._plugins_to_replace(resolved):
-                    await self.manager.replace_plugin(
-                        plugin,
-                        self._replacement(plugin, path=resolved, config=config),
-                    )
+                    await self.manager.replace_plugin(plugin, self._replacement(plugin, path=resolved, config=config))
             except (
                 ConfigBootstrapError,
                 ConfigReadError,
@@ -158,6 +170,49 @@ class HotReloadController:
         if config_path.is_file():
             return load_config(config_dir=self.watched_root)
         return None
+
+    def _is_watched(self, path: Path) -> bool:
+        return any(path.is_relative_to(root) for root in (self.watched_root, *self.source_roots))
+
+    async def _refresh_discovered(self, config: LoadedConfig, *, path: Path) -> bool:
+        factory = self._discovery_factory
+        if factory is None:
+            context = discovery_context_for(self.manager.get_plugins())
+            if context is None:
+                return False
+            self._reload_module(path)
+            registry = discover_plugins(replace(context, config=config))
+        else:
+            registry = factory(config)
+        if registry is None:
+            return False
+        desired = {plugin.name: plugin for plugin in registry.plugins}
+        self._discovered_names.update(
+            plugin.name
+            for plugin in self.manager.get_plugins()
+            if discovery_context_for((plugin,)) is not None
+        )
+        self._discovered_names.update(desired)
+        for active in self.manager.get_plugins():
+            replacement = desired.pop(active.name, None)
+            if replacement is None:
+                if active.name in self._discovered_names:
+                    await self.manager.disable_plugin(active.name)
+            else:
+                await self.manager.replace_plugin(active, replacement)
+        self._discovered_names.intersection_update({plugin.name for plugin in registry.plugins})
+        for replacement in desired.values():
+            await self.manager.enable_plugin(replacement)
+        return True
+
+    @staticmethod
+    def _reload_module(path: Path) -> None:
+        importlib.invalidate_caches()
+        for module in tuple(sys.modules.values()):
+            module_path = getattr(module, "__file__", None)
+            if isinstance(module_path, str) and Path(module_path).resolve() == path:
+                importlib.reload(module)
+                return
 
     def _plugins_to_replace(self, path: Path) -> tuple[Plugin, ...]:
         if path.name == "config.toml":

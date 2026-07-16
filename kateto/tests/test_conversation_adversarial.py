@@ -88,6 +88,6 @@ async def test_transcription_prompt_injection_stays_untrusted_text_not_a_todo_co
         # Then: it is only voice input; it cannot create tracked work or trigger an external command.
         assert not (tmp_path / "voices" / "doktor" / "TODO.md").exists()
         assert not [event for event in manager.get_events() if event.name in {"todo_updated", "todo_completed", "backlog_add"}]
-        assert len([event for event in manager.get_events() if event.name == "generate"]) == 3
+        assert len([event for event in manager.get_events() if event.name == "generate"]) == 1
     finally:
         await manager.close()

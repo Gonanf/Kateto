@@ -8,9 +8,9 @@ import pytest
 from kateto.core.config import load_config
 from kateto.core.hot_reload import HotReloadController
 from kateto.core.plugin import Plugin
-from kateto.live import LiveAssemblyConfigurationError, LiveDependencies
+from kateto.live import EventRuntimeConfigurationError, EventRuntimeDependencies
 from kateto.plugins.audio_input.base import AudioInputConfig, CaptureCallback
-from kateto.run_mode import RuntimeDependencies, RuntimeOwner, build_runtime_owner, run_live
+from kateto.run_mode import RuntimeDependencies, RuntimeOwner, build_runtime_owner, run_event_runtime
 
 
 class QuietVad:
@@ -117,9 +117,19 @@ allowlist = ["echo"]
     )
 
 
+def _write_run_config_with_voice(config_dir: Path, *, voice_name: str) -> None:
+    _write_run_config(config_dir)
+    config_path = config_dir / "config.toml"
+    original = config_path.read_text(encoding="utf-8")
+    config_path.write_text(
+        original.replace("[voice.doktor]", f"[voice.{voice_name}]"),
+        encoding="utf-8",
+    )
+
+
 def _dependencies(captures: RecordingCaptureFactory, calendars: CalendarFactory) -> RuntimeDependencies:
     return RuntimeDependencies(
-        live=LiveDependencies(vad=QuietVad(), capture_factory=captures),
+        event_runtime=EventRuntimeDependencies(vad=QuietVad(), capture_factory=captures),
         calendar_factory=calendars,
     )
 
@@ -128,10 +138,12 @@ def test_run_owner_reports_actionable_calendar_provider_unavailability_without_f
     # Given: the live config enables calendar but production has no provider boundary configured.
     _write_run_config(tmp_path)
     captures = RecordingCaptureFactory()
-    dependencies = RuntimeDependencies(live=LiveDependencies(vad=QuietVad(), capture_factory=captures))
+    dependencies = RuntimeDependencies(
+        event_runtime=EventRuntimeDependencies(vad=QuietVad(), capture_factory=captures),
+    )
 
     # When: the run owner assembles the configured production graph.
-    with pytest.raises(LiveAssemblyConfigurationError) as failure:
+    with pytest.raises(EventRuntimeConfigurationError) as failure:
         build_runtime_owner(load_config(config_dir=tmp_path), dependencies=dependencies)
 
     # Then: the failure identifies provider unavailability and the concrete credential remediation.
@@ -179,6 +191,38 @@ async def test_run_owner_composes_starts_and_stops_configured_components(tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_run_owner_reconciles_configured_voice_subscribers_after_reload(tmp_path: Path) -> None:
+    # Given: a running owner whose initial configuration enables only Doktor.
+    _write_run_config_with_voice(tmp_path, voice_name="doktor")
+    captures = RecordingCaptureFactory()
+    calendars = CalendarFactory()
+    assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, calendars))
+
+    try:
+        await assembly.start()
+        controller = assembly.hot_reload_controller
+        assert controller is not None
+
+        # When: the configured voice definition is changed from Doktor to Jane.
+        _write_run_config_with_voice(tmp_path, voice_name="jane")
+        await controller.handle_change(tmp_path / "config.toml")
+
+        # Then: the existing manager now routes generate only to the discovered Jane instance.
+        generate_registration = next(
+            registration
+            for registration in assembly.manager.get_event_registrations()
+            if registration.name == "generate"
+        )
+        assert "jane" in generate_registration.receivers
+        assert "doktor" not in generate_registration.receivers
+        assert "doktor" not in {
+            plugin.name for plugin in assembly.manager.get_plugins() if plugin.enabled
+        }
+    finally:
+        await assembly.stop()
+
+
+@pytest.mark.asyncio
 async def test_run_owner_start_failure_cleans_each_previously_owned_component(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -209,13 +253,13 @@ async def test_run_owner_start_failure_cleans_each_previously_owned_component(
 
 
 @pytest.mark.asyncio
-async def test_cancelling_run_live_closes_the_owned_configured_calendar(tmp_path: Path) -> None:
+async def test_cancelling_run_event_runtime_closes_the_owned_configured_calendar(tmp_path: Path) -> None:
     # Given: a live run whose audio capture signals that the complete owner is running.
     _write_run_config(tmp_path)
     captures = RecordingCaptureFactory()
     calendars = CalendarFactory()
     task = asyncio.create_task(
-        run_live(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, calendars))
+        run_event_runtime(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, calendars))
     )
 
     # When: the active run task is cancelled like an interrupted CLI session.

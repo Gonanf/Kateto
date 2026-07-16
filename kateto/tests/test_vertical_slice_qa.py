@@ -21,7 +21,7 @@ async def test_fixture_execute_reports_the_complete_vertical_slice() -> None:
     # Then: transcription, EXECUTE routing, voice streaming, audio, and TODO state are observable.
     assert result.transcriptions == (prompt,)
     assert result.classifications == (Classification.EXECUTE,)
-    assert result.generate_targets == ("jane", "doktor", "conquest")
+    assert result.generate_targets == ()
     assert result.text_chunks > 0
     assert result.audio_chunks == result.text_chunks
     assert result.todo_text == "# TODO\n\n- [ ] tomorrow standup\n"
@@ -58,7 +58,7 @@ async def test_fixture_interrupt_cancels_streams_and_resumes_with_a_new_segment(
     assert result.interrupts == 1
     assert result.resumes == 1
     assert result.cancelled_streams > 0
-    assert result.generate_targets == ("jane", "doktor", "conquest", "jane", "doktor", "conquest")
+    assert result.generate_targets == ()
     assert result.manager_alive
 
 
@@ -72,7 +72,7 @@ async def test_fixture_one_voice_interrupt_accepts_calendar_resume() -> None:
     assert result.interrupts == 1
     assert result.resumes == 1
     assert result.cancelled_streams == 1
-    assert result.generate_targets == ("jane", "doktor", "conquest", "jane", "doktor", "conquest")
+    assert result.generate_targets == ()
     assert result.manager_alive
 
 
@@ -93,6 +93,6 @@ def test_script_wrapper_delegates_to_the_canonical_fixture() -> None:
     assert completed.returncode == 0, completed.stderr
     assert "TRANSCRIPTION text=plan tomorrow standup" in completed.stdout
     assert "CLASSIFICATION category=EXECUTE" in completed.stdout
-    assert "GENERATE target=jane" in completed.stdout
+    assert "GENERATE target=" not in completed.stdout
     assert "AUDIO_CHUNK" in completed.stdout
     assert "TRACE manager_alive=true" in completed.stdout

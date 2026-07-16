@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Final, Protocol, assert_never
+from typing import Protocol, assert_never, override
 
 from kateto.core.event import (
     Classification,
@@ -8,11 +8,7 @@ from kateto.core.event import (
     GenerateData,
     TranscriptionData,
 )
-from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin, PluginManagerProtocol
-
-
-_P0_VOICE_NAMES: Final[tuple[str, ...]] = ("jane", "doktor", "conquest")
 
 
 class IntentClassifier(Protocol):
@@ -22,8 +18,9 @@ class IntentClassifier(Protocol):
 class ClassifierExecutor(Plugin):
     def __init__(self, *, classifier: IntentClassifier) -> None:
         super().__init__("executor_classifier", receive_self_events=True)
-        self._classifier = classifier
+        self._classifier: IntentClassifier = classifier
 
+    @override
     async def initialize(self) -> None:
         manager = self._manager()
         manager.register_event("transcription", TranscriptionData)
@@ -33,18 +30,14 @@ class ClassifierExecutor(Plugin):
     async def on_transcription(self, data: TranscriptionData) -> None:
         classification = await self._classifier.classify(data.text)
         manager = self._manager()
-        await manager.emit("classification", classification, source=self.name)
+        _ = await manager.emit("classification", classification, source=self.name)
         match classification.category:
             case Classification.EXECUTE:
-                active_plugins = {plugin.name for plugin in manager.get_plugins() if plugin.enabled}
-                for voice_name in _P0_VOICE_NAMES:
-                    if voice_name in active_plugins:
-                        await manager.emit(
-                            "generate",
-                            GenerateData(prompt=classification.text),
-                            source=self.name,
-                            target=voice_name,
-                        )
+                _ = await manager.emit(
+                    "generate",
+                    GenerateData(prompt=classification.text),
+                    source=self.name,
+                )
             case Classification.IGNORE_SELF_TALK | Classification.IGNORE_THIRD_PARTY:
                 return
             case unreachable:
