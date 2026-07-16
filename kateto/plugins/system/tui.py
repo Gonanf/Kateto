@@ -154,8 +154,8 @@ class KatetoApp(App[None]):
                         with Vertical(id="events-registrations"):
                             yield Static("REGISTERED EVENTS", classes="section-title")
                             yield Tree("Events", id="event-registrations-tree")
+                yield ListView(id="event-autocomplete")
                 with Vertical(id="composer"):
-                    yield ListView(id="event-autocomplete")
                     yield Label(
                         "Composer: ordinary text → tui_event · /event_name → strict JSON payload",
                         id="composer-mode",
