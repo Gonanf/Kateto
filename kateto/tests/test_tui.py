@@ -8,9 +8,10 @@ import sys
 
 import pytest
 from watchdog.events import FileCreatedEvent, FileModifiedEvent
+from textual.widgets import Input
 
 from kateto.core.hot_reload import HotReloadController, ReloadContext, _ReloadHandler
-from kateto.core.event import WorkflowRunData
+from kateto.core.event import PluginErrorData, VoiceIdleData, WorkflowRunData
 from kateto.core.plugin import Plugin
 from kateto.core.manager import PluginManager
 from kateto.core.workflow_engine import WorkflowEngine
@@ -129,10 +130,10 @@ async def test_tui_renders_live_runtime_state_and_controls(tmp_path: Path) -> No
     # When: the Textual app is driven through its real test surface.
     app = KatetoApp(runtime=runtime)
     async with app.run_test() as pilot:
-        await pilot.pause()
+        await pilot.pause(0.1)
         await pilot.click("#disable-fixture_plugin")
         await pilot.click("#enable-fixture_plugin")
-        await pilot.pause()
+        await pilot.pause(0.1)
 
         # Then: live runtime state is visible and controls use its manager.
         assert "RUNTIME: RUNNING" in app.runtime_text
@@ -357,9 +358,69 @@ async def test_tui_reports_malformed_reload_without_stopping() -> None:
     async with app.run_test() as pilot:
         # When: malformed workflow feedback is published as an error event.
         await manager.emit("tui_event", TuiEventData(message="reload error: malformed workflow"), source="watcher")
-        await pilot.pause()
+        await pilot.pause(0.1)
 
         # Then: the app remains mounted and the error is visible.
         assert app.is_running
         assert "malformed workflow" in app.event_text
+    assert not runtime.is_started
+
+
+@pytest.mark.asyncio
+async def test_tui_workspace_tabs_status_history_and_json_composer(tmp_path: Path) -> None:
+    # Given: a live runtime surface with a selectable plugin and voice.
+    manager = PluginManager()
+    plugin = _FixturePlugin()
+    engine = WorkflowEngine(config_dir=tmp_path)
+    runtime = _RuntimeOwnerLike(
+        manager=manager,
+        runtime_plugins=(plugin, engine),
+        workflow_engine=engine,
+        workflow_voices=("Conquest",),
+    )
+    app = KatetoApp(runtime=runtime)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        # When: the user observes tabs, a voice event, plugin selection, and composer states.
+        assert app.query_one("#plugins-tab")
+        assert app.query_one("#voices-tab")
+        assert app.query_one("#workflows-tab")
+        assert app.query_one("#mcps-tab")
+        await manager.emit("voice_idle", VoiceIdleData(voice="Conquest"), source="Conquest")
+        await pilot.click("#select-fixture_plugin")
+        await manager.emit("tui_event", TuiEventData(message="plugin sent"), source="fixture_plugin")
+        await pilot.pause()
+        assert "Conquest · idle" in app._voice_text()
+        assert "SENT" in app._history_text()
+
+        composer = app.query_one("#composer-input", Input)
+        composer.value = "/tui_event"
+        await pilot.click("#send-event")
+        await pilot.pause(0.1)
+        composer.value = '{"message":"json payload"}'
+        await pilot.click("#send-event")
+        await pilot.pause(0.1)
+
+        # Then: strict JSON emits only after selection, invalid JSON becomes a notification,
+        # and Enter in the text box never emits an event.
+        assert "json payload" in app.event_text
+        before_enter = len(manager.get_events())
+        composer.value = "ordinary enter"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert len(manager.get_events()) == before_enter
+        composer.value = "/tui_event"
+        await pilot.click("#send-event")
+        await pilot.pause(0.1)
+        composer.value = '{"message":3}'
+        await pilot.click("#send-event")
+        await pilot.pause(0.1)
+        assert any("invalid JSON" in notification for notification in app._notifications)
+
+        await manager.emit("error", PluginErrorData(plugin="fixture_plugin", event_name="tui_event", error_type="RuntimeError", message="boom"), source="fixture_plugin")
+        await pilot.pause()
+        assert "ERROR [fixture_plugin]: boom" in app._notifications
+
     assert not runtime.is_started
