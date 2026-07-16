@@ -125,6 +125,15 @@ class KatetoApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with TabbedContent(id="workspace"):
+            with TabPane("Events", id="events-tab"):
+                yield Static("EVENT STREAM", classes="section-title")
+                yield Static(id="event-state")
+                with Vertical(id="composer"):
+                    yield Label("Composer: ordinary text → tui_event · /event_name → strict JSON payload", id="composer-mode")
+                    with Horizontal():
+                        yield Input(placeholder="message or /registered_event", id="composer-input")
+                        yield Button("Emit", id="send-event", variant="primary")
+                    yield Static(id="notifications")
             with TabPane("Plugins", id="plugins-tab"):
                 yield Static("PLUGINS", classes="section-title")
                 yield Static(id="plugin-state")
@@ -147,14 +156,6 @@ class KatetoApp(App[None]):
             with TabPane("MCPs", id="mcps-tab"):
                 yield Static("MCP SERVERS", classes="section-title")
                 yield Static(id="mcp-state")
-                yield Static("EVENT STREAM", classes="section-title")
-                yield Static(id="event-state")
-        with Vertical(id="composer"):
-            yield Label("Composer: ordinary text → tui_event · /event_name → strict JSON payload", id="composer-mode")
-            with Horizontal():
-                yield Input(placeholder="message or /registered_event", id="composer-input")
-                yield Button("Emit", id="send-event", variant="primary")
-            yield Static(id="notifications")
         yield Footer()
 
     def on_mount(self) -> None:

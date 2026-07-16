@@ -8,7 +8,7 @@ import sys
 
 import pytest
 from watchdog.events import FileCreatedEvent, FileModifiedEvent
-from textual.widgets import Button, Input
+from textual.widgets import Button, Input, TabPane, TabbedContent
 
 from kateto.core.hot_reload import HotReloadController, ReloadContext, _ReloadHandler
 from kateto.core.event import (
@@ -154,6 +154,8 @@ async def test_tui_renders_live_runtime_state_and_controls(tmp_path: Path) -> No
     app = KatetoApp(runtime=runtime)
     async with app.run_test() as pilot:
         await pilot.pause(0.1)
+        app.query_one("#workspace", TabbedContent).active = "plugins-tab"
+        await pilot.pause()
         await pilot.click("#disable-fixture_plugin")
         await pilot.click("#enable-fixture_plugin")
         await pilot.pause(0.1)
@@ -188,6 +190,7 @@ async def test_tui_uses_bounded_manager_history_and_applies_audio_configuration(
     app = KatetoApp(runtime=runtime)
 
     async with app.run_test() as pilot:
+        app.query_one("#workspace", TabbedContent).active = "plugins-tab"
         await pilot.pause()
         await manager.emit("tui_event", TuiEventData(message="old"), source="fixture_plugin")
         await manager.emit("tui_event", TuiEventData(message="middle"), source="fixture_plugin")
@@ -442,10 +445,16 @@ async def test_tui_workspace_tabs_status_history_and_json_composer(tmp_path: Pat
         await pilot.pause()
 
         # When: the user observes tabs, a voice event, plugin selection, and composer states.
+        workspace = app.query_one("#workspace", TabbedContent)
+        panes = list(workspace.query(TabPane))
+        assert [pane.id for pane in panes] == ["events-tab", "plugins-tab", "voices-tab", "workflows-tab", "mcps-tab"]
+        assert app.query_one("#composer").parent is app.query_one("#events-tab", TabPane)
         assert app.query_one("#plugins-tab")
         assert app.query_one("#voices-tab")
         assert app.query_one("#workflows-tab")
         assert app.query_one("#mcps-tab")
+        workspace.active = "plugins-tab"
+        await pilot.pause()
         await manager.emit("voice_idle", VoiceIdleData(voice="Conquest"), source="Conquest")
         await pilot.click("#select-fixture_plugin")
         await manager.emit("tui_event", TuiEventData(message="plugin sent"), source="fixture_plugin")
@@ -453,12 +462,14 @@ async def test_tui_workspace_tabs_status_history_and_json_composer(tmp_path: Pat
         assert "Conquest · idle" in app._voice_text()
         assert "SENT" in app._history_text()
 
+        workspace.active = "events-tab"
+        await pilot.pause()
         composer = app.query_one("#composer-input", Input)
         composer.value = "/tui_event"
-        await pilot.click("#send-event")
+        app.query_one("#send-event", Button).press()
         await pilot.pause(0.1)
         composer.value = '{"message":"json payload"}'
-        await pilot.click("#send-event")
+        app.query_one("#send-event", Button).press()
         await pilot.pause(0.1)
 
         # Then: strict JSON emits only after selection, invalid JSON becomes a notification,
@@ -470,10 +481,10 @@ async def test_tui_workspace_tabs_status_history_and_json_composer(tmp_path: Pat
         await pilot.pause()
         assert len(manager.get_events()) == before_enter
         composer.value = "/tui_event"
-        await pilot.click("#send-event")
+        app.query_one("#send-event", Button).press()
         await pilot.pause(0.1)
         composer.value = '{"message":3}'
-        await pilot.click("#send-event")
+        app.query_one("#send-event", Button).press()
         await pilot.pause(0.1)
         assert any("invalid JSON" in notification for notification in app._notifications)
 
