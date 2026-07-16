@@ -276,7 +276,7 @@ class _ReloadHandler(FileSystemEventHandler):
         self._closed = False
 
     def on_any_event(self, event: FileSystemEvent) -> None:
-        if self._closed or event.is_directory:
+        if self._closed or event.is_directory or event.event_type in ("opened", "closed"):
             return
         loop = self._controller.loop
         if loop is not None and loop.is_running():
