@@ -7,7 +7,7 @@ from typing import assert_never
 from pydantic import BaseModel, Field, ValidationError
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Footer, Header, Input, Label, Static, TabbedContent, TabPane
+from textual.widgets import Button, Footer, Header, Input, Label, Static, Switch, TabbedContent, TabPane, Tree
 
 from kateto.core.event import (
     AudioInputStatusData,
@@ -39,7 +39,10 @@ class _FixtureRuntime:
         from kateto.core.workflow_engine import WorkflowEngine
 
         self.manager = PluginManager()
-        self.runtime_plugins = tuple(_FixturePlugin(name) for name in ("voice_jane", "voice_doktor", "voice_conquest", "workflow_engine"))
+        self.runtime_plugins = tuple(
+            _FixturePlugin(name)
+            for name in ("voice_jane", "voice_doktor", "voice_conquest", "workflow_engine")
+        )
         self._workflow_engine = WorkflowEngine(config_dir=config_dir)
         self.mcp_servers = ()
         self.workflow_voices = ("Jane", "Doktor", "Conquest")
@@ -71,20 +74,45 @@ class KatetoApp(App[None]):
     Screen { layout: vertical; background: $surface; }
     #workspace { height: 1fr; min-height: 0; }
     TabbedContent { height: 1fr; }
-    .tab-body { padding: 1 2; height: 1fr; overflow-y: auto; }
     .section-title { color: $accent; text-style: bold; margin-bottom: 1; }
-    .plugin-row { height: 3; width: 1fr; }
-    .plugin-name { width: 22; min-width: 12; content-align: left middle; }
-    .plugin-row Button { width: 10; border: none; background: transparent; }
-    #plugin-history { height: 1fr; border: round $secondary; padding: 1; overflow-y: auto; }
-    #notifications { height: 5; border: round $error; padding: 0 1; color: $error; overflow-y: auto; }
+
+    /* Events tab */
+    #events-body { height: 1fr; margin-bottom: 1; }
+    #event-state { height: 1fr; border: solid $secondary; padding: 1; overflow-y: auto; }
     #composer { dock: bottom; height: 5; padding: 0 1; }
     #composer-input { width: 1fr; }
     #send-event { width: 16; }
+
+    /* Plugins tab */
+    #plugin-panel { height: 1fr; }
+    #plugin-panel-left { width: 40%; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
+    #plugin-panel-right { width: 1fr; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
+    .plugin-row { height: 3; width: 1fr; align: center middle; }
+    .plugin-status { width: 3; content-align: center middle; }
+    .plugin-name { width: 24; }
+    .plugin-name.selected { background: $accent; color: $surface; }
+    Switch { margin: 0 2; }
+    #plugin-history { height: 1fr; overflow-y: auto; }
+
+    /* Voices tab */
+    #voice-tree { height: 1fr; }
+
+    /* Workflows tab */
+    #workflow-tree { height: 1fr; }
+
+    /* MCPs tab */
+    #mcp-state { height: 1fr; border: solid $secondary; padding: 1; overflow-y: auto; }
     """
     BINDINGS = [("q", "quit", "Quit"), ("escape", "quit", "Quit")]
 
-    def __init__(self, *, runtime: TuiRuntime, fixture: bool = False, config_dir: Path | None = None, replacement_factory: ReplacementFactory | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        runtime: TuiRuntime,
+        fixture: bool = False,
+        config_dir: Path | None = None,
+        replacement_factory: ReplacementFactory | None = None,
+    ) -> None:
         super().__init__()
         self.runtime = runtime
         self.manager = runtime.manager
@@ -92,7 +120,6 @@ class KatetoApp(App[None]):
         self.config_dir = (Path.cwd() if config_dir is None else config_dir).resolve()
         self.replacement_factory = replacement_factory or (self._fixture_replacement_factory if fixture else None)
         self._events: list[str] = []
-        self._notifications: list[str] = []
         self._voice_status: dict[str, str] = {voice: "idle" for voice in runtime.workflow_voices}
         self._audio_status: dict[str, str] = {}
         self._selected_plugin: str | None = None
@@ -103,22 +130,6 @@ class KatetoApp(App[None]):
         self.manager.add_event_observer(self._observe_event)
 
     @property
-    def plugin_text(self) -> str:
-        return self._plugin_state()
-
-    @property
-    def mcp_text(self) -> str:
-        return self._mcp_state()
-
-    @property
-    def workflow_text(self) -> str:
-        return self._format_workflows()
-
-    @property
-    def runtime_text(self) -> str:
-        return f"RUNTIME: {'RUNNING' if self.runtime.is_started else 'STOPPED'}"
-
-    @property
     def event_text(self) -> str:
         return "\n".join(self._events)
 
@@ -127,32 +138,45 @@ class KatetoApp(App[None]):
         with TabbedContent(id="workspace"):
             with TabPane("Events", id="events-tab"):
                 yield Static("EVENT STREAM", classes="section-title")
-                yield Static(id="event-state")
+                with Vertical(id="events-body"):
+                    yield Static(id="event-state")
                 with Vertical(id="composer"):
-                    yield Label("Composer: ordinary text → tui_event · /event_name → strict JSON payload", id="composer-mode")
+                    yield Label(
+                        "Composer: ordinary text → tui_event · /event_name → strict JSON payload",
+                        id="composer-mode",
+                    )
                     with Horizontal():
                         yield Input(placeholder="message or /registered_event", id="composer-input")
                         yield Button("Emit", id="send-event", variant="primary")
-                    yield Static(id="notifications")
             with TabPane("Plugins", id="plugins-tab"):
-                yield Static("PLUGINS", classes="section-title")
-                yield Static(id="plugin-state")
-                yield Static("Select a plugin to inspect sent / received events", classes="section-title")
-                yield Static(id="plugin-history")
-                for plugin in self._available_plugins():
-                    yield self._plugin_controls(plugin)[0]
-                yield Static(id="plugin-config")
-                for configuration in self._configuration_items():
-                    yield Label(f"{configuration.plugin} device configuration", classes="section-title")
-                    yield Input(value=configuration.microphone or "", placeholder="microphone device", id=f"microphone-{configuration.plugin}")
-                    yield Input(value=configuration.speaker or "", placeholder="speaker device", id=f"speaker-{configuration.plugin}")
-                    yield Button("Apply device configuration", id=f"apply-config-{configuration.plugin}")
+                with Horizontal(id="plugin-panel"):
+                    with Vertical(id="plugin-panel-left"):
+                        yield Static("PLUGINS", classes="section-title")
+                        for plugin in self._available_plugins():
+                            yield self._plugin_row(plugin)
+                    with Vertical(id="plugin-panel-right"):
+                        yield Static("Plugin Events", classes="section-title")
+                        yield Static(id="plugin-history")
+                        yield Static(id="plugin-config")
+                        for configuration in self._configuration_items():
+                            yield Label(f"{configuration.plugin} device configuration", classes="section-title")
+                            yield Input(
+                                value=configuration.microphone or "",
+                                placeholder="microphone device",
+                                id=f"microphone-{configuration.plugin}",
+                            )
+                            yield Input(
+                                value=configuration.speaker or "",
+                                placeholder="speaker device",
+                                id=f"speaker-{configuration.plugin}",
+                            )
+                            yield Button("Apply device configuration", id=f"apply-config-{configuration.plugin}")
             with TabPane("Voices", id="voices-tab"):
                 yield Static("RUNTIME VOICES", classes="section-title")
-                yield Static(id="voice-state")
+                yield Tree("Voices", id="voice-tree")
             with TabPane("Global Workflows", id="workflows-tab"):
                 yield Static("WORKFLOW TREE", classes="section-title")
-                yield Static(id="workflow-state")
+                yield Tree("Workflows", id="workflow-tree")
             with TabPane("MCPs", id="mcps-tab"):
                 yield Static("MCP SERVERS", classes="section-title")
                 yield Static(id="mcp-state")
@@ -167,7 +191,12 @@ class KatetoApp(App[None]):
     async def _start_runtime(self) -> None:
         await self.runtime.start()
         if self.fixture and self.runtime.hot_reload_controller is None and self.replacement_factory is not None:
-            self._controller = HotReloadController(manager=self.manager, watched_root=self.config_dir, loop=asyncio.get_running_loop(), replacement_factory=self.replacement_factory)
+            self._controller = HotReloadController(
+                manager=self.manager,
+                watched_root=self.config_dir,
+                loop=asyncio.get_running_loop(),
+                replacement_factory=self.replacement_factory,
+            )
             await self._controller.start()
         self._refresh_view()
 
@@ -188,6 +217,12 @@ class KatetoApp(App[None]):
         await self._stop_runtime()
         self.exit()
 
+    def on_switch_changed(self, event: Switch.Changed) -> None:
+        switch_id = event.switch.id or ""
+        if switch_id.startswith("switch-"):
+            plugin_name = switch_id.removeprefix("switch-")
+            self.run_worker(self._set_plugin(plugin_name, event.value), exclusive=False)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id or ""
         if button_id == "send-event":
@@ -196,14 +231,12 @@ class KatetoApp(App[None]):
             return
         if button_id.startswith("select-"):
             self._selected_plugin = button_id.removeprefix("select-")
+            self._refresh_plugin_selection()
             self._refresh_view()
             return
         if button_id.startswith("apply-config-"):
             self.run_worker(self._configure_plugin(button_id.removeprefix("apply-config-")), exclusive=False)
             return
-        prefix, _, name = button_id.partition("-")
-        if prefix in {"enable", "disable"} and name:
-            self.run_worker(self._set_plugin(name, prefix == "enable"), exclusive=False)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         event.stop()
@@ -215,12 +248,16 @@ class KatetoApp(App[None]):
             return
         if value.startswith("/"):
             name = value[1:].strip()
-            contract = next((item.contract for item in self.manager.get_event_registrations() if item.name == name), None)
+            contract = next(
+                (item.contract for item in self.manager.get_event_registrations() if item.name == name), None
+            )
             if contract is None:
-                self._notify(f"ERROR: unknown event /{name}")
+                self.notify(f"ERROR: unknown event /{name}", severity="error")
             else:
                 self._selected_event = name
-                self.query_one("#composer-mode", Label).update(f"Payload for /{name}: strict JSON for {contract.__name__}")
+                self.query_one("#composer-mode", Label).update(
+                    f"Payload for /{name}: strict JSON for {contract.__name__}"
+                )
                 input_widget.value = ""
             self._refresh_view()
             return
@@ -232,13 +269,18 @@ class KatetoApp(App[None]):
         try:
             payload = registration.contract.model_validate_json(value)
         except ValidationError as error:
-            self._notify(f"ERROR: invalid JSON for /{self._selected_event}: {error.errors()[0]['msg']}")
+            self.notify(
+                f"ERROR: invalid JSON for /{self._selected_event}: {error.errors()[0]['msg']}",
+                severity="error",
+            )
             self._refresh_view()
             return
         await self.manager.emit(self._selected_event, payload, source="tui")
         self._selected_event = None
         input_widget.value = ""
-        self.query_one("#composer-mode", Label).update("Composer: ordinary text → tui_event · /event_name → strict JSON payload")
+        self.query_one("#composer-mode", Label).update(
+            "Composer: ordinary text → tui_event · /event_name → strict JSON payload"
+        )
 
     async def _emit_manual(self, message: str) -> None:
         await self.manager.emit("tui_event", TuiEventData(message=message), source="tui")
@@ -257,7 +299,7 @@ class KatetoApp(App[None]):
             return
         current = self.runtime.plugin_configuration(name)
         if current is None:
-            self._notify(f"ERROR: unknown plugin configuration {name}")
+            self.notify(f"ERROR: unknown plugin configuration {name}", severity="error")
             self._refresh_view()
             return
         microphone = self.query_one(f"#microphone-{name}", Input).value.strip() or None
@@ -271,7 +313,7 @@ class KatetoApp(App[None]):
                 values=current.values,
             ),
         )
-        self._notify(f"CONFIGURED {name}: microphone={microphone or 'default'}, speaker={speaker or 'default'}")
+        self.notify(f"CONFIGURED {name}: microphone={microphone or 'default'}, speaker={speaker or 'default'}")
         self._refresh_view()
 
     @staticmethod
@@ -286,7 +328,7 @@ class KatetoApp(App[None]):
         formatted = self._format_event(envelope)
         self._events.append(formatted)
         if isinstance(envelope.data, PluginErrorData):
-            self._notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}")
+            self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
         self._update_voice_status(envelope)
         self._update_audio_status(envelope)
 
@@ -297,29 +339,35 @@ class KatetoApp(App[None]):
     def _refresh_view(self) -> None:
         if not self.is_mounted:
             return
-        self.query_one("#plugin-state", Static).update(self._plugin_state())
+        self.query_one("#event-state", Static).update(self.event_text or "waiting for events")
         self.query_one("#plugin-history", Static).update(self._history_text())
         self.query_one("#plugin-config", Static).update(self._configuration_text())
-        self.query_one("#voice-state", Static).update(self._voice_text())
-        self.query_one("#workflow-state", Static).update(self._format_workflows())
+        self._populate_voice_tree()
+        self._populate_workflow_tree()
         self.query_one("#mcp-state", Static).update(self._mcp_state())
-        self.query_one("#event-state", Static).update(self.event_text or "waiting for events")
-        self.query_one("#notifications", Static).update("\n".join(self._notifications[-4:]) or "notifications: none")
 
-    def _notify(self, message: str) -> None:
-        self._notifications.append(message)
+    def _refresh_plugin_selection(self) -> None:
+        for plugin in self._available_plugins():
+            try:
+                btn = self.query_one(f"#select-{plugin.name}", Button)
+                btn.classes = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
+            except Exception:
+                pass
+
+    def _plugin_row(self, plugin: Plugin) -> Horizontal:
+        status = "🟢" if plugin.enabled else "⚪"
+        selected_class = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
+        return Horizontal(
+            Static(status, classes="plugin-status"),
+            Button(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
+            Switch(value=plugin.enabled, id=f"switch-{plugin.name}"),
+            classes="plugin-row",
+        )
 
     def _available_plugins(self) -> tuple[Plugin, ...]:
         plugins: dict[str, Plugin] = {plugin.name: plugin for plugin in self.runtime.runtime_plugins}
         plugins.update({plugin.name: plugin for plugin in self.manager.get_plugins()})
         return tuple(plugins.values())
-
-    def _plugin_state(self) -> str:
-        return "\n".join(
-            f"{plugin.name:<24} {'ON' if plugin.enabled else 'OFF'}"
-            f"{f' · {self._audio_status[plugin.name]}' if plugin.name in self._audio_status else ''}"
-            for plugin in self._available_plugins()
-        ) or "no plugins"
 
     def _history_text(self) -> str:
         name = self._selected_plugin
@@ -333,8 +381,8 @@ class KatetoApp(App[None]):
     def _configuration_text(self) -> str:
         configurations = self._configuration_items()
         if not configurations:
-            return "configuration: runtime has no editable plugin settings"
-        return "CONFIGURATION\n" + "\n".join(self._format_configuration(item) for item in configurations)
+            return ""
+        return "\n".join(self._format_configuration(item) for item in configurations)
 
     def _configuration_items(self) -> tuple[TuiPluginConfiguration, ...]:
         if not isinstance(self.runtime, TuiConfigurationRuntime):
@@ -343,11 +391,95 @@ class KatetoApp(App[None]):
 
     @staticmethod
     def _format_configuration(configuration: TuiPluginConfiguration) -> str:
-        audio = ", ".join(value for value in (f"microphone={configuration.microphone}" if configuration.microphone else "", f"speaker={configuration.speaker}" if configuration.speaker else "") if value)
+        audio = ", ".join(
+            value
+            for value in (
+                f"microphone={configuration.microphone}" if configuration.microphone else "",
+                f"speaker={configuration.speaker}" if configuration.speaker else "",
+            )
+            if value
+        )
         return f"{configuration.plugin}: {audio or 'configured'}"
 
+    def _populate_voice_tree(self) -> None:
+        tree = self.query_one("#voice-tree", Tree)
+        tree.clear()
+        for voice in self.runtime.workflow_voices:
+            status = self._voice_status.get(voice, "idle")
+            voice_node = tree.root.add(f"{voice} · {status.upper()}")
+            try:
+                definitions = self.runtime.workflow_catalog.discover(voice=voice)
+            except WorkflowDefinitionError as error:
+                voice_node.add_leaf(f"└ Catalog error: {error}")
+                continue
+            for definition in definitions:
+                snapshot = self.runtime.workflow_engine.snapshot(workflow=definition.name, voice=voice)
+                if snapshot is None:
+                    voice_node.add_leaf(f"{definition.name} · ⚪ INACTIVE")
+                    continue
+                icon = self._status_icon(snapshot)
+                wf_node = voice_node.add(f"{definition.name} · {icon} {snapshot.status.value.upper()}")
+                phase = next(
+                    (p for p in definition.phases if p.id.casefold() == snapshot.phase_id.casefold()), None
+                )
+                if phase:
+                    phase_index = next(
+                        i for i, p in enumerate(definition.phases) if p.id.casefold() == snapshot.phase_id.casefold()
+                    )
+                    wf_node.add_leaf(f"Phase: {phase.name} ({phase_index + 1}/{len(definition.phases)})")
+                    wf_node.add_leaf(f"Task: {phase.instructions[0] if phase.instructions else '—'}")
+                    completed = snapshot.phase_status is WorkflowPhaseStatus.DONE
+                    wf_node.add_leaf(
+                        f"Progress: {(len(phase.instructions) if completed else 0)}/{len(phase.instructions)} instructions"
+                    )
+                    wf_node.add_leaf(
+                        f"Checkpoints: {(len(phase.checkpoints) if completed else 0)}/{len(phase.checkpoints)} ✓"
+                    )
+                else:
+                    wf_node.add_leaf(f"Phase: {snapshot.phase_id}")
+        tree.root.expand_all()
+
+    def _populate_workflow_tree(self) -> None:
+        tree = self.query_one("#workflow-tree", Tree)
+        tree.clear()
+        # Collect all unique workflows across all voices
+        workflow_map: dict[str, dict[str, WorkflowDefinition]] = {}
+        for voice in self.runtime.workflow_voices:
+            try:
+                definitions = self.runtime.workflow_catalog.discover(voice=voice)
+            except WorkflowDefinitionError:
+                continue
+            for definition in definitions:
+                workflow_map.setdefault(definition.name.casefold(), {})[voice] = definition
+        if not workflow_map:
+            tree.root.add_leaf("no workflows discovered")
+            return
+        # Build tree: workflow → voices → snapshot data
+        for wf_name in sorted(workflow_map.keys()):
+            voices = workflow_map[wf_name]
+            # Pick the first voice's definition for metadata
+            first_defn = next(iter(voices.values()))
+            wf_node = tree.root.add(first_defn.name)
+            for voice in sorted(voices.keys()):
+                snapshot = self.runtime.workflow_engine.snapshot(workflow=first_defn.name, voice=voice)
+                if snapshot is None:
+                    wf_node.add_leaf(f"{voice} · ⚪ INACTIVE")
+                else:
+                    icon = self._status_icon(snapshot)
+                    v_node = wf_node.add(f"{voice} · {icon} {snapshot.status.value.upper()}")
+                    phase = next(
+                        (p for p in first_defn.phases if p.id.casefold() == snapshot.phase_id.casefold()),
+                        None,
+                    )
+                    if phase:
+                        v_node.add_leaf(f"Phase: {phase.name}")
+                        v_node.add_leaf(f"Task: {phase.instructions[0] if phase.instructions else '—'}")
+        tree.root.expand_all()
+
     def _voice_text(self) -> str:
-        return "\n".join(f"{voice} · {self._voice_status.get(voice, 'idle')}" for voice in self.runtime.workflow_voices) or "no voices"
+        return "\n".join(
+            f"{voice} · {self._voice_status.get(voice, 'idle')}" for voice in self.runtime.workflow_voices
+        ) or "no voices"
 
     def _update_voice_status(self, envelope: EventEnvelope[BaseModel]) -> None:
         if isinstance(envelope.data, VoiceStatusData) and envelope.data.voice in self.runtime.workflow_voices:
@@ -358,31 +490,6 @@ class KatetoApp(App[None]):
         if isinstance(status_data, AudioInputStatusData | AudioOutputStatusData):
             plugin = envelope.source.split("/", maxsplit=1)[0]
             self._audio_status[plugin] = status_data.status.value
-
-    def _format_workflows(self) -> str:
-        groups: list[str] = []
-        for voice in self.runtime.workflow_voices:
-            try:
-                definitions = self.runtime.workflow_catalog.discover(voice=voice)
-            except WorkflowDefinitionError as error:
-                groups.append(f"{voice} · — · ⚪ INACTIVE\n  └ Catalog error: {error}")
-                continue
-            if definitions:
-                groups.extend(self._format_workflow(definition, voice) for definition in definitions)
-            else:
-                groups.append(f"{voice} · — · ⚪ INACTIVE")
-        return "\n\n".join(groups) or "no workflows"
-
-    def _format_workflow(self, definition: WorkflowDefinition, voice: str) -> str:
-        snapshot = self.runtime.workflow_engine.snapshot(workflow=definition.name, voice=voice)
-        if snapshot is None:
-            return f"{voice} · {definition.name} · ⚪ INACTIVE"
-        phase_index, phase = next((index, phase) for index, phase in enumerate(definition.phases) if phase.id.casefold() == snapshot.phase_id.casefold())
-        icon = self._status_icon(snapshot)
-        completed = snapshot.phase_status is WorkflowPhaseStatus.DONE
-        instructions = len(phase.instructions)
-        checkpoints = len(phase.checkpoints)
-        return "\n".join((f"{voice} · {definition.name} · {icon} {snapshot.status.value.upper()}", f"  ├ Fase activa: {phase.name} ({phase_index + 1}/{len(definition.phases)})", f"  ├ Tarea actual: {phase.instructions[0] if phase.instructions else '—'}", f"  ├ Progreso: {instructions if completed else 0}/{instructions} instrucciones", f"  └ Checkpoints: {checkpoints if completed else 0}/{checkpoints} ✓"))
 
     @staticmethod
     def _status_icon(snapshot: WorkflowSnapshot) -> str:
@@ -400,7 +507,13 @@ class KatetoApp(App[None]):
 
     def _mcp_state(self) -> str:
         runtime_status = "READY" if self.runtime.is_started else "STOPPED"
-        return "\n".join(f"{server.server_name} / {server.voice_name}: {runtime_status} · waits={server.pending_wait_count}" for server in self.runtime.mcp_servers) or "no MCP servers"
+        return (
+            "\n".join(
+                f"{server.server_name} / {server.voice_name}: {runtime_status} · waits={server.pending_wait_count}"
+                for server in self.runtime.mcp_servers
+            )
+            or "no MCP servers"
+        )
 
     @staticmethod
     def _format_event(envelope: EventEnvelope[BaseModel]) -> str:
@@ -410,9 +523,6 @@ class KatetoApp(App[None]):
         else:
             message = type(data).__name__
         return f"{envelope.name:<22} {envelope.source:<16} {message}"
-
-    def _plugin_controls(self, plugin: Plugin) -> tuple[Horizontal, ...]:
-        return (Horizontal(Button(plugin.name, id=f"select-{plugin.name}", classes="plugin-name"), Button("On", id=f"enable-{plugin.name}"), Button("Off", id=f"disable-{plugin.name}"), classes="plugin-row"),)
 
 
 def run_tui(*, fixture: bool = False, config_dir: Path | None = None) -> None:
