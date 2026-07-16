@@ -57,7 +57,8 @@ async def test_audio_to_execute_emits_ordered_transcript_classification_and_one_
         # Then: its visible event prefix is stable and the subscriber contract, not the classifier,
         # chooses active voices.
         events = manager.get_events()
-        assert [event.name for event in events[:3]] == ["audio_chunk", "transcription", "classification"]
+        conversation_events = [event for event in events if event.name != "voice_status"]
+        assert [event.name for event in conversation_events[:3]] == ["audio_chunk", "transcription", "classification"]
         generate_events = [event for event in events if event.name == "generate"]
         assert [
             (event.source, event.target, event.data.prompt)
@@ -93,7 +94,8 @@ async def test_ignored_classifications_end_after_the_classification_event(catego
         await manager.wait_for_idle()
 
         # Then: neither ignored category can wake a voice or mutate the TODO surface.
-        assert [event.name for event in manager.get_events()] == ["audio_chunk", "transcription", "classification"]
+        conversation_events = [event for event in manager.get_events() if event.name != "voice_status"]
+        assert [event.name for event in conversation_events] == ["audio_chunk", "transcription", "classification"]
         assert not (tmp_path / "voices" / "doktor" / "TODO.md").exists()
     finally:
         await manager.close()
