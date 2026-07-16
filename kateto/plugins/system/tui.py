@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import json
 import asyncio  # noqa: ANYIO_OK
 from collections import deque
 from pathlib import Path
 from typing import assert_never
 
 from pydantic import BaseModel, Field, ValidationError
+from pydantic.fields import FieldInfo
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Footer, Header, Input, Label, Static, Switch, TabbedContent, TabPane, Tree
+from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static, Switch, TabbedContent, TabPane, Tree
 
 from kateto.core.event import (
     AudioInputStatusData,
@@ -79,7 +81,11 @@ class KatetoApp(App[None]):
 
     /* Events tab */
     #events-body { height: 1fr; margin-bottom: 1; }
+    #events-content { height: 100%; }
+    #events-stream { width: 1fr; height: 100%; }
     #event-state { height: 1fr; border: solid $secondary; padding: 1; overflow-y: auto; }
+    #events-registrations { width: 40%; height: 100%; border: round $secondary; padding: 1; }
+    #event-registrations-tree { height: 1fr; overflow-y: auto; min-height: 0; }
     #composer { dock: bottom; height: 5; padding: 0 1; }
     #composer-input { width: 1fr; }
     #send-event { width: 16; }
@@ -93,8 +99,9 @@ class KatetoApp(App[None]):
     .plugin-name { width: 24; }
     .plugin-name.selected { background: $accent; color: $surface; }
     Switch { margin: 0 2; }
-    #plugin-history { height: 1fr; overflow-y: auto; min-height: 0; }
+    #plugin-history { height: auto; max-height: 12; overflow-y: auto; min-height: 0; border-top: solid $secondary; margin-top: 1; padding: 1; }
     #plugin-config-section { height: auto; max-height: 12; overflow-y: auto; border-top: solid $secondary; margin-top: 1; padding: 1; }
+    #event-autocomplete { height: auto; max-height: 10; border: solid $secondary; display: none; overflow-y: auto; }
 
     /* Voices tab */
     #voice-tree { height: 1fr; }
@@ -141,8 +148,14 @@ class KatetoApp(App[None]):
             with TabPane("Events", id="events-tab"):
                 yield Static("EVENT STREAM", classes="section-title")
                 with Vertical(id="events-body"):
-                    yield Static(id="event-state")
+                    with Horizontal(id="events-content"):
+                        with Vertical(id="events-stream"):
+                            yield Static(id="event-state")
+                        with Vertical(id="events-registrations"):
+                            yield Static("REGISTERED EVENTS", classes="section-title")
+                            yield Tree("Events", id="event-registrations-tree")
                 with Vertical(id="composer"):
+                    yield ListView(id="event-autocomplete")
                     yield Label(
                         "Composer: ordinary text → tui_event · /event_name → strict JSON payload",
                         id="composer-mode",
@@ -157,7 +170,7 @@ class KatetoApp(App[None]):
                         for plugin in self._available_plugins():
                             yield self._plugin_row(plugin)
                     with Vertical(id="plugin-panel-right"):
-                        yield Static("Plugin Events", classes="section-title")
+                        yield Static("Plugin History", classes="section-title")
                         yield Static(id="plugin-history")
                         with Vertical(id="plugin-config-section"):
                             yield Static("Configuration", classes="section-title")
@@ -232,6 +245,41 @@ class KatetoApp(App[None]):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         event.stop()
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id != "composer-input":
+            return
+        value = event.value.strip()
+        autocomplete = self.query_one("#event-autocomplete", ListView)
+        if value.startswith("/"):
+            prefix = value[1:].strip().lower()
+            matching = [
+                reg.name for reg in self.manager.get_event_registrations()
+                if prefix in reg.name.lower()
+            ]
+            autocomplete.clear()
+            for name in matching:
+                autocomplete.append(ListItem(Label(name)))
+            autocomplete.display = bool(matching)
+        else:
+            autocomplete.display = False
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        autocomplete = self.query_one("#event-autocomplete", ListView)
+        if not autocomplete.display:
+            return
+        index = autocomplete.index
+        if index is None:
+            return
+        input_widget = self.query_one("#composer-input", Input)
+        prefix = input_widget.value.strip()[1:].lower()
+        matching = [
+            reg.name for reg in self.manager.get_event_registrations()
+            if prefix in reg.name.lower()
+        ]
+        if index < len(matching):
+            self._select_event(matching[index])
+        autocomplete.display = False
+
     async def _submit_composer(self) -> None:
         input_widget = self.query_one("#composer-input", Input)
         value = input_widget.value.strip()
@@ -245,11 +293,7 @@ class KatetoApp(App[None]):
             if contract is None:
                 self.notify(f"ERROR: unknown event /{name}", severity="error")
             else:
-                self._selected_event = name
-                self.query_one("#composer-mode", Label).update(
-                    f"Payload for /{name}: strict JSON for {contract.__name__}"
-                )
-                input_widget.value = ""
+                self._select_event(name)
             self._refresh_view()
             return
         if self._selected_event is None:
@@ -334,6 +378,7 @@ class KatetoApp(App[None]):
         self.query_one("#plugin-history", Static).update(self._history_text())
         self._refresh_plugin_switches()
         self._refresh_plugin_config()
+        self._populate_event_tree()
         self._populate_voice_tree()
         self._populate_workflow_tree()
         self.query_one("#mcp-state", Static).update(self._mcp_state())
@@ -481,6 +526,93 @@ class KatetoApp(App[None]):
                         v_node.add_leaf(f"Phase: {phase.name}")
                         v_node.add_leaf(f"Task: {phase.instructions[0] if phase.instructions else '—'}")
         tree.root.expand_all()
+
+    def _populate_event_tree(self) -> None:
+        tree = self.query_one("#event-registrations-tree", Tree)
+        tree.clear()
+        for reg in self.manager.get_event_registrations():
+            contract_name = reg.contract.__name__
+            event_node = tree.root.add(f"{reg.name} ({contract_name})")
+            params_node = event_node.add("Parameters")
+            for field_name, field_info in reg.contract.model_fields.items():
+                if field_name == "model_config":
+                    continue
+                type_hint = self._field_type_str(field_info)
+                req = "required" if field_info.is_required() else ""
+                default = ""
+                if not field_info.is_required():
+                    val = field_info.default
+                    if val is None:
+                        default = "default=None"
+                    else:
+                        default = f"default={val!r}"
+                tag = f" [{req}]" if req else (f" [{default}]" if default else "")
+                params_node.add_leaf(f"{field_name}: {type_hint}{tag}")
+            if reg.receivers:
+                subs_node = event_node.add("Subscribers")
+                for plugin_name in reg.receivers:
+                    subs_node.add_leaf(plugin_name)
+        tree.root.expand_all()
+
+    @staticmethod
+    def _field_type_str(field_info: FieldInfo) -> str:
+        annotation = field_info.annotation
+        if annotation is None:
+            return "Any"
+        origin = getattr(annotation, "__origin__", None)
+        if origin is not None:
+            args = annotation.__args__
+            args_str = ", ".join(
+                getattr(a, "__name__", str(a).removeprefix("typing.")) for a in args
+            )
+            origin_name = getattr(origin, "__name__", str(origin))
+            return f"{origin_name}[{args_str}]"
+        return getattr(annotation, "__name__", str(annotation))
+
+    def _select_event(self, name: str) -> None:
+        contract = next(
+            (item.contract for item in self.manager.get_event_registrations() if item.name == name), None
+        )
+        if contract is None:
+            return
+        self._selected_event = name
+        self.query_one("#composer-mode", Label).update(
+            f"Payload for /{name}: strict JSON for {contract.__name__}"
+        )
+        template = self._json_template(contract)
+        self.query_one("#composer-input", Input).value = template
+        self.query_one("#composer-input", Input).focus()
+
+    @staticmethod
+    def _json_template(contract: type[BaseModel]) -> str:
+        fields: dict[str, object] = {}
+        for field_name, field_info in contract.model_fields.items():
+            if field_name == "model_config":
+                continue
+            if field_info.is_required():
+                annotation = field_info.annotation
+                origin = getattr(annotation, "__origin__", None)
+                if origin is list:
+                    fields[field_name] = []
+                elif origin is dict:
+                    fields[field_name] = {}
+                elif annotation is str:
+                    fields[field_name] = ""
+                elif annotation is int:
+                    fields[field_name] = 0
+                elif annotation is float:
+                    fields[field_name] = 0.0
+                elif annotation is bool:
+                    fields[field_name] = False
+                elif annotation is bytes:
+                    fields[field_name] = ""
+                else:
+                    fields[field_name] = ""
+            else:
+                val = field_info.default
+                if val is not None and not isinstance(val, type):
+                    fields[field_name] = val
+        return json.dumps(fields, indent=2, default=str)
 
     def _voice_text(self) -> str:
         return "\n".join(
