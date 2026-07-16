@@ -86,13 +86,14 @@ class KatetoApp(App[None]):
     /* Plugins tab */
     #plugin-panel { height: 1fr; }
     #plugin-panel-left { width: 40%; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
-    #plugin-panel-right { width: 1fr; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
+    #plugin-panel-right { width: 1fr; height: 1fr; border: round $secondary; padding: 1; }
     .plugin-row { height: 3; width: 1fr; align: center middle; }
     .plugin-status { width: 3; content-align: center middle; }
     .plugin-name { width: 24; }
     .plugin-name.selected { background: $accent; color: $surface; }
     Switch { margin: 0 2; }
-    #plugin-history { height: 1fr; overflow-y: auto; }
+    #plugin-history { height: 1fr; overflow-y: auto; min-height: 0; }
+    #plugin-config-section { height: auto; max-height: 12; overflow-y: auto; border-top: solid $secondary; margin-top: 1; padding: 1; }
 
     /* Voices tab */
     #voice-tree { height: 1fr; }
@@ -157,20 +158,9 @@ class KatetoApp(App[None]):
                     with Vertical(id="plugin-panel-right"):
                         yield Static("Plugin Events", classes="section-title")
                         yield Static(id="plugin-history")
-                        yield Static(id="plugin-config")
-                        for configuration in self._configuration_items():
-                            yield Label(f"{configuration.plugin} device configuration", classes="section-title")
-                            yield Input(
-                                value=configuration.microphone or "",
-                                placeholder="microphone device",
-                                id=f"microphone-{configuration.plugin}",
-                            )
-                            yield Input(
-                                value=configuration.speaker or "",
-                                placeholder="speaker device",
-                                id=f"speaker-{configuration.plugin}",
-                            )
-                            yield Button("Apply device configuration", id=f"apply-config-{configuration.plugin}")
+                        with Vertical(id="plugin-config-section"):
+                            yield Static("Configuration", classes="section-title")
+                            yield Static(id="plugin-config")
             with TabPane("Voices", id="voices-tab"):
                 yield Static("RUNTIME VOICES", classes="section-title")
                 yield Tree("Voices", id="voice-tree")
@@ -341,10 +331,31 @@ class KatetoApp(App[None]):
             return
         self.query_one("#event-state", Static).update(self.event_text or "waiting for events")
         self.query_one("#plugin-history", Static).update(self._history_text())
-        self.query_one("#plugin-config", Static).update(self._configuration_text())
+        self._refresh_plugin_switches()
+        self._refresh_plugin_config()
         self._populate_voice_tree()
         self._populate_workflow_tree()
         self.query_one("#mcp-state", Static).update(self._mcp_state())
+
+    def _refresh_plugin_switches(self) -> None:
+        for plugin in self._available_plugins():
+            try:
+                self.query_one(f"#switch-{plugin.name}", Switch).value = plugin.enabled
+            except Exception:
+                pass
+
+    def _refresh_plugin_config(self) -> None:
+        section = self.query_one("#plugin-config-section", Vertical)
+        name = self._selected_plugin
+        if name is None:
+            section.display = False
+            return
+        config = self._configuration_for(name)
+        if config is None:
+            section.display = False
+            return
+        section.display = True
+        self.query_one("#plugin-config", Static).update(self._format_configuration(config))
 
     def _refresh_plugin_selection(self) -> None:
         for plugin in self._available_plugins():
@@ -378,16 +389,10 @@ class KatetoApp(App[None]):
         received = (f"RECV  {self._format_event(event)}" for event in history.received)
         return f"{name}\n" + "\n".join((*sent, *received))
 
-    def _configuration_text(self) -> str:
-        configurations = self._configuration_items()
-        if not configurations:
-            return ""
-        return "\n".join(self._format_configuration(item) for item in configurations)
-
-    def _configuration_items(self) -> tuple[TuiPluginConfiguration, ...]:
+    def _configuration_for(self, name: str) -> TuiPluginConfiguration | None:
         if not isinstance(self.runtime, TuiConfigurationRuntime):
-            return ()
-        return self.runtime.plugin_configurations
+            return None
+        return next((c for c in self.runtime.plugin_configurations if c.plugin == name), None)
 
     @staticmethod
     def _format_configuration(configuration: TuiPluginConfiguration) -> str:
