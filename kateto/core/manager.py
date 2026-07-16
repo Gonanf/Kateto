@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK
+import logging
+from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
+from typing import Final
 from pydantic import BaseModel
 
 from .event import EventEnvelope, InterruptData, PluginErrorData
 from .plugin import Plugin
 
+log = logging.getLogger("kateto.manager")
+
 EventHandler = Callable[[BaseModel], Awaitable[None]]
 Subscriber = tuple[str, EventHandler]
 EventObserver = Callable[[EventEnvelope[BaseModel]], None]
+DEFAULT_EVENT_LIMIT: Final = 1_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,15 +26,27 @@ class EventRegistration:
     receivers: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class PluginEventHistory:
+    sent: tuple[EventEnvelope[BaseModel], ...]
+    received: tuple[EventEnvelope[BaseModel], ...]
+
+
 class PluginManager:
-    def __init__(self) -> None:
+    def __init__(self, *, event_limit: int = DEFAULT_EVENT_LIMIT) -> None:
+        if event_limit < 0:
+            msg = "event limit must not be negative"
+            raise ValueError(msg)
         self._plugins: dict[str, Plugin] = {}
         self._subscribers: dict[str, list[Subscriber]] = {}
         self._contracts: dict[str, type[BaseModel]] = {
             "error": PluginErrorData,
             "interrupt": InterruptData,
         }
-        self._events: list[EventEnvelope[BaseModel]] = []
+        self._events: deque[EventEnvelope[BaseModel]] = deque(maxlen=event_limit)
+        self._sent_events: dict[str, deque[EventEnvelope[BaseModel]]] = {}
+        self._received_events: dict[str, deque[EventEnvelope[BaseModel]]] = {}
+        self._event_limit: int = event_limit
         self._event_observers: list[EventObserver] = []
         self._dispatch_tasks: set[asyncio.Task[None]] = set()
         self._completed_dispatches = 0
@@ -94,6 +112,12 @@ class PluginManager:
     def get_events(self) -> tuple[EventEnvelope[BaseModel], ...]:
         return tuple(self._events)
 
+    def get_plugin_event_history(self, plugin_name: str) -> PluginEventHistory:
+        return PluginEventHistory(
+            sent=tuple(self._sent_events.get(plugin_name, ())),
+            received=tuple(self._received_events.get(plugin_name, ())),
+        )
+
     def get_event_registrations(self) -> tuple[EventRegistration, ...]:
         return tuple(
             EventRegistration(
@@ -157,12 +181,16 @@ class PluginManager:
             correlation_id=correlation_id,
         )
         self._events.append(envelope)
+        self._history_for(self._sent_events, envelope.source.split("/", maxsplit=1)[0]).append(envelope)
+        log.debug("emit %s source=%s target=%s", name, source, target or "*")
         for observer in tuple(self._event_observers):
             observer(envelope)
         recipients = self._resolve_subscribers(envelope, capability_filter)
         if only_once:
             recipients = recipients[:1]
+        log.debug("dispatch %s to %s", name, [p.name for p, _ in recipients])
         for plugin, handler in recipients:
+            self._history_for(self._received_events, plugin.name).append(envelope)
             task = asyncio.create_task(plugin._enqueue(envelope, handler))
             self._dispatch_tasks.add(task)
             task.add_done_callback(self._complete_dispatch)
@@ -188,6 +216,17 @@ class PluginManager:
     def _complete_dispatch(self, task: asyncio.Task[None]) -> None:
         self._dispatch_tasks.discard(task)
         self._completed_dispatches += 1
+
+    def _history_for(
+        self,
+        histories: dict[str, deque[EventEnvelope[BaseModel]]],
+        plugin_name: str,
+    ) -> deque[EventEnvelope[BaseModel]]:
+        history: deque[EventEnvelope[BaseModel]] | None = histories.get(plugin_name)
+        if history is None:
+            history = deque(maxlen=self._event_limit)
+            histories[plugin_name] = history
+        return history
 
     async def _report_plugin_error(
         self,

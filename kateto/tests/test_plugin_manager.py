@@ -6,7 +6,7 @@ import pytest
 
 import kateto.core as core
 
-from kateto.core import Plugin, PluginManager, get_plugin_manager
+from kateto.core import Plugin, PluginEventHistory, PluginManager, get_plugin_manager
 from kateto.core.event import EventModel, GenerateData, InterruptData
 
 
@@ -210,3 +210,51 @@ async def test_get_plugin_manager_returns_one_shared_singleton() -> None:
     # Then: both callers share the same event bus instance.
     assert first is second
     await first.close()
+
+
+@pytest.mark.asyncio
+async def test_event_history_is_bounded_and_exposes_plugin_sent_and_received_events() -> None:
+    # Given: a manager with a finite history limit and a source/receiver pair.
+    manager = PluginManager(event_limit=2)
+    source = LifecyclePlugin()
+    source.name = "source"
+    receiver = LifecyclePlugin()
+    receiver.name = "receiver"
+    await manager.enable_plugin(source)
+    await manager.enable_plugin(receiver)
+
+    # When: the source emits more events than the manager can retain.
+    envelopes = [
+        await manager.emit("context", ContextData(text=str(index)), source="source")
+        for index in range(3)
+    ]
+    await receiver.delivered.wait()
+    await manager.wait_for_idle()
+
+    # Then: global and per-plugin histories retain only the newest typed events.
+    assert manager.get_events() == tuple(envelopes[-2:])
+    history = manager.get_plugin_event_history("source")
+    assert isinstance(history, PluginEventHistory)
+    assert history.sent == tuple(envelopes[-2:])
+    assert manager.get_plugin_event_history("receiver").received == tuple(envelopes[-2:])
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_default_event_history_limit_is_finite() -> None:
+    # Given: a manager using its default event-history configuration.
+    manager = PluginManager()
+
+    # When: more than the default retention limit is emitted.
+    for index in range(1_001):
+        await manager.emit("context", ContextData(text=str(index)), source="source")
+
+    # Then: the default retains a finite recent window.
+    assert len(manager.get_events()) == 1_000
+    first = manager.get_events()[0].data
+    last = manager.get_events()[-1].data
+    assert isinstance(first, ContextData)
+    assert isinstance(last, ContextData)
+    assert first.text == "1"
+    assert last.text == "1000"
+    await manager.close()
