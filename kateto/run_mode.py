@@ -37,6 +37,7 @@ class RuntimeComponents:
     plugins: tuple[Plugin, ...]
     mcp_servers: tuple[McpEventServer, ...]
     hot_reload_controller: HotReloadController | None
+    workflow_voices: tuple[str, ...]
 
 
 @final
@@ -61,7 +62,11 @@ class RuntimeOwner:
 
     @property
     def runtime_plugins(self) -> tuple[Plugin, ...]:
-        return self._components.plugins
+        return (*self._event_runtime.plugins, *self._components.plugins)
+
+    @property
+    def workflow_voices(self) -> tuple[str, ...]:
+        return self._components.workflow_voices
 
     @property
     def mcp_servers(self) -> tuple[McpEventServer, ...]:
@@ -162,6 +167,11 @@ def build_runtime_owner(
             plugins=runtime_plugins,
             mcp_servers=mcp_servers,
             hot_reload_controller=controller,
+            workflow_voices=tuple(
+                name
+                for name, settings in config.settings.voice.items()
+                if settings.enabled
+            ),
         ),
     )
 

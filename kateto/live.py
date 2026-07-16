@@ -78,6 +78,10 @@ class EventRuntime:
     def providers(self) -> tuple[ManagedProvider, ...]:
         return self._providers
 
+    @property
+    def plugins(self) -> tuple[Plugin, ...]:
+        return tuple(self._plugins)
+
     async def start(self) -> None:
         if self._started:
             return

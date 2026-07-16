@@ -124,6 +124,14 @@ class McpEventServer:
         return self._fastmcp
 
     @property
+    def server_name(self) -> str:
+        return self._options.server_name
+
+    @property
+    def voice_name(self) -> str:
+        return self._options.voice_name
+
+    @property
     def pending_wait_count(self) -> int:
         return len(self._waiters)
 

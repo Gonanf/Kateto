@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK
 from pathlib import Path
-from typing import Final
+from typing import assert_never
 
 from pydantic import BaseModel, Field
 from textual.app import App, ComposeResult
@@ -13,6 +13,9 @@ from kateto.core.event import EventEnvelope, EventModel, PluginErrorData
 from kateto.core.hot_reload import HotReloadController, ReloadContext, ReplacementFactory
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
+from kateto.core.workflow import WorkflowDefinition, WorkflowDefinitionError, WorkflowPhaseStatus, WorkflowStatus
+from kateto.core.workflow_engine import WorkflowSnapshot
+from kateto.plugins.system.tui_runtime import TuiRuntime
 
 
 class TuiEventData(EventModel):
@@ -22,6 +25,44 @@ class TuiEventData(EventModel):
 class _FixturePlugin(Plugin):
     def __init__(self, name: str) -> None:
         super().__init__(name, capabilities=("fixture",))
+
+
+class _FixtureRuntime:
+    def __init__(self, config_dir: Path) -> None:
+        from kateto.core.workflow_engine import WorkflowEngine
+
+        self.manager = PluginManager()
+        self.runtime_plugins = tuple(
+            _FixturePlugin(name)
+            for name in ("voice_jane", "voice_doktor", "voice_conquest", "workflow_engine")
+        )
+        self._workflow_engine = WorkflowEngine(config_dir=config_dir)
+        self.mcp_servers = ()
+        self.workflow_voices = ()
+        self.hot_reload_controller = None
+        self.is_started = False
+
+    @property
+    def workflow_catalog(self):
+        return self._workflow_engine.catalog
+
+    @property
+    def workflow_engine(self):
+        return self._workflow_engine
+
+    async def start(self) -> None:
+        for plugin in self.runtime_plugins:
+            await self.manager.enable_plugin(plugin)
+        await self.manager.emit(
+            "tui_event",
+            TuiEventData(message="fixture dashboard ready"),
+            source="fixture",
+        )
+        self.is_started = True
+
+    async def stop(self) -> None:
+        await self.manager.close()
+        self.is_started = False
 
 
 class KatetoApp(App[None]):
@@ -42,27 +83,43 @@ class KatetoApp(App[None]):
     def __init__(
         self,
         *,
-        manager: PluginManager,
+        runtime: TuiRuntime,
         fixture: bool = False,
         config_dir: Path | None = None,
         replacement_factory: ReplacementFactory | None = None,
     ) -> None:
         super().__init__()
-        self.manager = manager
+        self.runtime = runtime
+        self.manager = runtime.manager
         self.fixture = fixture
         self.config_dir = (Path.cwd() if config_dir is None else config_dir).resolve()
         self.replacement_factory = replacement_factory
         if fixture and replacement_factory is None:
             self.replacement_factory = self._fixture_replacement_factory
-        self._fixture_names = ("voice_jane", "voice_doktor", "voice_conquest", "workflow_engine")
         self._events: list[str] = []
         self._plugin_state = ""
+        self._mcp_state = ""
+        self._workflow_state = ""
+        self._runtime_state = ""
         self._controller: HotReloadController | None = None
+        self._stop_runtime_started = False
         self.manager.add_event_observer(self._observe_event)
 
     @property
     def plugin_text(self) -> str:
         return self._plugin_state
+
+    @property
+    def mcp_text(self) -> str:
+        return self._mcp_state
+
+    @property
+    def workflow_text(self) -> str:
+        return self._workflow_state
+
+    @property
+    def runtime_text(self) -> str:
+        return self._runtime_state
 
     @property
     def event_text(self) -> str:
@@ -73,12 +130,14 @@ class KatetoApp(App[None]):
         with Horizontal(id="body"):
             with Vertical(id="plugins"):
                 yield Label("PLUGINS / VOICES", classes="title")
+                yield Static(id="runtime-state")
                 yield Static(id="plugin-state")
-                for plugin in self.manager.get_plugins():
-                    yield from self._plugin_controls(plugin)
-                if self.fixture and not self.manager.get_plugins():
-                    for name in self._fixture_names:
-                        yield from self._plugin_controls(_FixturePlugin(name))
+                yield Label("MCP SERVERS", classes="title")
+                yield Static(id="mcp-state")
+                yield Label("WORKFLOWS", classes="title")
+                yield Static(id="workflow-state")
+                for plugin in self._available_plugins():
+                    yield self._plugin_controls(plugin)[0]
             with Vertical(id="events"):
                 yield Label("EVENT STREAM", classes="title")
                 yield Static(id="event-state")
@@ -90,40 +149,36 @@ class KatetoApp(App[None]):
     def on_mount(self) -> None:
         self._events.extend(self._format_event(event) for event in self.manager.get_events())
         self._refresh_view()
-        if self.fixture:
-            self.run_worker(self._bootstrap_fixture, exclusive=True)
-        self.run_worker(self._start_hot_reload, exclusive=True)
+        self.run_worker(self._start_runtime, exclusive=True)
 
-    async def _bootstrap_fixture(self) -> None:
-        for name in self._fixture_names:
-            await self.manager.enable_plugin(_FixturePlugin(name))
-        await self.manager.emit("tui_event", TuiEventData(message="fixture dashboard ready"), source="fixture")
+    async def _start_runtime(self) -> None:
+        await self.runtime.start()
+        if self.fixture and self.runtime.hot_reload_controller is None:
+            controller = HotReloadController(
+                manager=self.manager,
+                watched_root=self.config_dir,
+                loop=asyncio.get_running_loop(),
+                replacement_factory=self.replacement_factory,
+            )
+            self._controller = controller
+            await controller.start()
         self._refresh_view()
 
-    async def _start_hot_reload(self) -> None:
-        controller = HotReloadController(
-            manager=self.manager,
-            watched_root=self.config_dir,
-            loop=asyncio.get_running_loop(),
-            replacement_factory=self.replacement_factory,
-        )
-        self._controller = controller
-        await controller.start()
-
-    def on_unmount(self) -> None:
+    async def on_unmount(self) -> None:
         self.manager.remove_event_observer(self._observe_event)
-        if self._controller is not None:
-            self.run_worker(self._close_hot_reload, exclusive=True)
+        await self._stop_runtime()
 
-    async def _close_hot_reload(self) -> None:
+    async def _stop_runtime(self) -> None:
+        if self._stop_runtime_started:
+            return
+        self._stop_runtime_started = True
         if self._controller is not None:
             await self._controller.close()
             self._controller = None
+        await self.runtime.stop()
 
     async def action_quit(self) -> None:
-        if self._controller is not None:
-            await self._controller.close()
-            self._controller = None
+        await self._stop_runtime()
         self.exit()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -147,7 +202,7 @@ class KatetoApp(App[None]):
 
     async def _set_plugin(self, name: str, enabled: bool) -> None:
         if enabled:
-            plugin = next((item for item in self.manager.get_plugins() if item.name == name), None)
+            plugin = next((item for item in self._available_plugins() if item.name == name), None)
             if plugin is not None:
                 await self.manager.enable_plugin(plugin)
         else:
@@ -166,10 +221,82 @@ class KatetoApp(App[None]):
     def _refresh_view(self) -> None:
         if not self.is_mounted:
             return
-        states = [f"{plugin.name:<24} {'ON' if plugin.enabled else 'OFF'}" for plugin in self.manager.get_plugins()]
-        self._plugin_state = "\n".join(states) or "no plugins"
+        self._runtime_state = f"RUNTIME: {'RUNNING' if self.runtime.is_started else 'STOPPED'}"
+        self._plugin_state = "\n".join(
+            f"{plugin.name:<24} {'ON' if plugin.enabled else 'OFF'}"
+            for plugin in self._available_plugins()
+        ) or "no plugins"
+        runtime_status = "READY" if self.runtime.is_started else "STOPPED"
+        self._mcp_state = "\n".join(
+            f"{server.server_name} / {server.voice_name}: {runtime_status}"
+            for server in self.runtime.mcp_servers
+        ) or "no MCP servers"
+        self._workflow_state = self._format_workflows()
+        self.query_one("#runtime-state", Static).update(self._runtime_state)
         self.query_one("#plugin-state", Static).update(self._plugin_state)
+        self.query_one("#mcp-state", Static).update(self._mcp_state)
+        self.query_one("#workflow-state", Static).update(self._workflow_state)
         self.query_one("#event-state", Static).update(self.event_text or "waiting for events")
+
+    def _available_plugins(self) -> tuple[Plugin, ...]:
+        plugins: dict[str, Plugin] = {plugin.name: plugin for plugin in self.runtime.runtime_plugins}
+        plugins.update({plugin.name: plugin for plugin in self.manager.get_plugins()})
+        return tuple(plugins.values())
+
+    def _format_workflows(self) -> str:
+        groups: list[str] = []
+        for voice in self.runtime.workflow_voices:
+            try:
+                definitions = self.runtime.workflow_catalog.discover(voice=voice)
+            except WorkflowDefinitionError as error:
+                groups.append(f"{voice} · — · ⚪ INACTIVE\n  └ Catalog error: {error}")
+                continue
+            if not definitions:
+                groups.append(f"{voice} · — · ⚪ INACTIVE")
+                continue
+            groups.extend(
+                self._format_workflow(definition, voice)
+                for definition in definitions
+            )
+        return "\n\n".join(groups) or "no workflows"
+
+    def _format_workflow(self, definition: WorkflowDefinition, voice: str) -> str:
+        snapshot = self.runtime.workflow_engine.snapshot(workflow=definition.name, voice=voice)
+        if snapshot is None:
+            return f"{voice} · {definition.name} · ⚪ INACTIVE"
+        phase_index, phase = next(
+            (index, phase)
+            for index, phase in enumerate(definition.phases)
+            if phase.id.casefold() == snapshot.phase_id.casefold()
+        )
+        icon = self._status_icon(snapshot)
+        completed = snapshot.phase_status is WorkflowPhaseStatus.DONE
+        instruction_count = len(phase.instructions)
+        checkpoint_count = len(phase.checkpoints)
+        instruction_progress = instruction_count if completed else 0
+        checkpoint_progress = checkpoint_count if completed else 0
+        return "\n".join(
+            (
+                f"{voice} · {definition.name} · {icon} {snapshot.status.value.upper()}",
+                f"  ├ Fase activa: {phase.name} ({phase_index + 1}/{len(definition.phases)})",
+                f"  ├ Progreso: {instruction_progress}/{instruction_count} instrucciones",
+                f"  └ Checkpoints: {checkpoint_progress}/{checkpoint_count} ✓",
+            ),
+        )
+
+    @staticmethod
+    def _status_icon(snapshot: WorkflowSnapshot) -> str:
+        match snapshot.status:
+            case WorkflowStatus.RUNNING:
+                return "🟡"
+            case WorkflowStatus.PAUSED:
+                return "🟠"
+            case WorkflowStatus.STOPPED:
+                return "🔴"
+            case WorkflowStatus.COMPLETED:
+                return "🟢"
+            case unreachable:
+                assert_never(unreachable)
 
     @staticmethod
     def _format_event(envelope: EventEnvelope[BaseModel]) -> str:
@@ -195,6 +322,12 @@ class KatetoApp(App[None]):
 
 
 def run_tui(*, fixture: bool = False, config_dir: Path | None = None) -> None:
-    manager = PluginManager()
-    app = KatetoApp(manager=manager, fixture=fixture, config_dir=config_dir)
-    app.run()
+    resolved_config_dir = (Path.cwd() if config_dir is None else config_dir).resolve()
+    if fixture:
+        runtime: TuiRuntime = _FixtureRuntime(resolved_config_dir)
+    else:
+        from kateto.core.config import load_config
+        from kateto.run_mode import build_runtime_owner
+
+        runtime = build_runtime_owner(load_config(config_dir=resolved_config_dir))
+    KatetoApp(runtime=runtime, fixture=fixture, config_dir=resolved_config_dir).run()

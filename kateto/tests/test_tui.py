@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+from dataclasses import dataclass
 from pathlib import Path
 import sys
 
@@ -9,8 +10,10 @@ import pytest
 from watchdog.events import FileCreatedEvent, FileModifiedEvent
 
 from kateto.core.hot_reload import HotReloadController, ReloadContext, _ReloadHandler
+from kateto.core.event import WorkflowRunData
 from kateto.core.plugin import Plugin
 from kateto.core.manager import PluginManager
+from kateto.core.workflow_engine import WorkflowEngine
 from kateto.plugins.system.tui import KatetoApp, TuiEventData
 
 
@@ -40,6 +43,52 @@ class _ConfiguredPlugin(Plugin):
         self.hot_reload = hot_reload
 
 
+@dataclass
+class _McpRuntime:
+    server_name: str
+    voice_name: str
+    pending_wait_count: int = 0
+
+
+class _RuntimeOwnerLike:
+    def __init__(
+        self,
+        *,
+        manager: PluginManager,
+        runtime_plugins: tuple[Plugin, ...],
+        workflow_engine: WorkflowEngine,
+        mcp_servers: tuple[_McpRuntime, ...] = (),
+        workflow_voices: tuple[str, ...] = (),
+    ) -> None:
+        self.manager = manager
+        self.runtime_plugins = runtime_plugins
+        self.workflow_engine = workflow_engine
+        self.workflow_catalog = workflow_engine.catalog
+        self.mcp_servers = mcp_servers
+        self.workflow_voices = workflow_voices
+        self.hot_reload_controller = None
+        self.is_started = False
+
+    async def start(self) -> None:
+        for plugin in self.runtime_plugins:
+            await self.manager.enable_plugin(plugin)
+        await self.manager.emit(
+            "tui_event",
+            TuiEventData(message="runtime ready"),
+            source="runtime",
+        )
+        await self.manager.emit(
+            "workflow_run",
+            WorkflowRunData(workflow="daily", voice="Conquest"),
+            source="runtime",
+        )
+        self.is_started = True
+
+    async def stop(self) -> None:
+        await self.manager.close()
+        self.is_started = False
+
+
 def _config_source(*, hot_reload: bool) -> str:
     enabled = "true" if hot_reload else "false"
     return f"[kateto]\nhot_reload = {enabled}\n\n[cli]\nallowlist = [\"echo\"]\n"
@@ -56,26 +105,48 @@ def _module_source(*, version: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_tui_renders_plugins_and_event_rows_and_controls() -> None:
-    # Given: a manager with one controllable fixture plugin and an emitted event.
+async def test_tui_renders_live_runtime_state_and_controls(tmp_path: Path) -> None:
+    # Given: a runtime owner with a manager, workflow engine, catalog, and MCP server.
+    workflow_path = tmp_path / "workflows" / "daily" / "workflow.py"
+    workflow_path.parent.mkdir(parents=True)
+    workflow_path.write_text(
+        "name = 'daily'\n"
+        "description = 'runtime workflow'\n"
+        "phases = [{'id': 'start', 'name': 'Start', 'instructions': ['work']}]\n",
+        encoding="utf-8",
+    )
     manager = PluginManager()
     plugin = _FixturePlugin()
-    await manager.enable_plugin(plugin)
-    await manager.emit("tui_event", TuiEventData(message="fixture ready"), source="fixture")
+    engine = WorkflowEngine(config_dir=tmp_path)
+    runtime = _RuntimeOwnerLike(
+        manager=manager,
+        runtime_plugins=(plugin, engine),
+        workflow_engine=engine,
+        mcp_servers=(_McpRuntime("backlog", "Conquest"),),
+        workflow_voices=("Conquest", "Jane"),
+    )
 
     # When: the Textual app is driven through its real test surface.
-    app = KatetoApp(manager=manager, fixture=True)
+    app = KatetoApp(runtime=runtime)
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.click("#disable-fixture_plugin")
         await pilot.click("#enable-fixture_plugin")
         await pilot.pause()
 
-    # Then: the app rendered the state and controls changed the live plugin.
-    assert "fixture_plugin" in app.plugin_text
-    assert "fixture ready" in app.event_text
-    assert plugin.enabled
-    await manager.close()
+        # Then: live runtime state is visible and controls use its manager.
+        assert "RUNTIME: RUNNING" in app.runtime_text
+        assert "fixture_plugin" in app.plugin_text
+        assert "backlog / Conquest: READY" in app.mcp_text
+        assert "Conquest · daily · 🟡 RUNNING" in app.workflow_text
+        assert "Fase activa: Start (1/1)" in app.workflow_text
+        assert "Progreso: 0/1 instrucciones" in app.workflow_text
+        assert "Checkpoints: 0/0" in app.workflow_text
+        assert "Jane · daily · ⚪ INACTIVE" in app.workflow_text
+        assert "runtime ready" in app.event_text
+        assert plugin.enabled
+
+    assert not runtime.is_started
 
 
 @pytest.mark.asyncio
@@ -280,7 +351,9 @@ async def test_hot_reload_close_cancels_active_task_and_blocks_thread_callbacks(
 async def test_tui_reports_malformed_reload_without_stopping() -> None:
     # Given: a TUI with a reload callback that reports an invalid definition.
     manager = PluginManager()
-    app = KatetoApp(manager=manager, fixture=True)
+    engine = WorkflowEngine(config_dir=Path.cwd())
+    runtime = _RuntimeOwnerLike(manager=manager, runtime_plugins=(), workflow_engine=engine)
+    app = KatetoApp(runtime=runtime, fixture=True)
     async with app.run_test() as pilot:
         # When: malformed workflow feedback is published as an error event.
         await manager.emit("tui_event", TuiEventData(message="reload error: malformed workflow"), source="watcher")
@@ -289,4 +362,4 @@ async def test_tui_reports_malformed_reload_without_stopping() -> None:
         # Then: the app remains mounted and the error is visible.
         assert app.is_running
         assert "malformed workflow" in app.event_text
-    await manager.close()
+    assert not runtime.is_started
