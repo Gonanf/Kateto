@@ -19,6 +19,7 @@ from kateto.core.event import (
     EventModel,
     GenerateData,
     PluginErrorData,
+    TextChunk,
     VoiceStatus,
     VoiceStatusData,
 )
@@ -174,6 +175,7 @@ class KatetoApp(App[None]):
         self._selected_event: str | None = None
         self._controller: HotReloadController | None = None
         self._stop_runtime_started = False
+        self._voice_texts: dict[str, str] = {}
         self.manager.register_event("tui_event", TuiEventData)
         self.manager.add_event_observer(self._observe_event)
 
@@ -407,6 +409,7 @@ class KatetoApp(App[None]):
         if placeholder:
             placeholder.remove()
         self._hide_typing_indicator(name)
+        self._voice_texts.pop(name, None)
         msg = Static(f"[bold]{name}[/bold]  {content}", classes=f"chat-message chat-{role}")
         messages.mount(msg)
         self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
@@ -432,6 +435,27 @@ class KatetoApp(App[None]):
         indicator = self.query(f"#typing-{voice}")
         if indicator:
             indicator.remove()
+
+    def _handle_text_chunk(self, voice: str, chunk: TextChunk) -> None:
+        if not self.is_mounted:
+            return
+        messages = self.query_one("#conversation-messages", Vertical)
+        placeholder = messages.query("#conversation-placeholder")
+        if placeholder:
+            placeholder.remove()
+        self._hide_typing_indicator(voice)
+        self._voice_texts.setdefault(voice, "")
+        self._voice_texts[voice] += chunk.text
+        bubble_id = f"bubble-{voice}"
+        existing = messages.query(f"#{bubble_id}")
+        if existing:
+            existing[0].update(f"[bold]{voice}[/bold]  {self._voice_texts[voice]}")
+        else:
+            msg = Static(f"[bold]{voice}[/bold]  {self._voice_texts[voice]}", id=bubble_id, classes="chat-message chat-agent")
+            messages.mount(msg)
+        if chunk.final:
+            self._voice_texts.pop(voice, None)
+        self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
 
     async def _emit_manual(self, message: str) -> None:
         await self.manager.emit("tui_event", TuiEventData(message=message), source="tui")
@@ -484,6 +508,9 @@ class KatetoApp(App[None]):
                 self._show_typing_indicator(source_voice)
             elif envelope.data.status == VoiceStatus.IDLE:
                 self._hide_typing_indicator(source_voice)
+            return
+        if isinstance(envelope.data, TextChunk):
+            self._handle_text_chunk(source_voice, envelope.data)
             return
         data_preview = str(envelope.data)
         if len(data_preview) > 200:
