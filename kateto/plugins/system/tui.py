@@ -19,6 +19,7 @@ from kateto.core.event import (
     EventModel,
     GenerateData,
     PluginErrorData,
+    VoiceStatus,
     VoiceStatusData,
 )
 from kateto.core.hot_reload import HotReloadController, ReloadContext, ReplacementFactory
@@ -405,9 +406,32 @@ class KatetoApp(App[None]):
         placeholder = messages.query("#conversation-placeholder")
         if placeholder:
             placeholder.remove()
+        self._hide_typing_indicator(name)
         msg = Static(f"[bold]{name}[/bold]  {content}", classes=f"chat-message chat-{role}")
         messages.mount(msg)
         self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
+
+    def _show_typing_indicator(self, voice: str) -> None:
+        if not self.is_mounted:
+            return
+        indicator_id = f"typing-{voice}"
+        existing = self.query(f"#{indicator_id}")
+        if existing:
+            return
+        messages = self.query_one("#conversation-messages", Vertical)
+        placeholder = messages.query("#conversation-placeholder")
+        if placeholder:
+            placeholder.remove()
+        msg = Static(f"[bold]{voice}[/bold]  [dim]…[/dim]", id=indicator_id, classes="chat-message chat-agent")
+        messages.mount(msg)
+        self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
+
+    def _hide_typing_indicator(self, voice: str) -> None:
+        if not self.is_mounted:
+            return
+        indicator = self.query(f"#typing-{voice}")
+        if indicator:
+            indicator.remove()
 
     async def _emit_manual(self, message: str) -> None:
         await self.manager.emit("tui_event", TuiEventData(message=message), source="tui")
@@ -450,11 +474,21 @@ class KatetoApp(App[None]):
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         self._record_event(envelope)
         self._refresh_view_after_event()
-        if self.is_mounted and envelope.name != "tui_event":
-            data_preview = envelope.data.model_dump_json(exclude_none=True)
-            if len(data_preview) > 200:
-                data_preview = data_preview[:197] + "..."
-            self._add_chat_message("agent", envelope.source, f"[{envelope.name}] {data_preview}")
+        if not self.is_mounted:
+            return
+        source_voice = envelope.source.split("/")[0]
+        if source_voice not in self.runtime.workflow_voices:
+            return
+        if isinstance(envelope.data, VoiceStatusData):
+            if envelope.data.status in (VoiceStatus.WAITING, VoiceStatus.THINKING):
+                self._show_typing_indicator(source_voice)
+            elif envelope.data.status == VoiceStatus.IDLE:
+                self._hide_typing_indicator(source_voice)
+            return
+        data_preview = str(envelope.data)
+        if len(data_preview) > 200:
+            data_preview = data_preview[:197] + "..."
+        self._add_chat_message("agent", source_voice, data_preview)
 
     def _record_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         self._events.append(envelope)
@@ -760,7 +794,10 @@ class KatetoApp(App[None]):
     @staticmethod
     def _format_event(envelope: EventEnvelope[BaseModel]) -> str:
         data = envelope.data
-        data_str = data.model_dump_json(exclude_none=True)
+        try:
+            data_str = data.model_dump_json(exclude_none=True)
+        except Exception:
+            data_str = str(data)
         if len(data_str) > 60:
             data_str = data_str[:57] + "..."
         return f"{envelope.name:<22} {envelope.source:<16} {data_str}"
