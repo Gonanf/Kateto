@@ -31,10 +31,11 @@ def _f32_to_s16(buf: bytearray) -> bytes:
     return bytes(out)
 
 
-def _wav_sample_rate(wav: bytes) -> int:
-    # ponytail: WAV header is 44 bytes, framerate at offset 24
+def _wav_to_pcm(wav: bytes) -> tuple[bytes, int]:
     with Wave_read(io := __import__("io").BytesIO(wav)) as w:
-        return w.getframerate()
+        framerate = w.getframerate()
+        data = w.readframes(w.getnframes())
+    return data, framerate
 
 
 class ZonosProvider(HttpProvider):
@@ -119,22 +120,25 @@ class ZonosProvider(HttpProvider):
                 yield chunk
 
     async def _generate_wav(self, sentence: TextChunk, *, voice_id: str) -> AsyncIterator[AudioOutput]:
+        # ponytail: full-inference endpoint can take 60s+, use generous timeout
+        timeout = httpx.Timeout(connect=self._timeout_s, read=120, write=self._timeout_s, pool=self._timeout_s)
         async with self._client_or_raise().stream(
             "POST",
             self._url("/tts/generate"),
             json={"text": sentence.text, "stream": False, "format": "wav"},
             headers=self._request_headers,
+            timeout=timeout,
         ) as response:
             response.raise_for_status()
             body = await response.aread()
             if not body:
                 return
-            sample_rate = _wav_sample_rate(body)
+            pcm, sample_rate = _wav_to_pcm(body)
             yield AudioOutput(
-                samples=body,
+                samples=pcm,
                 sample_rate=sample_rate,
                 channels=1,
-                format="wav",
+                format="pcm_s16le",
                 voice_id=voice_id,
                 sequence=0,
             )
@@ -142,7 +146,7 @@ class ZonosProvider(HttpProvider):
                 samples=b"",
                 sample_rate=sample_rate,
                 channels=1,
-                format="wav",
+                format="pcm_s16le",
                 voice_id=voice_id,
                 sequence=1,
                 final=True,
