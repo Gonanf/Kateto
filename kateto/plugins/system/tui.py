@@ -17,6 +17,7 @@ from kateto.core.event import (
     AudioOutputStatusData,
     EventEnvelope,
     EventModel,
+    GenerateData,
     PluginErrorData,
     VoiceStatusData,
 )
@@ -138,6 +139,16 @@ class KatetoApp(App[None]):
 
     /* MCPs tab */
     #mcp-state { height: 1fr; border: solid $secondary; padding: 1; overflow-y: auto; }
+    /* Conversation tab */
+    #conversation-tab { layout: vertical; }
+    #conversation-body { height: 1fr; min-height: 0; overflow-y: auto; border: solid $secondary; padding: 1; }
+    #conversation-messages { height: auto; margin-bottom: 1; }
+    .chat-message { height: auto; margin-bottom: 1; padding: 1 2; }
+    .chat-user { background: $primary 20%; border-left: thick $primary; }
+    .chat-agent { background: $accent 20%; border-left: thick $accent; }
+    #conversation-input { dock: bottom; height: 3; padding: 0 1; }
+    #conversation-input > Input { width: 1fr; }
+    #conversation-input > Button { width: 12; }
     """
     BINDINGS = [("q", "quit", "Quit"), ("escape", "quit", "Quit")]
 
@@ -200,6 +211,13 @@ class KatetoApp(App[None]):
                     with Horizontal():
                         yield Input(placeholder="message or /registered_event", id="composer-input")
                         yield Button("Emit", id="send-event", variant="primary")
+            with TabPane("Conversation", id="conversation-tab"):
+                with Vertical(id="conversation-body"):
+                    with Vertical(id="conversation-messages"):
+                        yield Static("no messages yet", id="conversation-placeholder")
+                with Horizontal(id="conversation-input"):
+                    yield Input(placeholder="Type a prompt for the agent...", id="prompt-input")
+                    yield Button("Send", id="send-prompt", variant="primary")
             with TabPane("Plugins", id="plugins-tab"):
                 with Horizontal(id="plugin-panel"):
                     with Vertical(id="plugin-panel-left"):
@@ -270,6 +288,9 @@ class KatetoApp(App[None]):
             self.query_one("#composer-input", Input).focus()
             self.run_worker(self._submit_composer(), exclusive=False)
             return
+        if button_id == "send-prompt":
+            self.run_worker(self._submit_prompt(), exclusive=False)
+            return
         if button_id.startswith("select-"):
             self._selected_plugin = button_id.removeprefix("select-")
             self._refresh_plugin_selection()
@@ -280,6 +301,8 @@ class KatetoApp(App[None]):
             return
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "prompt-input":
+            self.run_worker(self._submit_prompt(), exclusive=False)
         event.stop()
 
     def on_input_changed(self, event: Input.Changed) -> None:
@@ -366,6 +389,26 @@ class KatetoApp(App[None]):
             "Composer: ordinary text → tui_event · /event_name → strict JSON payload"
         )
 
+    async def _submit_prompt(self) -> None:
+        input_widget = self.query_one("#prompt-input", Input)
+        text = input_widget.value.strip()
+        if not text:
+            return
+        input_widget.value = ""
+        self._add_chat_message("user", "You", text)
+        await self.manager.emit("generate", GenerateData(prompt=text), source="tui")
+
+    def _add_chat_message(self, role: str, name: str, content: str) -> None:
+        if not self.is_mounted:
+            return
+        messages = self.query_one("#conversation-messages", Vertical)
+        placeholder = messages.query("#conversation-placeholder")
+        if placeholder:
+            placeholder.remove()
+        msg = Static(f"[bold]{name}[/bold]  {content}", classes=f"chat-message chat-{role}")
+        messages.mount(msg)
+        self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
+
     async def _emit_manual(self, message: str) -> None:
         await self.manager.emit("tui_event", TuiEventData(message=message), source="tui")
 
@@ -407,6 +450,11 @@ class KatetoApp(App[None]):
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         self._record_event(envelope)
         self._refresh_view_after_event()
+        if self.is_mounted and envelope.name != "tui_event":
+            data_preview = envelope.data.model_dump_json(exclude_none=True)
+            if len(data_preview) > 200:
+                data_preview = data_preview[:197] + "..."
+            self._add_chat_message("agent", envelope.source, f"[{envelope.name}] {data_preview}")
 
     def _record_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         self._events.append(envelope)
