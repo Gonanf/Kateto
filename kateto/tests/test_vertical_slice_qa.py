@@ -64,14 +64,15 @@ async def test_fixture_interrupt_cancels_streams_and_resumes_with_a_new_segment(
 
 @pytest.mark.asyncio
 async def test_fixture_one_voice_interrupt_accepts_calendar_resume() -> None:
-    # Given: a prompt relevant only to Doktor and an interruption after three provider tokens.
-    # When: the canceled one-voice turn is followed by the next audio segment.
+    # Given: a prompt that triggers all three voices and an interruption after three provider tokens.
+    # When: the canceled turn is followed by the next audio segment.
     result = await asyncio.wait_for(run_fixture("calendar BLOCK", interrupt_at=3), timeout=1)
 
     # Then: cancellation completes and the resumed utterance reaches the live manager.
+    # All three voices now respond without is_relevant filtering.
     assert result.interrupts == 1
     assert result.resumes == 1
-    assert result.cancelled_streams == 1
+    assert result.cancelled_streams == 3
     assert result.generate_targets == ()
     assert result.manager_alive
 

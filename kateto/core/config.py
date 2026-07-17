@@ -109,6 +109,7 @@ class PluginSettings(_ConfigModel):
     interrupt_llm: bool | None = None
     interrupt_tts: bool | None = None
     context_window: int | None = Field(default=None, gt=0)
+    stream: bool = True
 
     @field_validator("endpoint", "model_endpoint")
     @classmethod

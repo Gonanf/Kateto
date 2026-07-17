@@ -99,4 +99,4 @@ class ZonosRequest(ProviderModel):
     voice_id: str = Field(min_length=1)
     model: str | None = None
     response_format: Literal["pcm"] = "pcm"
-    stream: Literal[True] = True
+    stream: bool = True

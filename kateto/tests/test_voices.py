@@ -366,13 +366,11 @@ async def test_fixture_defines_zero_one_and_multiple_relevance_responses() -> No
     one = await run_fixture(prompt="create a backlog task")
     multiple = await run_fixture(prompt="plan a sprint retrospective")
 
-    # Then: self-filtering yields exactly the documented response cardinalities.
-    assert zero.response_voices == ()
-    assert zero.idle_voices == ()
-    assert one.response_voices == ("doktor",)
-    assert one.idle_voices == ("doktor",)
-    assert multiple.response_voices == ("doktor", "conquest")
-    assert multiple.idle_voices == ("doktor", "conquest")
+    # Then: every voice responds to every prompt since is_relevant was removed.
+    # Classification plugin handles intent filtering instead.
+    for result in (zero, one, multiple):
+        assert result.response_voices == ("jane", "doktor", "conquest")
+        assert result.idle_voices == ("jane", "doktor", "conquest")
 
 
 @pytest.mark.asyncio
@@ -382,8 +380,9 @@ async def test_fixture_reports_only_missing_voice_reference_while_bus_stays_aliv
     result = await run_fixture(prompt="coordinate the team", missing_reference_voice="jane")
 
     # Then: the one configuration error is isolated and the event bus remains alive.
+    # Doktor and conquest still respond since is_relevant was removed.
     assert result.error_voices == ("jane",)
-    assert result.response_voices == ()
+    assert result.response_voices == ("doktor", "conquest")
     assert result.manager_alive
 
 

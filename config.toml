@@ -27,6 +27,7 @@ model = "openbmb/MiniCPM5-1B-GGUF:Q4_K_M"
 
 [plugin.audio_output_zonos]
 enabled = true
+stream = false
 endpoint = "http://127.0.0.1:8093"
 
 [plugin.audio_output_player]
