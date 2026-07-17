@@ -362,13 +362,16 @@ class VoiceAgent(Plugin):
         executor = self._tool_executor
         if provider is None or executor is None:
             return
-        messages = list(await self._messages_for(prompt))
+        chat_messages = await self._messages_for(prompt)
+        messages: list[dict[str, object]] = [
+            {"role": m.role, "content": m.content} for m in chat_messages
+        ]
         max_iterations = 10
         for _ in range(max_iterations):
             if self._interrupted:
                 break
             response = await provider.chat_with_tools(
-                messages=tuple(messages),
+                messages=messages,
                 tools=self._tools,
             )
             if not response.tool_calls:

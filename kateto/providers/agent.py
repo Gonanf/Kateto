@@ -1,20 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from openai import AsyncOpenAI
-from openai.types.chat import (
-    ChatCompletionAssistantMessageParam,
-    ChatCompletionDeveloperMessageParam,
-    ChatCompletionMessageParam,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionToolParam,
-    ChatCompletionUserMessageParam,
-)
-
-from kateto.providers._models import ChatMessage
+from openai.types.chat import ChatCompletionToolParam
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +27,7 @@ class ToolExecutor(Protocol):
 class AgentProvider(Protocol):
     async def chat_with_tools(
         self,
-        messages: tuple[ChatMessage, ...],
+        messages: list[dict[str, object]],
         tools: tuple[ChatCompletionToolParam, ...],
     ) -> AgentResponse: ...
 
@@ -56,13 +46,12 @@ class OpenAIAgentProvider:
 
     async def chat_with_tools(
         self,
-        messages: tuple[ChatMessage, ...],
+        messages: list[dict[str, object]],
         tools: tuple[ChatCompletionToolParam, ...],
     ) -> AgentResponse:
-        oai_messages = _convert_messages(messages)
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "messages": oai_messages,
+            "messages": messages,
             "max_tokens": self._max_tokens,
         }
         if tools:
@@ -81,21 +70,6 @@ class OpenAIAgentProvider:
             )
             return AgentResponse(text=message.content or "", tool_calls=tool_calls)
         return AgentResponse(text=message.content or "")
-
-
-def _convert_messages(messages: tuple[ChatMessage, ...]) -> list[ChatCompletionMessageParam]:
-    result: list[ChatCompletionMessageParam] = []
-    for message in messages:
-        match message.role:
-            case "assistant":
-                result.append(ChatCompletionAssistantMessageParam(role="assistant", content=message.content))
-            case "developer":
-                result.append(ChatCompletionDeveloperMessageParam(role="developer", content=message.content))
-            case "system":
-                result.append(ChatCompletionSystemMessageParam(role="system", content=message.content))
-            case "user":
-                result.append(ChatCompletionUserMessageParam(role="user", content=message.content))
-    return result
 
 
 def _parse_json(raw: str) -> dict[str, Any]:
