@@ -11,6 +11,7 @@ from typing import Any
 from openai.types.chat import ChatCompletionToolParam
 
 from kateto.core.config import CliSettings
+from kateto.core.manager import PluginManager
 from kateto.providers.agent import ToolExecutor
 
 
@@ -19,12 +20,17 @@ class VoiceToolExecutor:
         self,
         *,
         config_dir: Path,
+        manager: PluginManager | None = None,
         cli_settings: CliSettings | None = None,
         working_directory: Path | None = None,
     ) -> None:
         self._config_dir = config_dir.resolve()
+        self._manager = manager
         self._cli_settings = cli_settings
         self._working_directory = (working_directory or config_dir).resolve()
+
+    def set_manager(self, manager: PluginManager) -> None:
+        self._manager = manager
 
     async def execute(self, name: str, arguments: dict[str, Any]) -> str:
         match name:
@@ -34,8 +40,85 @@ class VoiceToolExecutor:
                 return self._read_file(arguments)
             case "write_file":
                 return self._write_file(arguments)
+            case "send_event":
+                return await self._send_event(arguments)
+            case "list_events":
+                return self._list_events()
             case _:
                 return json.dumps({"error": f"unknown tool: {name}"})
+
+    async def _send_event(self, args: dict[str, Any]) -> str:
+        manager = self._manager
+        if manager is None:
+            return json.dumps({"error": "no plugin manager available"})
+
+        event_name = args.get("event_name", "")
+        if not event_name:
+            return json.dumps({"error": "event_name is required"})
+
+        data = args.get("data", {})
+        target = args.get("target")
+        wait = args.get("wait", False)
+
+        try:
+            registrations = list(manager.get_event_registrations())
+            registration = None
+            for reg in registrations:
+                if reg.name == event_name and reg.receivers:
+                    registration = reg
+                    break
+            if registration is None:
+                return json.dumps({"error": f"event '{event_name}' has no receivers"})
+
+            payload = registration.contract.model_validate(data)
+            correlation_id = None
+            reply_to = None
+            if wait and target:
+                import uuid
+                correlation_id = uuid.uuid4().hex
+                reply_to = f"voice/{event_name}/{correlation_id}"
+
+            await manager.emit(
+                event_name,
+                payload,
+                source="voice_agent",
+                target=target,
+                reply_to=reply_to,
+                correlation_id=correlation_id,
+            )
+
+            if wait and correlation_id:
+                return json.dumps({
+                    "status": "dispatched",
+                    "event_name": event_name,
+                    "correlation_id": correlation_id,
+                    "note": "waiting for reply not yet implemented in voice agent",
+                })
+
+            return json.dumps({"status": "dispatched", "event_name": event_name})
+        except Exception as e:
+            return json.dumps({"error": f"failed to dispatch event: {e}"})
+
+    def _list_events(self) -> str:
+        manager = self._manager
+        if manager is None:
+            return json.dumps({"events": [], "error": "no plugin manager available"})
+
+        events = []
+        for reg in manager.get_event_registrations():
+            if reg.receivers:
+                fields = {}
+                for name, field_info in reg.contract.model_fields.items():
+                    fields[name] = {
+                        "type": field_info.annotation.__name__ if field_info.annotation else "unknown",
+                        "required": field_info.is_required(),
+                    }
+                events.append({
+                    "name": reg.name,
+                    "receivers": list(reg.receivers),
+                    "fields": fields,
+                })
+        return json.dumps({"events": events})
 
     async def _run_command(self, args: dict[str, Any]) -> str:
         command = args.get("command", "")
@@ -166,6 +249,46 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
                     },
                 },
                 "required": ["path", "content"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "send_event",
+            "description": "Dispatch an event through the plugin system. Use list_events first to see available events and their fields. Events include backlog_add, backlog_list, cli_execute, todo_completed, and any other registered event.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_name": {
+                        "type": "string",
+                        "description": "The event name to dispatch (e.g. 'backlog_add', 'cli_execute')",
+                    },
+                    "data": {
+                        "type": "object",
+                        "description": "The event payload as key-value pairs matching the event's fields",
+                    },
+                    "target": {
+                        "type": "string",
+                        "description": "Optional target plugin name to route the event to",
+                    },
+                    "wait": {
+                        "type": "boolean",
+                        "description": "Whether to wait for a reply event (default: false)",
+                    },
+                },
+                "required": ["event_name", "data"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "list_events",
+            "description": "List all available events that can be dispatched, including their fields and receivers.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
             },
         },
     ),

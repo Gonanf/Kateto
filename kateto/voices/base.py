@@ -238,6 +238,11 @@ class VoiceAgent(Plugin):
         )
 
     async def enable(self) -> None:
+        manager = self.manager
+        if manager is not None and self._tool_executor is not None:
+            from kateto.voices.tools import VoiceToolExecutor
+            if isinstance(self._tool_executor, VoiceToolExecutor):
+                self._tool_executor.set_manager(manager)
         await self._set_status(VoiceStatus.IDLE)
 
     async def disable(self) -> None:
