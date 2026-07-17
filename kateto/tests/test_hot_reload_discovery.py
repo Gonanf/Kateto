@@ -61,10 +61,10 @@ async def test_hot_reload_reconciles_created_modified_and_deleted_definitions(tm
     def discover(config: object) -> PluginRegistry:
         del config
         if not source_path.exists():
-            return PluginRegistry(plugins=frozenset(), input_plugins=frozenset())
+            return PluginRegistry(plugins=frozenset())
         version = versions["modified"] if source_path.read_text(encoding="utf-8") == "v2" else versions["created"]
         plugin = _DiscoveredPlugin(version)
-        return PluginRegistry(plugins=frozenset({plugin}), input_plugins=frozenset())
+        return PluginRegistry(plugins=frozenset({plugin}))
 
     controller = HotReloadController(
         manager=manager,

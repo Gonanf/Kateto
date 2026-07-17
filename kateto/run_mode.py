@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, final
+from typing import Any, Protocol, final
 
 from kateto.core.config import LoadedConfig
 from kateto.core.hot_reload import HotReloadController
@@ -14,8 +14,6 @@ from kateto.core.workflow_engine import WorkflowEngine
 from kateto.live import (
     EventRuntime,
     EventRuntimeConfigurationError,
-    EventRuntimeDependencies,
-    ManagedProvider,
     build_event_runtime,
 )
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
@@ -29,7 +27,7 @@ class CalendarConnectorFactory(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class RuntimeDependencies:
-    event_runtime: EventRuntimeDependencies | None = None
+    shared: dict[str, Any] | None = None
     calendar_factory: CalendarConnectorFactory | None = None
 
 
@@ -58,10 +56,6 @@ class RuntimeOwner(TuiConfigurationRuntime):
     @property
     def manager(self) -> PluginManager:
         return self._event_runtime.manager
-
-    @property
-    def providers(self) -> tuple[ManagedProvider, ...]:
-        return self._event_runtime.providers
 
     @property
     def runtime_plugins(self) -> tuple[Plugin, ...]:
@@ -159,7 +153,7 @@ def build_runtime_owner(
     resolved_dependencies = RuntimeDependencies() if dependencies is None else dependencies
     event_runtime = build_event_runtime(
         config,
-        dependencies=resolved_dependencies.event_runtime,
+        shared=resolved_dependencies.shared,
     )
     runtime_plugins = (
         WorkflowEngine(config_dir=config.paths.config_dir),

@@ -17,6 +17,12 @@ class FixtureTranscriber:
         self._texts = iter(texts)
         self.received: list[AudioData] = []
 
+    async def __aenter__(self) -> FixtureTranscriber:
+        return self
+
+    async def aclose(self) -> None:
+        pass
+
     async def transcribe(self, audio: AudioData) -> TranscriptionData:
         self.received.append(audio)
         return TranscriptionData(text=next(self._texts))
@@ -26,6 +32,12 @@ class FixtureClassifier:
     def __init__(self, category: Classification) -> None:
         self._category = category
         self.received: list[str] = []
+
+    async def __aenter__(self) -> FixtureClassifier:
+        return self
+
+    async def aclose(self) -> None:
+        pass
 
     async def classify(self, text: str) -> ClassificationData:
         self.received.append(text)

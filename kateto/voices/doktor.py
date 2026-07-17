@@ -18,3 +18,21 @@ _PROFILE = VoiceProfile(
 class Doktor(VoiceAgent):
     def __init__(self, *, config_dir: Path, provider: StreamingProvider, settings: VoiceSettings | None = None) -> None:
         super().__init__(profile=_PROFILE, config_dir=config_dir, provider=provider, settings=settings)
+
+
+def create_voice(ctx, settings):
+    from kateto.voices.base import OpenAICompatibleProvider as _Provider
+    from kateto.voices.doktor import Doktor
+
+    voice_settings = ctx.config.settings.plugin.get("voice_llm")
+    if voice_settings is None:
+        from kateto.core.discovery import LiveAssemblyConfigurationError as _Err
+
+        raise _Err(field="plugin.voice_llm", reason="must be configured for voice creation")
+
+    provider = _Provider(
+        model=voice_settings.model or "unknown",
+        endpoint=voice_settings.endpoint,
+        api_key=voice_settings.api_key or "sk-no-key-required",
+    )
+    return Doktor(config_dir=ctx.config.paths.config_dir, provider=provider, settings=settings)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Protocol, assert_never, override
+from typing import TYPE_CHECKING, assert_never, override
 
+from kateto.core.config import PluginSettings
 from kateto.core.event import (
     Classification,
     ClassificationData,
@@ -10,15 +11,15 @@ from kateto.core.event import (
 )
 from kateto.core.plugin import Plugin, PluginManagerProtocol
 
-
-class IntentClassifier(Protocol):
-    async def classify(self, text: str) -> ClassificationData: ...
+if TYPE_CHECKING:
+    from kateto.providers import ClassifierProvider
 
 
 class ClassifierExecutor(Plugin):
-    def __init__(self, *, classifier: IntentClassifier) -> None:
+    def __init__(self, settings: PluginSettings) -> None:
         super().__init__("executor_classifier", receive_self_events=True)
-        self._classifier: IntentClassifier = classifier
+        self._settings: PluginSettings = settings
+        self._classifier: ClassifierProvider | None = None
 
     @override
     async def initialize(self) -> None:
@@ -27,8 +28,25 @@ class ClassifierExecutor(Plugin):
         manager.register_event("classification", ClassificationData)
         manager.register_event("generate", GenerateData)
 
+    @override
+    async def enable(self) -> None:
+        from kateto.providers import ClassifierProvider
+
+        self._classifier = ClassifierProvider(self._settings)
+        await self._classifier.__aenter__()
+
+    @override
+    async def disable(self) -> None:
+        if self._classifier is not None:
+            await self._classifier.aclose()
+            self._classifier = None
+
     async def on_transcription(self, data: TranscriptionData) -> None:
-        classification = await self._classifier.classify(data.text)
+        classifier = self._classifier
+        if classifier is None:
+            msg = "classifier executor must be enabled before use"
+            raise RuntimeError(msg)
+        classification = await classifier.classify(data.text)
         manager = self._manager()
         _ = await manager.emit("classification", classification, source=self.name)
         match classification.category:

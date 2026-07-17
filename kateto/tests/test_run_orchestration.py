@@ -8,7 +8,7 @@ import pytest
 from kateto.core.config import load_config
 from kateto.core.hot_reload import HotReloadController
 from kateto.core.plugin import Plugin
-from kateto.live import EventRuntimeConfigurationError, EventRuntimeDependencies
+from kateto.live import EventRuntimeConfigurationError
 from kateto.plugins.audio_input.base import AudioInputConfig, CaptureCallback
 from kateto.run_mode import RuntimeDependencies, RuntimeOwner, build_runtime_owner, run_event_runtime
 from kateto.plugins.system.tui_runtime import TuiPluginConfiguration
@@ -130,7 +130,7 @@ def _write_run_config_with_voice(config_dir: Path, *, voice_name: str) -> None:
 
 def _dependencies(captures: RecordingCaptureFactory, calendars: CalendarFactory) -> RuntimeDependencies:
     return RuntimeDependencies(
-        event_runtime=EventRuntimeDependencies(vad=QuietVad(), capture_factory=captures),
+        shared={"vad": QuietVad(), "capture_factory": captures},
         calendar_factory=calendars,
     )
 
@@ -140,7 +140,7 @@ def test_run_owner_reports_actionable_calendar_provider_unavailability_without_f
     _write_run_config(tmp_path)
     captures = RecordingCaptureFactory()
     dependencies = RuntimeDependencies(
-        event_runtime=EventRuntimeDependencies(vad=QuietVad(), capture_factory=captures),
+        shared={"vad": QuietVad(), "capture_factory": captures},
     )
 
     # When: the run owner assembles the configured production graph.
@@ -217,7 +217,6 @@ async def test_run_owner_composes_starts_and_stops_configured_components(tmp_pat
     assert calendars.connector is not None
     assert not calendars.connector.enabled
     assert all(capture.closed for capture in captures.captures)
-    assert all(provider.is_closed for provider in assembly.providers)
     assert not assembly.is_started
 
 
@@ -278,7 +277,6 @@ async def test_run_owner_start_failure_cleans_each_previously_owned_component(
     assert calendars.connector is not None
     assert not calendars.connector.enabled
     assert all(capture.closed for capture in captures.captures)
-    assert all(provider.is_closed for provider in assembly.providers)
     assert not any(plugin.enabled for plugin in assembly.manager.get_plugins())
     assert not assembly.is_started
 
