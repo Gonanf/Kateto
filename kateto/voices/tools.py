@@ -44,22 +44,32 @@ class VoiceToolExecutor:
                 return await self._send_event(arguments)
             case "list_events":
                 return self._list_events()
+            case "enable_plugin":
+                return await self._enable_plugin(arguments)
+            case "disable_plugin":
+                return await self._disable_plugin(arguments)
+            case "list_plugins":
+                return self._list_plugins()
             case _:
+                manager = self._manager
+                if manager is not None and name in self._event_tool_names():
+                    return await self._dispatch_event(name, arguments)
                 return json.dumps({"error": f"unknown tool: {name}"})
 
-    async def _send_event(self, args: dict[str, Any]) -> str:
+    def _event_tool_names(self) -> set[str]:
+        manager = self._manager
+        if manager is None:
+            return set()
+        return {
+            reg.name
+            for reg in manager.get_event_registrations()
+            if reg.receivers
+        }
+
+    async def _dispatch_event(self, event_name: str, args: dict[str, Any]) -> str:
         manager = self._manager
         if manager is None:
             return json.dumps({"error": "no plugin manager available"})
-
-        event_name = args.get("event_name", "")
-        if not event_name:
-            return json.dumps({"error": "event_name is required"})
-
-        data = args.get("data", {})
-        target = args.get("target")
-        wait = args.get("wait", False)
-
         try:
             registrations = list(manager.get_event_registrations())
             registration = None
@@ -69,32 +79,32 @@ class VoiceToolExecutor:
                     break
             if registration is None:
                 return json.dumps({"error": f"event '{event_name}' has no receivers"})
+            payload = registration.contract.model_validate(args)
+            await manager.emit(event_name, payload, source="voice_agent")
+            return json.dumps({"status": "dispatched", "event_name": event_name})
+        except Exception as e:
+            return json.dumps({"error": f"failed to dispatch: {e}"})
 
+    async def _send_event(self, args: dict[str, Any]) -> str:
+        manager = self._manager
+        if manager is None:
+            return json.dumps({"error": "no plugin manager available"})
+        event_name = args.get("event_name", "")
+        if not event_name:
+            return json.dumps({"error": "event_name is required"})
+        data = args.get("data", {})
+        target = args.get("target")
+        try:
+            registrations = list(manager.get_event_registrations())
+            registration = None
+            for reg in registrations:
+                if reg.name == event_name and reg.receivers:
+                    registration = reg
+                    break
+            if registration is None:
+                return json.dumps({"error": f"event '{event_name}' has no receivers"})
             payload = registration.contract.model_validate(data)
-            correlation_id = None
-            reply_to = None
-            if wait and target:
-                import uuid
-                correlation_id = uuid.uuid4().hex
-                reply_to = f"voice/{event_name}/{correlation_id}"
-
-            await manager.emit(
-                event_name,
-                payload,
-                source="voice_agent",
-                target=target,
-                reply_to=reply_to,
-                correlation_id=correlation_id,
-            )
-
-            if wait and correlation_id:
-                return json.dumps({
-                    "status": "dispatched",
-                    "event_name": event_name,
-                    "correlation_id": correlation_id,
-                    "note": "waiting for reply not yet implemented in voice agent",
-                })
-
+            await manager.emit(event_name, payload, source="voice_agent", target=target)
             return json.dumps({"status": "dispatched", "event_name": event_name})
         except Exception as e:
             return json.dumps({"error": f"failed to dispatch event: {e}"})
@@ -103,7 +113,6 @@ class VoiceToolExecutor:
         manager = self._manager
         if manager is None:
             return json.dumps({"events": [], "error": "no plugin manager available"})
-
         events = []
         for reg in manager.get_event_registrations():
             if reg.receivers:
@@ -120,27 +129,72 @@ class VoiceToolExecutor:
                 })
         return json.dumps({"events": events})
 
+    async def _enable_plugin(self, args: dict[str, Any]) -> str:
+        manager = self._manager
+        if manager is None:
+            return json.dumps({"error": "no plugin manager available"})
+        name = args.get("name", "")
+        if not name:
+            return json.dumps({"error": "name is required"})
+        try:
+            for plugin in manager.get_plugins():
+                if plugin.name == name:
+                    if plugin.enabled:
+                        return json.dumps({"status": "already_enabled", "name": name})
+                    await manager.enable_plugin(plugin)
+                    return json.dumps({"status": "enabled", "name": name})
+            return json.dumps({"error": f"plugin '{name}' not found"})
+        except Exception as e:
+            return json.dumps({"error": f"failed to enable: {e}"})
+
+    async def _disable_plugin(self, args: dict[str, Any]) -> str:
+        manager = self._manager
+        if manager is None:
+            return json.dumps({"error": "no plugin manager available"})
+        name = args.get("name", "")
+        if not name:
+            return json.dumps({"error": "name is required"})
+        try:
+            for plugin in manager.get_plugins():
+                if plugin.name == name:
+                    if not plugin.enabled:
+                        return json.dumps({"status": "already_disabled", "name": name})
+                    await manager.disable_plugin(name)
+                    return json.dumps({"status": "disabled", "name": name})
+            return json.dumps({"error": f"plugin '{name}' not found"})
+        except Exception as e:
+            return json.dumps({"error": f"failed to disable: {e}"})
+
+    def _list_plugins(self) -> str:
+        manager = self._manager
+        if manager is None:
+            return json.dumps({"plugins": [], "error": "no plugin manager available"})
+        plugins = []
+        for plugin in manager.get_plugins():
+            plugins.append({
+                "name": plugin.name,
+                "enabled": plugin.enabled,
+                "capabilities": list(plugin.capabilities),
+            })
+        return json.dumps({"plugins": plugins})
+
     async def _run_command(self, args: dict[str, Any]) -> str:
         command = args.get("command", "")
         if not command:
             return json.dumps({"error": "no command provided"})
-
         try:
             argv = tuple(shlex.split(command, posix=True))
         except ValueError as e:
             return json.dumps({"error": f"malformed command: {e}"})
-
         if self._cli_settings is not None:
             try:
                 from kateto.plugins.connector.cli import normalize_argv
                 argv = normalize_argv(command, settings=self._cli_settings, working_directory=self._working_directory)
             except Exception as e:
                 return json.dumps({"error": f"command rejected: {e}"})
-
         executable = shutil.which(argv[0], path=os.defpath)
         if executable is None:
             return json.dumps({"error": f"executable not found: {argv[0]}"})
-
         process = await asyncio.create_subprocess_exec(
             executable,
             *argv[1:],
@@ -156,7 +210,6 @@ class VoiceToolExecutor:
             process.kill()
             await process.communicate()
             return json.dumps({"error": "command timed out after 30s"})
-
         return json.dumps({
             "returncode": process.returncode,
             "stdout": stdout.decode("utf-8", errors="replace"),
@@ -194,6 +247,44 @@ class VoiceToolExecutor:
             return json.dumps({"path": str(resolved.relative_to(self._working_directory)), "bytes_written": len(content.encode("utf-8"))})
         except Exception as e:
             return json.dumps({"error": str(e)})
+
+
+def build_event_tools(manager: PluginManager) -> tuple[ChatCompletionToolParam, ...]:
+    tools: list[ChatCompletionToolParam] = []
+    for reg in manager.get_event_registrations():
+        if not reg.receivers:
+            continue
+        properties: dict[str, Any] = {}
+        required: list[str] = []
+        for field_name, field_info in reg.contract.model_fields.items():
+            field_type = "string"
+            if field_info.annotation is not None:
+                annotation_name = getattr(field_info.annotation, "__name__", str(field_info.annotation))
+                if "bool" in annotation_name:
+                    field_type = "boolean"
+                elif "int" in annotation_name or "float" in annotation_name:
+                    field_type = "number"
+                elif "dict" in annotation_name or "list" in annotation_name:
+                    field_type = "object"
+            properties[field_name] = {
+                "type": field_type,
+                "description": f"Field for {reg.name} event",
+            }
+            if field_info.is_required():
+                required.append(field_name)
+        tools.append(ChatCompletionToolParam(
+            type="function",
+            function={
+                "name": reg.name,
+                "description": f"Dispatch {reg.name} event to: {', '.join(reg.receivers)}",
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                },
+            },
+        ))
+    return tuple(tools)
 
 
 BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
@@ -256,25 +347,21 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
         type="function",
         function={
             "name": "send_event",
-            "description": "Dispatch an event through the plugin system. Use list_events first to see available events and their fields. Events include backlog_add, backlog_list, cli_execute, todo_completed, and any other registered event.",
+            "description": "Dispatch any registered event. Use list_events to see available events. For known events, prefer using the specific tool directly.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "event_name": {
                         "type": "string",
-                        "description": "The event name to dispatch (e.g. 'backlog_add', 'cli_execute')",
+                        "description": "The event name to dispatch",
                     },
                     "data": {
                         "type": "object",
-                        "description": "The event payload as key-value pairs matching the event's fields",
+                        "description": "The event payload as key-value pairs",
                     },
                     "target": {
                         "type": "string",
-                        "description": "Optional target plugin name to route the event to",
-                    },
-                    "wait": {
-                        "type": "boolean",
-                        "description": "Whether to wait for a reply event (default: false)",
+                        "description": "Optional target plugin name",
                     },
                 },
                 "required": ["event_name", "data"],
@@ -285,7 +372,52 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
         type="function",
         function={
             "name": "list_events",
-            "description": "List all available events that can be dispatched, including their fields and receivers.",
+            "description": "List all available events with their fields and receivers.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "enable_plugin",
+            "description": "Enable a plugin by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Plugin name to enable",
+                    }
+                },
+                "required": ["name"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "disable_plugin",
+            "description": "Disable a plugin by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Plugin name to disable",
+                    }
+                },
+                "required": ["name"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "list_plugins",
+            "description": "List all plugins with their enabled status and capabilities.",
             "parameters": {
                 "type": "object",
                 "properties": {},

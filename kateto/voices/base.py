@@ -171,6 +171,7 @@ class VoiceAgent(Plugin):
         self._agent_provider: AgentProvider | None = None
         self._tool_executor: ToolExecutor | None = None
         self._tools: tuple[ChatCompletionToolParam, ...] = ()
+        self._extra_tools: tuple[ChatCompletionToolParam, ...] = ()
 
     @property
     def role(self) -> VoiceRole:
@@ -198,6 +199,7 @@ class VoiceAgent(Plugin):
         from kateto.voices.tools import BUILTIN_TOOLS
         self._agent_provider = agent_provider
         self._tool_executor = tool_executor
+        self._extra_tools = extra_tools
         self._tools = (*BUILTIN_TOOLS, *extra_tools)
 
     @property
@@ -240,9 +242,11 @@ class VoiceAgent(Plugin):
     async def enable(self) -> None:
         manager = self.manager
         if manager is not None and self._tool_executor is not None:
-            from kateto.voices.tools import VoiceToolExecutor
+            from kateto.voices.tools import VoiceToolExecutor, BUILTIN_TOOLS, build_event_tools
             if isinstance(self._tool_executor, VoiceToolExecutor):
                 self._tool_executor.set_manager(manager)
+                event_tools = build_event_tools(manager)
+                self._tools = (*BUILTIN_TOOLS, *event_tools, *self._extra_tools)
         await self._set_status(VoiceStatus.IDLE)
 
     async def disable(self) -> None:
