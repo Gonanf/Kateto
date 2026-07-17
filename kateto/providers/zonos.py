@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from struct import Struct
+from wave import Wave_read
 
 import httpx
 
@@ -17,7 +18,6 @@ _F32 = Struct("<f")
 
 
 def _f32_to_s16(buf: bytearray) -> bytes:
-    # ponytail: buf may not be 4-byte-aligned, only consume complete float32s
     usable = len(buf) & ~3
     out = bytearray(usable // 2)
     for i in range(0, usable, 4):
@@ -29,6 +29,12 @@ def _f32_to_s16(buf: bytearray) -> bytes:
         out[j + 1] = (s16 >> 8) & 0xFF
     del buf[:usable]
     return bytes(out)
+
+
+def _wav_sample_rate(wav: bytes) -> int:
+    # ponytail: WAV header is 44 bytes, framerate at offset 24
+    with Wave_read(io := __import__("io").BytesIO(wav)) as w:
+        return w.getframerate()
 
 
 class ZonosProvider(HttpProvider):
@@ -52,7 +58,7 @@ class ZonosProvider(HttpProvider):
         self._sample_rate = settings.sample_rate if settings.sample_rate is not None else 24_000
         self._stream = settings.stream
 
-    async def _read_response(
+    async def _read_streaming(
         self, response: httpx.Response, *, voice_id: str
     ) -> AsyncIterator[AudioOutput]:
         content_type = response.headers.get("Content-Type", "").lower()
@@ -61,8 +67,6 @@ class ZonosProvider(HttpProvider):
         if not content_type.startswith("audio/l16") and not content_type.startswith("application/octet-stream") and not content_type.startswith("audio/pcm"):
             raise MalformedUpstreamResponse(provider="zonos", reason="expected PCM audio content type")
         sequence = 0
-        # ponytail: HTTP chunks don't align to float32 boundaries, so
-        # accumulate in a buffer that persists across chunks
         buf = bytearray()
         bytes_per_sample = 4 if audio_format == "float32" else 2
         async for chunk in response.aiter_bytes():
@@ -95,7 +99,15 @@ class ZonosProvider(HttpProvider):
         )
 
     async def stream_sentence(self, sentence: TextChunk, *, voice_id: str) -> AsyncIterator[AudioOutput]:
-        request = ZonosRequest(input=sentence.text, voice_id=voice_id, model=self._model, stream=self._stream)
+        if self._stream:
+            async for chunk in self._stream_sentence(sentence, voice_id=voice_id):
+                yield chunk
+        else:
+            async for chunk in self._generate_wav(sentence, voice_id=voice_id):
+                yield chunk
+
+    async def _stream_sentence(self, sentence: TextChunk, *, voice_id: str) -> AsyncIterator[AudioOutput]:
+        request = ZonosRequest(input=sentence.text, voice_id=voice_id, model=self._model, stream=True)
         async with self._client_or_raise().stream(
             "POST",
             self._url(self._path),
@@ -103,31 +115,35 @@ class ZonosProvider(HttpProvider):
             headers=self._request_headers,
         ) as response:
             response.raise_for_status()
-            if self._stream:
-                async for chunk in self._read_response(response, voice_id=voice_id):
-                    yield chunk
-            else:
-                # ponytail: buffer full response, yield as single chunk
-                buf = bytearray()
-                async for chunk in self._read_response(response, voice_id=voice_id):
-                    if chunk.samples:
-                        buf.extend(chunk.samples)
-                # yield one AudioOutput with all samples, then the final marker
-                if buf:
-                    yield AudioOutput(
-                        samples=bytes(buf),
-                        sample_rate=int(response.headers.get("X-Audio-Sample-Rate", str(self._sample_rate))),
-                        channels=1,
-                        format="pcm_s16le",
-                        voice_id=voice_id,
-                        sequence=0,
-                    )
-                yield AudioOutput(
-                    samples=b"",
-                    sample_rate=int(response.headers.get("X-Audio-Sample-Rate", str(self._sample_rate))),
-                    channels=1,
-                    format="pcm_s16le",
-                    voice_id=voice_id,
-                    sequence=1,
-                    final=True,
-                )
+            async for chunk in self._read_streaming(response, voice_id=voice_id):
+                yield chunk
+
+    async def _generate_wav(self, sentence: TextChunk, *, voice_id: str) -> AsyncIterator[AudioOutput]:
+        async with self._client_or_raise().stream(
+            "POST",
+            self._url("/tts/generate"),
+            json={"text": sentence.text, "stream": False, "format": "wav"},
+            headers=self._request_headers,
+        ) as response:
+            response.raise_for_status()
+            body = await response.aread()
+            if not body:
+                return
+            sample_rate = _wav_sample_rate(body)
+            yield AudioOutput(
+                samples=body,
+                sample_rate=sample_rate,
+                channels=1,
+                format="wav",
+                voice_id=voice_id,
+                sequence=0,
+            )
+            yield AudioOutput(
+                samples=b"",
+                sample_rate=sample_rate,
+                channels=1,
+                format="wav",
+                voice_id=voice_id,
+                sequence=1,
+                final=True,
+            )
