@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from struct import Struct
 
 import httpx
 
@@ -10,6 +11,23 @@ from kateto.core.event import AudioOutput, TextChunk
 from ._http import HttpProvider, configured_endpoint
 from ._models import ZonosRequest
 from .errors import MalformedUpstreamResponse
+
+
+_F32 = Struct("<f")
+
+
+def _f32_to_s16(chunk: bytes) -> bytes:
+    # ponytail: chunk may not be 4-byte-aligned, truncate
+    usable = len(chunk) & ~3
+    out = bytearray(usable // 2)
+    for i in range(0, usable, 4):
+        sample_f32 = _F32.unpack_from(chunk, i)[0]
+        sample_f32 = max(-1.0, min(1.0, sample_f32))
+        s16 = int(sample_f32 * 32767)
+        j = i // 2
+        out[j] = s16 & 0xFF
+        out[j + 1] = (s16 >> 8) & 0xFF
+    return bytes(out)
 
 
 class ZonosProvider(HttpProvider):
@@ -43,22 +61,28 @@ class ZonosProvider(HttpProvider):
         ) as response:
             response.raise_for_status()
             content_type = response.headers.get("Content-Type", "").lower()
-            if not content_type.startswith("audio/l16") and not content_type.startswith("application/octet-stream"):
+            audio_format = response.headers.get("X-Audio-Format", "int16").lower()
+            sample_rate = int(response.headers.get("X-Audio-Sample-Rate", str(self._sample_rate)))
+            if not content_type.startswith("audio/l16") and not content_type.startswith("application/octet-stream") and not content_type.startswith("audio/pcm"):
                 raise MalformedUpstreamResponse(provider="zonos", reason="expected PCM audio content type")
             async for samples in response.aiter_bytes():
-                if samples:
-                    yield AudioOutput(
-                        samples=samples,
-                        sample_rate=self._sample_rate,
-                        channels=1,
-                        format="pcm_s16le",
-                        voice_id=voice_id,
-                        sequence=sequence,
-                    )
-                    sequence += 1
+                if not samples:
+                    continue
+                # ponytail: server sends float32 PCM, convert to s16
+                if audio_format == "float32":
+                    samples = _f32_to_s16(samples)
+                yield AudioOutput(
+                    samples=samples,
+                    sample_rate=sample_rate,
+                    channels=1,
+                    format="pcm_s16le",
+                    voice_id=voice_id,
+                    sequence=sequence,
+                )
+                sequence += 1
         yield AudioOutput(
             samples=b"",
-            sample_rate=self._sample_rate,
+            sample_rate=sample_rate,
             channels=1,
             format="pcm_s16le",
             voice_id=voice_id,
