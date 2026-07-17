@@ -8,7 +8,7 @@ from typing import assert_never
 
 from pydantic import BaseModel, Field, ValidationError
 from pydantic.fields import FieldInfo
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, Screen
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static, Switch, TabbedContent, TabPane, Tree
 
@@ -72,6 +72,33 @@ class _FixtureRuntime:
         self.is_started = False
 
 
+class EventDetailScreen(Screen[None]):
+    def __init__(self, event_name: str, source: str, data_json: str) -> None:
+        super().__init__()
+        self.event_name = event_name
+        self.source = source
+        self.data_json = data_json
+
+    CSS = """
+    EventDetailScreen { align: center middle; background: $surface 80%; }
+    #detail-box { width: 80%; height: 80%; border: thick $accent; background: $surface; padding: 2; overflow-y: auto; }
+    #detail-box > Static { height: auto; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="detail-box"):
+            yield Static(f"[bold]{self.event_name}[/bold] from {self.source}")
+            yield Static(self.data_json)
+            yield Button("Close", id="close-detail", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "close-detail":
+            self.app.pop_screen()
+
+    def key_escape(self) -> None:
+        self.app.pop_screen()
+
+
 class KatetoApp(App[None]):
     CSS = """
     Screen { layout: vertical; background: $surface; }
@@ -82,8 +109,8 @@ class KatetoApp(App[None]):
     /* Events tab */
     #events-body { height: 1fr; margin-bottom: 1; }
     #events-content { height: 100%; }
-    #events-stream { width: 1fr; height: 100%; overflow-y: auto; border: solid $secondary; padding: 1; }
-    #event-state { height: auto; }
+    #events-stream { width: 1fr; height: 100%; border: solid $secondary; padding: 1; }
+    #event-list { height: 1fr; min-height: 0; }
     #events-registrations { width: 40%; height: 100%; border: round $secondary; padding: 1; }
     #event-registrations-tree { height: 1fr; overflow-y: auto; min-height: 0; }
     #composer { dock: bottom; height: 5; padding: 0 1; }
@@ -128,7 +155,7 @@ class KatetoApp(App[None]):
         self.fixture = fixture
         self.config_dir = (Path.cwd() if config_dir is None else config_dir).resolve()
         self.replacement_factory = replacement_factory or (self._fixture_replacement_factory if fixture else None)
-        self._events: deque[str] = deque(maxlen=1000)
+        self._events: deque[EventEnvelope[BaseModel]] = deque(maxlen=1000)
         self._voice_status: dict[str, str] = {voice: "idle" for voice in runtime.workflow_voices}
         self._audio_status: dict[str, str] = {}
         self._selected_plugin: str | None = None
@@ -140,7 +167,7 @@ class KatetoApp(App[None]):
 
     @property
     def event_text(self) -> str:
-        return "\n".join(self._events)
+        return "\n".join(self._format_event(e) for e in self._events) or "waiting for events"
 
     @property
     def plugin_text(self) -> str:
@@ -160,7 +187,7 @@ class KatetoApp(App[None]):
                 with Vertical(id="events-body"):
                     with Horizontal(id="events-content"):
                         with Vertical(id="events-stream"):
-                            yield Static(id="event-state")
+                            yield ListView(id="event-list")
                         with Vertical(id="events-registrations"):
                             yield Static("REGISTERED EVENTS", classes="section-title")
                             yield Tree("Events", id="event-registrations-tree")
@@ -274,21 +301,33 @@ class KatetoApp(App[None]):
             autocomplete.display = False
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
-        autocomplete = self.query_one("#event-autocomplete", ListView)
-        if not autocomplete.display:
-            return
-        index = autocomplete.index
-        if index is None:
-            return
-        input_widget = self.query_one("#composer-input", Input)
-        prefix = input_widget.value.strip()[1:].lower()
-        matching = [
-            reg.name for reg in self.manager.get_event_registrations()
-            if prefix in reg.name.lower()
-        ]
-        if index < len(matching):
-            self._select_event(matching[index])
-        autocomplete.display = False
+        list_view = event.list_view
+        if list_view.id == "event-autocomplete":
+            index = list_view.index
+            if index is None:
+                return
+            input_widget = self.query_one("#composer-input", Input)
+            prefix = input_widget.value.strip()[1:].lower()
+            matching = [
+                reg.name for reg in self.manager.get_event_registrations()
+                if prefix in reg.name.lower()
+            ]
+            if index < len(matching):
+                self._select_event(matching[index])
+            list_view.display = False
+        elif list_view.id == "event-list":
+            index = list_view.index
+            if index is None:
+                return
+            events = list(self._events)
+            if 0 <= index < len(events):
+                envelope = events[index]
+                data_json = envelope.data.model_dump_json(indent=2)
+                self.push_screen(EventDetailScreen(
+                    event_name=envelope.name,
+                    source=envelope.source,
+                    data_json=data_json,
+                ))
 
     async def _submit_composer(self) -> None:
         input_widget = self.query_one("#composer-input", Input)
@@ -370,8 +409,9 @@ class KatetoApp(App[None]):
         self._refresh_view_after_event()
 
     def _record_event(self, envelope: EventEnvelope[BaseModel]) -> None:
-        formatted = self._format_event(envelope)
-        self._events.append(formatted)
+        self._events.append(envelope)
+        if self.is_mounted:
+            self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
         if isinstance(envelope.data, PluginErrorData):
             self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
         self._update_voice_status(envelope)
@@ -384,7 +424,6 @@ class KatetoApp(App[None]):
     def _refresh_view(self) -> None:
         if not self.is_mounted:
             return
-        self.query_one("#event-state", Static).update(self.event_text or "waiting for events")
         self.query_one("#plugin-history", Static).update(self._history_text())
         self._refresh_plugin_switches()
         self._refresh_plugin_config()
@@ -673,11 +712,10 @@ class KatetoApp(App[None]):
     @staticmethod
     def _format_event(envelope: EventEnvelope[BaseModel]) -> str:
         data = envelope.data
-        if isinstance(data, TuiEventData | PluginErrorData):
-            message = data.message
-        else:
-            message = type(data).__name__
-        return f"{envelope.name:<22} {envelope.source:<16} {message}"
+        data_str = data.model_dump_json(exclude_none=True)
+        if len(data_str) > 60:
+            data_str = data_str[:57] + "..."
+        return f"{envelope.name:<22} {envelope.source:<16} {data_str}"
 
 
 def run_tui(*, fixture: bool = False, config_dir: Path | None = None) -> None:
