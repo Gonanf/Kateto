@@ -35,4 +35,20 @@ def create_voice(ctx, settings):
         endpoint=voice_settings.endpoint,
         api_key=voice_settings.api_key or "sk-no-key-required",
     )
-    return Conquest(config_dir=ctx.config.paths.config_dir, provider=provider, settings=settings)
+    voice = Conquest(config_dir=ctx.config.paths.config_dir, provider=provider, settings=settings)
+
+    if voice_settings.model:
+        from kateto.providers.agent import OpenAIAgentProvider
+        from kateto.voices.tools import VoiceToolExecutor
+        agent_provider = OpenAIAgentProvider(
+            model=voice_settings.model,
+            endpoint=voice_settings.endpoint,
+            api_key=voice_settings.api_key,
+        )
+        executor = VoiceToolExecutor(
+            config_dir=ctx.config.paths.config_dir,
+            cli_settings=ctx.config.settings.cli,
+        )
+        voice.setup_agent(agent_provider=agent_provider, tool_executor=executor)
+
+    return voice

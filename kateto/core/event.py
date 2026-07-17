@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 
 class EventModel(BaseModel):
@@ -120,6 +120,21 @@ class VoiceStatus(StrEnum):
 class VoiceStatusData(EventModel):
     voice: str
     status: VoiceStatus
+
+
+class ToolCallData(EventModel):
+    tool_name: str = Field(min_length=1)
+    arguments: dict[str, JsonValue] = Field(default_factory=dict)
+    correlation_id: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+
+
+class ToolResultData(EventModel):
+    correlation_id: str = Field(min_length=1)
+    tool_name: str = Field(min_length=1)
+    result: str = Field(default="")
+    error: str | None = Field(default=None)
+    voice: str = Field(min_length=1)
 
 
 class TodoItemData(EventModel):

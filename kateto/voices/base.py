@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from uuid import uuid4
 from typing import Protocol, assert_never
 
 from openai import AsyncOpenAI
@@ -13,6 +15,8 @@ from openai.types.chat import (
     ChatCompletionDeveloperMessageParam,
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
+    ChatCompletionToolMessageParam,
+    ChatCompletionToolParam,
     ChatCompletionUserMessageParam,
 )
 from pydantic import BaseModel
@@ -23,6 +27,8 @@ from kateto.core.event import (
     GenerateData,
     InterruptData,
     TextChunk,
+    ToolCallData,
+    ToolResultData,
     TranscriptionData,
     VoiceIdleData,
     VoiceStatus,
@@ -30,6 +36,7 @@ from kateto.core.event import (
 )
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.providers import ChatMessage
+from kateto.providers.agent import AgentProvider, ToolExecutor
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import LoadedSkill, load_skills
 
@@ -161,6 +168,9 @@ class VoiceAgent(Plugin):
         self._generation_task: asyncio.Task[None] | None = None
         self._interrupted = False
         self._status: VoiceStatus | None = None
+        self._agent_provider: AgentProvider | None = None
+        self._tool_executor: ToolExecutor | None = None
+        self._tools: tuple[ChatCompletionToolParam, ...] = ()
 
     @property
     def role(self) -> VoiceRole:
@@ -169,6 +179,26 @@ class VoiceAgent(Plugin):
     @property
     def loaded_skills(self) -> tuple[LoadedSkill, ...]:
         return self._skills
+
+    @property
+    def agent_provider(self) -> AgentProvider | None:
+        return self._agent_provider
+
+    @property
+    def tools(self) -> tuple[ChatCompletionToolParam, ...]:
+        return self._tools
+
+    def setup_agent(
+        self,
+        *,
+        agent_provider: AgentProvider,
+        tool_executor: ToolExecutor,
+        extra_tools: tuple[ChatCompletionToolParam, ...] = (),
+    ) -> None:
+        from kateto.voices.tools import BUILTIN_TOOLS
+        self._agent_provider = agent_provider
+        self._tool_executor = tool_executor
+        self._tools = (*BUILTIN_TOOLS, *extra_tools)
 
     @property
     def reference_wav(self) -> Path:
@@ -200,6 +230,8 @@ class VoiceAgent(Plugin):
         manager.register_event("text_chunk", TextChunk)
         manager.register_event("voice_idle", VoiceIdleData)
         manager.register_event("voice_status", VoiceStatusData)
+        manager.register_event("tool_call", ToolCallData)
+        manager.register_event("tool_result", ToolResultData)
         await self._memory.ensure_soul(self.profile.system_prompt)
         self._skills = load_skills(
             config_dir=self._config_dir, names=tuple(self._settings.skills)
@@ -277,6 +309,9 @@ class VoiceAgent(Plugin):
         return None
 
     async def _stream_response(self, prompt: str) -> None:
+        if self._agent_provider is not None and self._tool_executor is not None:
+            await self._agent_loop(prompt)
+            return
         request = GenerationRequest(
             voice_id=self.name,
             reference_wav=self.reference_wav,
@@ -315,6 +350,80 @@ class VoiceAgent(Plugin):
                 full = "".join(tokens)
                 open("/tmp/kateto_voice_debug.txt", "a").write(f"[{self.name}] stream=false accumulated {len(tokens)} tokens -> {full!r}\n")
                 await self._emit_chunk(full, 0, final=True)
+        manager = self.manager
+        if manager is not None:
+            await manager.emit(
+                "voice_idle", VoiceIdleData(voice=self.name), source=self.name
+            )
+        await self._set_status(VoiceStatus.IDLE)
+
+    async def _agent_loop(self, prompt: str) -> None:
+        provider = self._agent_provider
+        executor = self._tool_executor
+        if provider is None or executor is None:
+            return
+        messages = list(await self._messages_for(prompt))
+        max_iterations = 10
+        for _ in range(max_iterations):
+            if self._interrupted:
+                break
+            response = await provider.chat_with_tools(
+                messages=tuple(messages),
+                tools=self._tools,
+            )
+            if not response.tool_calls:
+                if response.text:
+                    await self._emit_chunk(response.text, 0, final=True)
+                break
+            messages.append(
+                ChatCompletionAssistantMessageParam(
+                    role="assistant",
+                    content=response.text or None,
+                    tool_calls=[
+                        {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
+                        for tc in response.tool_calls
+                    ],
+                )
+            )
+            for tc in response.tool_calls:
+                correlation_id = uuid4().hex
+                manager = self.manager
+                if manager is not None:
+                    await manager.emit(
+                        "tool_call",
+                        ToolCallData(
+                            tool_name=tc.name,
+                            arguments=tc.arguments,
+                            correlation_id=correlation_id,
+                            voice=self.name,
+                        ),
+                        source=self.name,
+                    )
+                try:
+                    result = await executor.execute(tc.name, tc.arguments)
+                    error = None
+                except Exception as e:
+                    result = ""
+                    error = str(e)
+                if manager is not None:
+                    await manager.emit(
+                        "tool_result",
+                        ToolResultData(
+                            correlation_id=correlation_id,
+                            tool_name=tc.name,
+                            result=result,
+                            error=error,
+                            voice=self.name,
+                        ),
+                        source=self.name,
+                    )
+                messages.append(
+                    ChatCompletionToolMessageParam(
+                        role="tool",
+                        tool_call_id=tc.id,
+                        content=result if error is None else f"Error: {error}",
+                    )
+                )
         manager = self.manager
         if manager is not None:
             await manager.emit(
