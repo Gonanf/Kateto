@@ -6,7 +6,7 @@ hot_reload = false
 
 [plugin.audio_input_mic]
 enabled = true
-device = "pulse"
+device = "default"
 sample_rate = 16000
 silence_timeout = 1.5
 vad_model = "silero"
@@ -23,7 +23,7 @@ model = "classifier"
 [plugin.voice_llm]
 enabled = true
 endpoint = "http://127.0.0.1:11434/v1"
-model = "openbmb/MiniCPM5-1B-GGUF"
+model = "openbmb/MiniCPM5-1B-GGUF:Q4_K_M"
 
 [plugin.audio_output_zonos]
 enabled = true
@@ -35,15 +35,20 @@ enabled = true
 [voice.jane]
 enabled = true
 skills = ["orchestrator"]
+mcp_servers = ["system"]
 
 [voice.doktor]
 enabled = true
 skills = ["backlog", "risk-analysis", "planning-poker"]
+mcp_servers = ["system"]
 
 [voice.conquest]
 enabled = true
 skills = ["backlog"]
+mcp_servers = ["system"]
 
-[mcp_servers]
+[mcp_servers.system]
+command = "kateto"
+
 [cli]
 allowlist = ["git", "ls", "pwd", "cat", "echo", "date"]

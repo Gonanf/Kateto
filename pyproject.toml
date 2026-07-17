@@ -12,7 +12,7 @@ dependencies = [
     "openai==2.45.0",
     "pydantic==2.13.4",
     "python-dotenv==1.2.2",
-    "silero-vad>=6.2.1",
+    "silero-vad<6.2",
     "sounddevice==0.5.5",
     "textual==8.2.8",
     "torch>=2.13.0",

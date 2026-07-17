@@ -12,7 +12,12 @@ CHANNELS: Final = 1
 SAMPLE_WIDTH_BYTES: Final = 2
 PCM_FORMAT: Final = "pcm_s16le"
 DEFAULT_SILENCE_TIMEOUT: Final = 1.5
-DEFAULT_VAD_THRESHOLD: Final = 0.5
+# ponytail: 0.5 is the upstream default, but it assumes loud/normalised
+# audio.  On typical consumer mics the Silero JIT model peaks at 0.3–0.6
+# for actual speech, while silence sits below 0.03.  0.2 gives reliable
+# detection without false positives.  Raise via vad_threshold per plugin
+# if the environment is noisier.
+DEFAULT_VAD_THRESHOLD: Final = 0.2
 
 
 @dataclass(frozen=True, slots=True)

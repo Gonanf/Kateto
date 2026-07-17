@@ -117,7 +117,7 @@ def create_voice_provider(config: LoadedConfig) -> OpenAICompatibleProvider:
     model = settings.model
     if model is None or not model.strip():
         raise LiveAssemblyConfigurationError(field="plugin.voice_llm.model", reason="must be configured")
-    return OpenAICompatibleProvider(model=model, endpoint=settings.endpoint)
+    return OpenAICompatibleProvider(model=model, endpoint=settings.endpoint, api_key=settings.api_key or "sk-no-key-required")
 
 
 def first_enabled_input_settings(config: LoadedConfig) -> PluginSettings:

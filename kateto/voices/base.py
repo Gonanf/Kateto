@@ -247,7 +247,8 @@ class VoiceAgent(Plugin):
 
     async def on_generate(self, data: GenerateData) -> None:
         prompt = self._prompt_for(data)
-        if prompt is None or not prompt.strip() or not self.is_relevant(prompt):
+        # ponytail: is_relevant removed — classification plugin handles intent filtering now
+        if prompt is None or not prompt.strip():
             return
         self._interrupted = False
         await self._set_status(VoiceStatus.THINKING)
@@ -263,10 +264,6 @@ class VoiceAgent(Plugin):
         finally:
             if self._generation_task is generation:
                 self._generation_task = None
-
-    def is_relevant(self, prompt: str) -> bool:
-        normalized = prompt.casefold()
-        return any(term in normalized for term in self.profile.relevance_terms)
 
     def _prompt_for(self, data: GenerateData) -> str | None:
         if data.prompt is not None:

@@ -142,6 +142,16 @@ class KatetoApp(App[None]):
     def event_text(self) -> str:
         return "\n".join(self._events)
 
+    @property
+    def plugin_text(self) -> str:
+        lines: list[str] = []
+        for plugin in self._available_plugins():
+            on_off = "ON" if plugin.enabled else "OFF"
+            audio = self._audio_status.get(plugin.name)
+            suffix = f" · {audio}" if audio else ""
+            lines.append(f"{plugin.name} {on_off}{suffix}")
+        return "\n".join(lines)
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with TabbedContent(id="workspace"):
@@ -389,6 +399,11 @@ class KatetoApp(App[None]):
                 self.query_one(f"#switch-{plugin.name}", Switch).value = plugin.enabled
             except Exception:
                 pass
+        for name, status in self._audio_status.items():
+            try:
+                self.query_one(f"#audio-status-{name}", Static).update(status)
+            except Exception:
+                pass
 
     def _refresh_plugin_config(self) -> None:
         section = self.query_one("#plugin-config-section", Vertical)
@@ -412,11 +427,13 @@ class KatetoApp(App[None]):
                 pass
 
     def _plugin_row(self, plugin: Plugin) -> Horizontal:
-        status = "🟢" if plugin.enabled else "⚪"
+        enabled_status = "🟢" if plugin.enabled else "⚪"
+        audio = self._audio_status.get(plugin.name, "?")
         selected_class = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
         return Horizontal(
-            Static(status, classes="plugin-status"),
+            Static(enabled_status, classes="plugin-status"),
             Button(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
+            Static(audio, id=f"audio-status-{plugin.name}"),
             Switch(value=plugin.enabled, id=f"switch-{plugin.name}"),
             classes="plugin-row",
         )

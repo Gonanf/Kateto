@@ -99,6 +99,7 @@ class PluginSettings(_ConfigModel):
     endpoint: str | None = None
     model: str | None = None
     model_endpoint: str | None = None
+    api_key: str | None = None
     silence_timeout: float | None = Field(default=None, gt=0)
     sample_rate: int | None = Field(default=None, gt=0)
     device: str | None = None

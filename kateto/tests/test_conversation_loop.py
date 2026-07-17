@@ -54,8 +54,9 @@ async def test_audio_to_execute_emits_ordered_transcript_classification_and_one_
         await manager.emit("audio_chunk", AudioData(samples=b"\x01\x00", format="pcm_s16le"), source="fixture")
         await manager.wait_for_idle()
 
-        # Then: its visible event prefix is stable and the subscriber contract, not the classifier,
-        # chooses active voices.
+        # Then: every voice that received a generate event emits text_chunks.
+        # The previous is_relevant filter has been removed — classification
+        # plugin handles intent filtering instead.
         events = manager.get_events()
         conversation_events = [event for event in events if event.name != "voice_status"]
         assert [event.name for event in conversation_events[:3]] == ["audio_chunk", "transcription", "classification"]
@@ -68,6 +69,7 @@ async def test_audio_to_execute_emits_ordered_transcript_classification_and_one_
         assert transcriber.received[0].format == "pcm_s16le"
         assert classifier.received == ["plan tomorrow standup"]
         assert [event.data.voice_id for event in events if event.name == "text_chunk" and isinstance(event.data, TextChunk)] == [
+            "jane",
             "doktor",
             "conquest",
         ]
@@ -158,10 +160,11 @@ async def test_interrupt_cancels_active_llm_and_tts_then_the_next_audio_segment_
         await manager.wait_for_idle()
 
         # Then: cancellation is observable and a fresh utterance reaches a resumed stream.
+        # All three voices now respond without is_relevant filtering.
         names = [event.name for event in manager.get_events()]
         assert names.count("conversation_interrupted") == 1
         assert names.count("conversation_resumed") == 1
-        assert provider.calls == 2
+        assert provider.calls == 6
         assert [event.data.text for event in manager.get_events() if event.name == "text_chunk" and isinstance(event.data, TextChunk)][-1] == "resumed"
     finally:
         await manager.close()

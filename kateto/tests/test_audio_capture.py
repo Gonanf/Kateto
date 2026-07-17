@@ -48,7 +48,21 @@ def no_op_capture_callback(
     del samples, frames, time_info, status
 
 
-def test_sounddevice_capture_uses_raw_int16_mono_16khz_input(monkeypatch: pytest.MonkeyPatch) -> None:
+DEFAULT_NATIVE_RATE = 48_000
+
+
+class _FakeDeviceInfo(dict):
+    """Fake sounddevice device info dict returned by query_devices."""
+
+    def __getitem__(self, key: str) -> object:
+        if key == "default_samplerate":
+            return DEFAULT_NATIVE_RATE
+        if key == "max_input_channels":
+            return 1
+        return super().__getitem__(key)
+
+
+def test_sounddevice_capture_uses_raw_int16_mono_native_rate_input(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: a fake RawInputStream constructor that captures its requested format.
     captures: list[tuple[str | None, int, int, str]] = []
 
@@ -64,13 +78,17 @@ def test_sounddevice_capture_uses_raw_int16_mono_16khz_input(monkeypatch: pytest
         captures.append((device, samplerate, channels, dtype))
         return FixtureRawStream()
 
+    def fake_query_devices(*, device: str | None = None, kind: str | None = None) -> _FakeDeviceInfo:
+        return _FakeDeviceInfo()
+
     monkeypatch.setattr(sounddevice, "RawInputStream", create_stream)
+    monkeypatch.setattr(sounddevice, "query_devices", fake_query_devices)
 
     # When: a default microphone capture stream is constructed.
     stream = SoundDeviceCaptureFactory().create(fixture_config("default"), no_op_capture_callback)
 
-    # Then: PortAudio receives raw int16 mono capture at exactly 16 kHz.
-    assert captures == [(None, 16_000, 1, "int16")]
+    # Then: PortAudio receives raw int16 mono capture at the device's native rate.
+    assert captures == [(None, DEFAULT_NATIVE_RATE, 1, "int16")]
     stream.close()
 
 
