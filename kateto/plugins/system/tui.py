@@ -82,8 +82,8 @@ class KatetoApp(App[None]):
     /* Events tab */
     #events-body { height: 1fr; margin-bottom: 1; }
     #events-content { height: 100%; }
-    #events-stream { width: 1fr; height: 100%; }
-    #event-state { height: 1fr; border: solid $secondary; padding: 1; overflow-y: auto; }
+    #events-stream { width: 1fr; height: 100%; overflow-y: auto; border: solid $secondary; padding: 1; }
+    #event-state { height: auto; }
     #events-registrations { width: 40%; height: 100%; border: round $secondary; padding: 1; }
     #event-registrations-tree { height: 1fr; overflow-y: auto; min-height: 0; }
     #composer { dock: bottom; height: 5; padding: 0 1; }
