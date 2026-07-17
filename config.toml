@@ -37,16 +37,19 @@ enabled = true
 enabled = true
 skills = ["orchestrator"]
 mcp_servers = ["system"]
+stream = false
 
 [voice.doktor]
 enabled = true
 skills = ["backlog", "risk-analysis", "planning-poker"]
 mcp_servers = ["system"]
+stream = false
 
 [voice.conquest]
 enabled = true
 skills = ["backlog"]
 mcp_servers = ["system"]
+stream = false
 
 [mcp_servers.system]
 command = "kateto"

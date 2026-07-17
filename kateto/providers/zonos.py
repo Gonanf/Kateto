@@ -101,9 +101,11 @@ class ZonosProvider(HttpProvider):
 
     async def stream_sentence(self, sentence: TextChunk, *, voice_id: str) -> AsyncIterator[AudioOutput]:
         if self._stream:
+            open("/tmp/kateto_voice_debug.txt", "a").write(f"[zonos] stream=true path for voice={voice_id} text={sentence.text!r}\n")
             async for chunk in self._stream_sentence(sentence, voice_id=voice_id):
                 yield chunk
         else:
+            open("/tmp/kateto_voice_debug.txt", "a").write(f"[zonos] stream=false path for voice={voice_id} text={sentence.text!r}\n")
             async for chunk in self._generate_wav(sentence, voice_id=voice_id):
                 yield chunk
 
@@ -133,6 +135,9 @@ class ZonosProvider(HttpProvider):
             body = await response.aread()
             if not body:
                 return
+            n = len(__import__("glob").glob("/tmp/kateto_tts_*.wav"))
+            open(f"/tmp/kateto_tts_prompt_{n}.txt", "w").write(f"[voice={voice_id}] {sentence.text}")
+            open(f"/tmp/kateto_tts_output_{n}.wav", "wb").write(body)
             pcm, sample_rate = _wav_to_pcm(body)
             yield AudioOutput(
                 samples=pcm,

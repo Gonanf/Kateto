@@ -133,6 +133,7 @@ class VoiceSettings(_ConfigModel):
     memories: str | None = None
     reference_audio: str | None = None
     reference_clip: str | None = None
+    stream: bool = True
 
     @field_validator(*_ASSET_FIELDS)
     @classmethod

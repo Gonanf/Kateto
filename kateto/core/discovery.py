@@ -132,6 +132,7 @@ def first_enabled_input_settings(config: LoadedConfig) -> PluginSettings:
 
 
 def discover_plugins(context: DiscoveryContext) -> PluginRegistry:
+    open("/tmp/kateto_voice_debug.txt", "a").write(f"[discovery] config_file={context.config.paths.config_file}\n")
     for name in _REQUIRED_PLUGIN_NAMES:
         _ = context.plugin_settings(name)
     discovered: list[tuple[Plugin, bool]] = []
@@ -149,6 +150,7 @@ def discover_plugins(context: DiscoveryContext) -> PluginRegistry:
             continue
         if not _module_is_available(definition.module_name):
             continue
+        open("/tmp/kateto_voice_debug.txt", "a").write(f"[discovery] voice={voice_name} settings.stream={settings.stream} config_file={context.config.paths.config_file}\n")
         discovered.append((definition.factory(context, settings), False))
     plugin_names = {plugin.name for plugin, _ in discovered}
     if len(plugin_names) != len(discovered):

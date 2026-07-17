@@ -282,21 +282,39 @@ class VoiceAgent(Plugin):
             reference_wav=self.reference_wav,
             messages=await self._messages_for(prompt),
         )
-        previous: str | None = None
-        sequence = 0
-        async for token in self._provider.stream(request):
-            if not isinstance(token, str) or not token:
-                raise ProviderStreamError(
-                    voice=self.name, reason="token must be a non-empty string"
-                )
-            if self._status is not VoiceStatus.TALKING:
-                await self._set_status(VoiceStatus.TALKING)
+        open("/tmp/kateto_voice_debug.txt", "a").write(f"[{self.name}] _settings.stream={self._settings.stream} (type={type(self._settings).__name__})\n")
+        if self._settings.stream:
+            open("/tmp/kateto_voice_debug.txt", "a").write(f"[{self.name}] stream=true mode, emitting per token\n")
+            previous: str | None = None
+            sequence = 0
+            async for token in self._provider.stream(request):
+                if not isinstance(token, str) or not token:
+                    raise ProviderStreamError(
+                        voice=self.name, reason="token must be a non-empty string"
+                    )
+                if self._status is not VoiceStatus.TALKING:
+                    await self._set_status(VoiceStatus.TALKING)
+                if previous is not None:
+                    await self._emit_chunk(previous, sequence, final=False)
+                    sequence += 1
+                previous = token
             if previous is not None:
-                await self._emit_chunk(previous, sequence, final=False)
-                sequence += 1
-            previous = token
-        if previous is not None:
-            await self._emit_chunk(previous, sequence, final=True)
+                await self._emit_chunk(previous, sequence, final=True)
+        else:
+            open("/tmp/kateto_voice_debug.txt", "a").write(f"[{self.name}] stream=false mode, accumulating tokens...\n")
+            tokens: list[str] = []
+            async for token in self._provider.stream(request):
+                if not isinstance(token, str) or not token:
+                    raise ProviderStreamError(
+                        voice=self.name, reason="token must be a non-empty string"
+                    )
+                if self._status is not VoiceStatus.TALKING:
+                    await self._set_status(VoiceStatus.TALKING)
+                tokens.append(token)
+            if tokens:
+                full = "".join(tokens)
+                open("/tmp/kateto_voice_debug.txt", "a").write(f"[{self.name}] stream=false accumulated {len(tokens)} tokens -> {full!r}\n")
+                await self._emit_chunk(full, 0, final=True)
         manager = self.manager
         if manager is not None:
             await manager.emit(
