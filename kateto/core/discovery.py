@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
@@ -26,6 +27,11 @@ class DiscoveryContext:
 
     def plugin_settings(self, name: str) -> PluginSettings:
         return required_plugin_settings(self.config, name)
+
+    def get_shared(self, key: str, factory: Callable[[], Any] | None = None) -> Any:
+        if key not in self.shared and factory is not None:
+            self.shared[key] = factory()
+        return self.shared.get(key)
 
 
 @dataclass(frozen=True, slots=True)

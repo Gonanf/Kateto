@@ -30,8 +30,8 @@ def create_plugins(ctx):
         plugins.append(
             cls(
                 settings,
-                vad=ctx.shared.get("vad"),
-                capture_factory=ctx.shared.get("capture_factory"),
+                vad=ctx.get_shared("vad", factory=_load_vad),
+                capture_factory=ctx.get_shared("capture_factory"),
             )
         )
     if not plugins:
@@ -42,3 +42,10 @@ def create_plugins(ctx):
             reason="at least one configured input must be enabled",
         )
     return plugins
+
+
+def _load_vad():
+    from .silero import load_silero_model
+    from .base import SileroVad, DEFAULT_VAD_THRESHOLD
+    model = load_silero_model()
+    return SileroVad(model, threshold=DEFAULT_VAD_THRESHOLD)
