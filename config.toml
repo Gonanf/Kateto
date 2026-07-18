@@ -40,13 +40,13 @@ mcp_servers = ["system"]
 stream = false
 
 [voice.doktor]
-enabled = true
+enabled = false
 skills = ["backlog", "risk-analysis", "planning-poker"]
 mcp_servers = ["system"]
 stream = false
 
 [voice.conquest]
-enabled = true
+enabled = false
 skills = ["backlog"]
 mcp_servers = ["system"]
 stream = false

@@ -6,7 +6,8 @@ dist/
 wheels/
 *.egg-info
 #Why this? Because it can contain personal data from my pc
-.omo/evidence
-
+.omo/evidence/
+.sisyphus/
+docs/compose/
 # Virtual environments
 .venv

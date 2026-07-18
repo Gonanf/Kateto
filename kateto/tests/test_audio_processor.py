@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from kateto.core import PluginManager
+from kateto.core.config import PluginSettings
 from kateto.core.event import AudioData, TranscriptionData
 from kateto.core.plugin import Plugin
 from kateto.plugins.audio_processor import WhisperAudioProcessor
@@ -15,6 +16,20 @@ class FixtureWhisper:
     async def transcribe(self, audio: AudioData) -> TranscriptionData:
         self.received.append(audio)
         return TranscriptionData(text="fixture transcription", language="en")
+
+
+class _TestableWhisperProcessor(WhisperAudioProcessor):
+    """Test helper that injects a fixture provider instead of the real one."""
+
+    def __init__(self, fixture: FixtureWhisper) -> None:
+        super().__init__(settings=PluginSettings())
+        self._fixture = fixture
+
+    async def enable(self) -> None:
+        self._provider = self._fixture  # type: ignore[assignment]
+
+    async def disable(self) -> None:
+        self._provider = None
 
 
 class TranscriptionSink(Plugin):
@@ -31,7 +46,7 @@ async def test_audio_chunk_flows_through_whisper_processor_to_transcription() ->
     # Given: the documented processor boundary is connected to a Whisper adapter and a sink.
     manager = PluginManager()
     whisper = FixtureWhisper()
-    processor = WhisperAudioProcessor(provider=whisper)
+    processor = _TestableWhisperProcessor(whisper)
     sink = TranscriptionSink()
     await manager.enable_plugin(processor)
     await manager.enable_plugin(sink)

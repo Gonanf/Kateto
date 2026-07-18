@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from kateto.core import Plugin, PluginManager
+from kateto.core.config import PluginSettings
 from kateto.core.event import Classification, ClassificationData, GenerateData, TranscriptionData
 from kateto.plugins.executor import ClassifierExecutor
 
@@ -13,6 +14,20 @@ class FixtureClassifier:
 
     async def classify(self, text: str) -> ClassificationData:
         return ClassificationData(text=text, category=self._category)
+
+
+class _TestableClassifierExecutor(ClassifierExecutor):
+    """Test helper that injects a fixture classifier instead of the real one."""
+
+    def __init__(self, fixture: FixtureClassifier) -> None:
+        super().__init__(settings=PluginSettings())
+        self._fixture = fixture
+
+    async def enable(self) -> None:
+        self._classifier = self._fixture  # type: ignore[assignment]
+
+    async def disable(self) -> None:
+        self._classifier = None
 
 
 class DynamicVoicePlugin(Plugin):
@@ -28,7 +43,7 @@ class DynamicVoicePlugin(Plugin):
 async def test_execute_broadcasts_to_dynamically_named_voice_plugins() -> None:
     # Given: subscribers whose names are not known by the classifier executor.
     manager = PluginManager()
-    await manager.enable_plugin(ClassifierExecutor(classifier=FixtureClassifier(Classification.EXECUTE)))
+    await manager.enable_plugin(_TestableClassifierExecutor(FixtureClassifier(Classification.EXECUTE)))
     voices = (DynamicVoicePlugin("voice_orchid"), DynamicVoicePlugin("voice_sable"))
     for voice in voices:
         await manager.enable_plugin(voice)
@@ -53,7 +68,7 @@ async def test_execute_broadcasts_to_dynamically_named_voice_plugins() -> None:
 async def test_ignore_classification_does_not_generate(category: Classification) -> None:
     # Given: dynamically named subscribers and a classifier that ignores the transcription.
     manager = PluginManager()
-    await manager.enable_plugin(ClassifierExecutor(classifier=FixtureClassifier(category)))
+    await manager.enable_plugin(_TestableClassifierExecutor(FixtureClassifier(category)))
     voice = DynamicVoicePlugin("voice_unlisted")
     await manager.enable_plugin(voice)
 

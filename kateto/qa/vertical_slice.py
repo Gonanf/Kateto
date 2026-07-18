@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from kateto.core import Plugin, PluginManager
+from kateto.core.config import PluginSettings
 from kateto.core.plugin import PluginManagerProtocol
 from kateto.core.event import (
     AudioData,
@@ -114,6 +115,34 @@ class _FixtureAudioOutput(Plugin):
         return manager
 
 
+class _TestableWhisperProcessor(WhisperAudioProcessor):
+    """Test helper that injects a fixture transcriber instead of the real provider."""
+
+    def __init__(self, fixture: _FixtureTranscriber) -> None:
+        super().__init__(settings=PluginSettings())
+        self._fixture = fixture
+
+    async def enable(self) -> None:
+        self._provider = self._fixture  # type: ignore[assignment]
+
+    async def disable(self) -> None:
+        self._provider = None
+
+
+class _TestableClassifierExecutor(ClassifierExecutor):
+    """Test helper that injects a fixture classifier instead of the real one."""
+
+    def __init__(self, fixture: _FixtureClassifier) -> None:
+        super().__init__(settings=PluginSettings())
+        self._fixture = fixture
+
+    async def enable(self) -> None:
+        self._classifier = self._fixture  # type: ignore[assignment]
+
+    async def disable(self) -> None:
+        self._classifier = None
+
+
 async def run_fixture(prompt: str, interrupt_at: int | None = None) -> VerticalSliceResult:
     if interrupt_at is not None and interrupt_at < 1:
         raise ValueError("interrupt_at must be positive")
@@ -125,8 +154,8 @@ async def run_fixture(prompt: str, interrupt_at: int | None = None) -> VerticalS
         transcriber = _FixtureTranscriber((prompt, prompt) if interrupt_at is not None else (prompt,))
         classifier = _FixtureClassifier()
         await manager.enable_plugin(InterruptExecutor())
-        await manager.enable_plugin(WhisperAudioProcessor(provider=transcriber))
-        await manager.enable_plugin(ClassifierExecutor(classifier=classifier))
+        await manager.enable_plugin(_TestableWhisperProcessor(transcriber))
+        await manager.enable_plugin(_TestableClassifierExecutor(classifier))
         await manager.enable_plugin(TodoListExecutor(config_dir=config_dir, voice="doktor"))
         await enable_voices(manager, config_dir=config_dir, provider=provider)
         audio_output = _FixtureAudioOutput()

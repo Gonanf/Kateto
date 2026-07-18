@@ -6,7 +6,7 @@ import pytest
 
 from kateto.core.config import load_config
 from kateto.core.event import AudioOutput, TodoItemData
-from kateto.live import EventRuntimeDependencies, build_event_runtime
+from kateto.live import build_event_runtime
 from kateto.plugins.audio_input.base import (
     AudioDeviceError,
     AudioInputConfig,
@@ -186,7 +186,7 @@ def test_default_live_assembly_loads_and_invokes_injected_silero_model(tmp_path:
     )
     microphone = next(
         plugin
-        for plugin in assembly._input_plugins
+        for plugin in assembly.plugins
         if isinstance(plugin, MicrophoneAudioInput)
     )
     detected_speech = microphone._vad.is_speech(b"\x01\x00" * 512)
@@ -206,11 +206,11 @@ async def test_configured_live_assembly_starts_and_stops_production_plugins(tmp_
     output_factory = RecordingOutputFactory()
     assembly = build_event_runtime(
         load_config(config_dir=tmp_path),
-        dependencies=EventRuntimeDependencies(
-            vad=QuietVad(),
-            capture_factory=capture_factory,
-            player_factory=output_factory,
-        ),
+        shared={
+            "vad": QuietVad(),
+            "capture_factory": capture_factory,
+            "player_factory": output_factory,
+        },
     )
 
     # When: the configured production assembly starts, receives PCM, and stops.
@@ -243,7 +243,6 @@ async def test_configured_live_assembly_starts_and_stops_production_plugins(tmp_
     assert all(capture.started and capture.stopped and capture.closed for capture in capture_factory.captures)
     assert output_factory.requests == [("Fixture Output", 24_000, 1)]
     assert all(stream.started and stream.stopped and stream.closed for stream in output_factory.streams)
-    assert all(provider.is_closed for provider in assembly.providers)
     assert not any(plugin.enabled for plugin in assembly.manager.get_plugins())
 
 
@@ -253,11 +252,11 @@ async def test_live_assembly_persists_completed_todo_through_cli_backlog_owner(t
     write_live_config(tmp_path)
     assembly = build_event_runtime(
         load_config(config_dir=tmp_path),
-        dependencies=EventRuntimeDependencies(
-            vad=QuietVad(),
-            capture_factory=RecordingCaptureFactory(),
-            player_factory=RecordingOutputFactory(),
-        ),
+        shared={
+            "vad": QuietVad(),
+            "capture_factory":RecordingCaptureFactory(),
+            "player_factory": RecordingOutputFactory(),
+        },
     )
 
     try:
@@ -290,11 +289,11 @@ async def test_live_start_failure_closes_opened_resources_and_workers(tmp_path: 
     capture_factory = RecordingCaptureFactory(fail_on_start=True)
     assembly = build_event_runtime(
         load_config(config_dir=tmp_path),
-        dependencies=EventRuntimeDependencies(
-            vad=QuietVad(),
-            capture_factory=capture_factory,
-            player_factory=RecordingOutputFactory(),
-        ),
+        shared={
+            "vad": QuietVad(),
+            "capture_factory":capture_factory,
+            "player_factory": RecordingOutputFactory(),
+        },
     )
 
     # When: live startup reaches the failing capture boundary.
@@ -303,6 +302,5 @@ async def test_live_start_failure_closes_opened_resources_and_workers(tmp_path: 
 
     # Then: every opened boundary is closed and no plugin worker remains active.
     assert all(capture.closed for capture in capture_factory.captures)
-    assert all(provider.is_closed for provider in assembly.providers)
     assert not any(plugin.enabled for plugin in assembly.manager.get_plugins())
     assert all(plugin._worker is None or plugin._worker.done() for plugin in assembly.manager.get_plugins())

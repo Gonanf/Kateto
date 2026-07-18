@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from kateto.core import PluginManager
+from kateto.core.config import PluginSettings
 from kateto.core.event import AudioData, Classification, GenerateData, TextChunk, TodoItemData
 from kateto.plugins.audio_processor import WhisperAudioProcessor
 from kateto.plugins.executor import ClassifierExecutor, InterruptExecutor, TodoListExecutor
@@ -20,6 +21,34 @@ from kateto.tests.conversation_support import (
 )
 
 
+class _TestableWhisperProcessor(WhisperAudioProcessor):
+    """Test helper that injects a fixture transcriber instead of the real provider."""
+
+    def __init__(self, fixture: FixtureTranscriber) -> None:
+        super().__init__(settings=PluginSettings())
+        self._fixture = fixture
+
+    async def enable(self) -> None:
+        self._provider = self._fixture  # type: ignore[assignment]
+
+    async def disable(self) -> None:
+        self._provider = None
+
+
+class _TestableClassifierExecutor(ClassifierExecutor):
+    """Test helper that injects a fixture classifier instead of the real one."""
+
+    def __init__(self, fixture: FixtureClassifier) -> None:
+        super().__init__(settings=PluginSettings())
+        self._fixture = fixture
+
+    async def enable(self) -> None:
+        self._classifier = self._fixture  # type: ignore[assignment]
+
+    async def disable(self) -> None:
+        self._classifier = None
+
+
 async def _enable_pipeline(
     manager: PluginManager,
     *,
@@ -29,8 +58,8 @@ async def _enable_pipeline(
     provider: StreamingFixtureProvider | BlockingFixtureProvider,
 ) -> None:
     await manager.enable_plugin(InterruptExecutor())
-    await manager.enable_plugin(WhisperAudioProcessor(provider=transcriber))
-    await manager.enable_plugin(ClassifierExecutor(classifier=classifier))
+    await manager.enable_plugin(_TestableWhisperProcessor(transcriber))
+    await manager.enable_plugin(_TestableClassifierExecutor(classifier))
     await manager.enable_plugin(TodoListExecutor(config_dir=config_dir, voice="doktor"))
     await enable_voices(manager, config_dir=config_dir, provider=provider)
 
