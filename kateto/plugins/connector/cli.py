@@ -13,7 +13,7 @@ from typing import Final
 
 from pydantic import BaseModel, Field
 
-from kateto.core.config import CliCommandRejectedError, CliSettings, validate_cli_command
+from kateto.core.config import ConfigError, CliSettings, validate_cli_command
 from kateto.core.event import BacklogAddData, BacklogItem, BacklogPriority, BacklogStatus, EventEnvelope, EventModel, InterruptData, TodoItemData
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import EventHandler, Plugin
@@ -131,7 +131,7 @@ class CliConnector(Plugin):
         try:
             try:
                 argv = normalize_argv(data.command, settings=self._settings, working_directory=self._working_directory)
-            except (CliCommandRejectedError, CliArgumentRejectedError) as error:
+            except (ConfigError, CliArgumentRejectedError) as error:
                 await self._emit_reply(
                     CliReplyData(argv=argv, status=CliReplyStatus.REJECTED, reason=str(error)),
                     reply_to=data.reply_to,
