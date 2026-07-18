@@ -204,6 +204,89 @@ AGENT_LOOP got response: text='\nTodos los plugins están habilitados...' tool_c
 
 ---
 
+## 10. Voices no se pueden habilitar/deshabilitar en runtime
+
+**Severidad:** Alta
+**Componente:** `kateto/voices/factory.py`, `kateto/core/manager.py`
+
+Las voces (doktor, conquest) son configuradas como `enabled = false` en `config.toml`. No hay manera de habilitarlas en runtime sin recargar la configuración completa. El tool `enable_plugin` solo funciona con instancias de `Plugin` registradas en `PluginManager`, pero las voces se crean en `create_voice()` solo cuando `enabled = true` en el config.
+
+**Evidencia:**
+```
+# config.toml
+[voice.doktor]
+enabled = false
+
+# enable_plugin("voice_doktor") -> "plugin 'voice_doktor' not found"
+# porque doktor nunca se creó como Plugin
+```
+
+**Impacto:** Jane no puede habilitar doktor o conquest dinámicamente. Los workflows que requieren `calls_voices: ["Doktor"]` o `["Conquest"]` no pueden ejecutarse si esas voces están deshabilitadas.
+
+**Solución propuesta:** Crear un evento `voice_enable` que:
+1. Recibe `{voice_name: str}` como payload
+2. Si la voz no está habilitada, la crea vía `create_voice()` y la registra en `PluginManager`
+3. Si ya existe, la re-enable
+4. El MCP server lo expone como tool para que Jane/otras voces lo usen
+
+**Archivos a modificar:**
+- `kateto/core/event.py` — agregar `VoiceEnableData`
+- `kateto/voices/factory.py` — refactorizar `create_voice()` para poder llamarse post-init
+- `kateto/run_mode.py` — registrar handler `on_voice_enable` en `RuntimeOwner`
+- `kateto/plugins/system/mcp_server.py` — exponer el evento como tool MCP
+
+**Alternativa más simple:** Agregar un `on_voice_enable` handler en `RuntimeOwner` que:
+```python
+async def on_voice_enable(self, data: VoiceEnableData) -> None:
+    voice_name = data.voice_name
+    # Recargar config, crear voice, registrar en manager
+    voice = create_voice(self._ctx, self._config.settings.voice[voice_name], voice_name=voice_name)
+    await self._manager.enable_plugin(voice)
+```
+
+---
+
+## 11. backlog_list no soporta filtro por prioridad
+
+**Severidad:** Baja
+**Componente:** `kateto/core/event.py` (BacklogListData)
+
+`BacklogListData` solo tiene filtro por `status` (BacklogStatus) y `priority` (BacklogPriority), pero el filtro `status` no acepta valores de prioridad. Si se pasa `"Must"` a `status`, falla con error de validación.
+
+**Evidencia:**
+```
+BacklogListData(status="Must") -> ValidationError
+  Input should be an instance of BacklogStatus [type=is_instance_of, input_value=<BacklogPriority.MUST: 'Must'>]
+```
+
+**Causa:** `BacklogListData.status` tiene un validator que espera `BacklogStatus`, no `BacklogPriority`. El campo `priority` existe pero el test lo pasó al campo equivocado.
+
+**Impacto:** Los usuarios no pueden filtrar backlog por prioridad desde el LLM sin usar el campo correcto.
+
+**Solución:** El LLM debe usar `BacklogListData(priority="Must")` en vez de `status="Must"`. El campo `priority` ya existe en el modelo.
+
+---
+
+## 12. TODO.md se escribe en voices/shared/ no en la raíz del config
+
+**Severidad:** Informativa
+**Componente:** `kateto/plugins/executor/todo_list.py`
+
+Los items de TODO se almacenan en `~/.config/kateto/voices/shared/TODO.md`, no en `~/.config/kateto/TODO.md`. Esto es porque `TodoListExecutor` usa `VoiceFileStore.for_voice(voice="shared")`.
+
+**Evidencia:**
+```
+~/.config/kateto/voices/shared/TODO.md:
+  - [ ] preparar presentación del sprint
+  - [ ] revisar pull requests del equipo
+```
+
+**Causa:** Diseño intencional — los TODO items están scoped por voz. La voz "shared" es el default para items no específicos.
+
+**Impacto:** Los usuarios pueden buscar TODO.md en la ubicación equivocada. No es un bug funcional.
+
+---
+
 ## Issues resueltos / Cerrados
 
 Actualmente ninguno.
