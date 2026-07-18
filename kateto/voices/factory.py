@@ -54,9 +54,12 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             endpoint=voice_settings.endpoint,
             api_key=voice_settings.api_key,
         )
+        external_mcp = ctx.shared.get("external_mcp_manager") if ctx.shared is not None else None
         executor = VoiceToolExecutor(
             config_dir=ctx.config.paths.config_dir,
             cli_settings=ctx.config.settings.cli,
+            external_manager=external_mcp,
+            mcp_server_names=tuple(settings.mcp_servers),
         )
         voice.setup_agent(agent_provider=agent_provider, tool_executor=executor)
 

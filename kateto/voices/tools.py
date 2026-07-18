@@ -6,7 +6,10 @@ import os
 import shlex
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from kateto.plugins.system.external_mcp import ExternalMcpManager
 
 from openai.types.chat import ChatCompletionToolParam
 
@@ -23,11 +26,15 @@ class VoiceToolExecutor:
         manager: PluginManager | None = None,
         cli_settings: CliSettings | None = None,
         working_directory: Path | None = None,
+        external_manager: "ExternalMcpManager | None" = None,
+        mcp_server_names: tuple[str, ...] = (),
     ) -> None:
         self._config_dir = config_dir.resolve()
         self._manager = manager
         self._cli_settings = cli_settings
         self._working_directory = (working_directory or config_dir).resolve()
+        self._external_manager = external_manager
+        self._mcp_server_names = mcp_server_names
 
     def set_manager(self, manager: PluginManager) -> None:
         self._manager = manager
@@ -51,6 +58,12 @@ class VoiceToolExecutor:
             case "list_plugins":
                 return self._list_plugins()
             case _:
+                if self._external_manager is not None and self._mcp_server_names:
+                    result = await self._external_manager.try_call_tool(
+                        list(self._mcp_server_names), name, arguments,
+                    )
+                    if result is not None:
+                        return result
                 manager = self._manager
                 if manager is not None and name in self._event_tool_names():
                     return await self._dispatch_event(name, arguments)

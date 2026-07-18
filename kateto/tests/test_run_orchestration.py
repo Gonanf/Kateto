@@ -106,10 +106,10 @@ enabled = true
 
 [voice.doktor]
 enabled = true
-mcp_servers = ["fixture"]
+mcp_servers = ["system"]
 
-[mcp_servers.fixture]
-command = "not-a-real-process"
+[mcp_servers.system]
+command = "kateto"
 
 [cli]
 allowlist = ["echo"]
