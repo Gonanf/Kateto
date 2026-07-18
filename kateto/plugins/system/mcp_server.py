@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Final
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 from kateto.core.config import KatetoConfig
 from kateto.core.event import EventEnvelope, PluginErrorData
 from kateto.core.manager import EventRegistration, PluginManager
+from kateto.voices.memory import VoiceMemory
 
 
 DEFAULT_WAIT_TIMEOUT: Final = 5.0
@@ -107,6 +109,7 @@ class McpEventServer:
         manager: PluginManager,
         config: KatetoConfig,
         options: McpServerOptions,
+        config_dir: Path | None = None,
     ) -> None:
         self._manager = manager
         self._options = options
@@ -115,10 +118,14 @@ class McpEventServer:
         self.fastmcp.add_tool(self._send_event_tool, name="send_event", structured_output=True)
         self.server_name = options.server_name
         self.voice_name = options.voice_name
+        self._voice_memory: VoiceMemory | None = None
+        if config_dir is not None:
+            self._voice_memory = VoiceMemory.for_voice(config_dir=config_dir, voice=options.voice_name)
         self._reply_address = f"mcp/{options.server_name}/{options.voice_name}"
         self._waiters: dict[str, _PendingReply] = {}
         self._event_tool_names: set[str] = set()
         self._manager.add_event_observer(self._observe_event)
+        self._register_memory_tools()
         self.refresh_tools()
 
     @property
@@ -136,6 +143,50 @@ class McpEventServer:
         for registration in self._manager.get_event_registrations():
             if registration.receivers and registration.name != "send_event":
                 self._add_event_tool(registration)
+
+    def _register_memory_tools(self) -> None:
+        self.fastmcp.add_tool(self._memory_read_tool, name="memory_read")
+        self.fastmcp.add_tool(self._memory_append_tool, name="memory_append")
+        self.fastmcp.add_tool(self._memory_set_soul_tool, name="memory_set_soul")
+
+    async def _memory_read_tool(
+        self, source: str
+    ) -> str:
+        memory = self._voice_memory
+        if memory is None:
+            return "error: memory is not configured for this server"
+        match source:
+            case "soul":
+                return await memory.read_soul()
+            case "journal":
+                return await memory.read_journal()
+            case "memories":
+                return await memory.read_memories()
+            case _:
+                return f"invalid memory source: {source!r} (expected soul, journal, or memories)"
+
+    async def _memory_append_tool(
+        self, target: str, entry: str
+    ) -> str:
+        memory = self._voice_memory
+        if memory is None:
+            return "error: memory is not configured for this server"
+        match target:
+            case "journal":
+                await memory.append_journal(entry)
+                return "ok"
+            case "memories":
+                await memory.append_memories(entry)
+                return "ok"
+            case _:
+                return f"invalid memory target: {target!r} (expected journal or memories)"
+
+    async def _memory_set_soul_tool(self, soul: str) -> str:
+        memory = self._voice_memory
+        if memory is None:
+            return "error: memory is not configured for this server"
+        await memory.write_soul(soul)
+        return "ok"
 
     async def send_event(
         self,

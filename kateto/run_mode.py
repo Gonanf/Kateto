@@ -250,6 +250,7 @@ def _authorized_mcp_servers(
             manager,
             config.settings,
             McpServerOptions(server_name=server_name, voice_name=voice_name),
+            config_dir=config.paths.config_dir,
         )
         for voice_name, voice in config.settings.voice.items()
         if voice.enabled
