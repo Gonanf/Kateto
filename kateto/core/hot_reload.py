@@ -14,7 +14,7 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
 
-from .config import ConfigBootstrapError, ConfigReadError, ConfigTomlError, ConfigValidationError, LoadedConfig, load_config
+from .config import ConfigError, LoadedConfig, load_config
 from .discovery import PluginRegistry, discovery_context_for, discover_plugins
 from .event import PluginErrorData
 from .manager import PluginManager
@@ -122,10 +122,7 @@ class HotReloadController:
                 for plugin in self._plugins_to_replace(resolved):
                     await self.manager.replace_plugin(plugin, self._replacement(plugin, path=resolved, config=config))
             except (
-                ConfigBootstrapError,
-                ConfigReadError,
-                ConfigTomlError,
-                ConfigValidationError,
+                ConfigError,
                 HotReloadReplacementError,
                 WorkflowDefinitionError,
             ) as error:

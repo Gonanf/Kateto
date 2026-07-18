@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from kateto.core.config import PluginSettings
 
-from .base import AudioInputConfig, AudioInputIdentity, CaptureFactory, VoiceActivityDetector
+from .base import AudioInputConfig, AudioInputIdentity, CaptureFactory, SileroVad
 from .capture import SoundDeviceCaptureFactory
 from .listener import AudioInputPlugin
 
@@ -12,7 +12,7 @@ class MeetAudioInput(AudioInputPlugin):
         self,
         settings: PluginSettings,
         *,
-        vad: VoiceActivityDetector,
+        vad: SileroVad,
         capture_factory: CaptureFactory | None = None,
     ) -> None:
         super().__init__(

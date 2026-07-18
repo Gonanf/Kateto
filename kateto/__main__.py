@@ -6,27 +6,15 @@ import subprocess
 from pathlib import Path
 from typing import Final
 
-from kateto.core.config import (
-    ConfigBootstrapError,
-    ConfigPathError,
-    ConfigReadError,
-    ConfigTomlError,
-    ConfigValidationError,
-    load_config,
-)
-from kateto.live import EventRuntimeConfigurationError
+from kateto.core.config import load_config
+from kateto.core.exceptions import ConfigError
+from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
 from kateto.plugins.system.tui import run_tui
 from kateto.run_mode import run_event_runtime
 
 _USAGE: Final = "usage: kateto [-h] | kateto config check | kateto run | kateto smoke --fixture | kateto tui [--fixture]\n"
 _RUN_USAGE: Final = "usage: kateto run\n"
-_CONFIG_ERRORS: Final = (
-    ConfigBootstrapError,
-    ConfigPathError,
-    ConfigReadError,
-    ConfigTomlError,
-    ConfigValidationError,
-)
+_CONFIG_ERRORS: Final = (ConfigError,)
 
 
 def main() -> int:

@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from kateto.core.exceptions import ConfigError
+
 
 SAFE_CLI_COMMANDS: Final[frozenset[str]] = frozenset({"cat", "date", "echo", "git", "ls", "pwd"})
 _ASSET_FIELDS: Final[tuple[str, ...]] = (
@@ -22,57 +24,6 @@ _ASSET_FIELDS: Final[tuple[str, ...]] = (
     "reference_clip",
     "soul",
 )
-
-
-@dataclass(frozen=True, slots=True)
-class ConfigPathError(Exception):
-    variable: str
-
-    def __str__(self) -> str:
-        return f"missing required config path environment variable: {self.variable}"
-
-
-@dataclass(frozen=True, slots=True)
-class ConfigBootstrapError(Exception):
-    path: Path
-    reason: str
-
-    def __str__(self) -> str:
-        return f"unable to bootstrap config at {self.path}: {self.reason}"
-
-
-@dataclass(frozen=True, slots=True)
-class ConfigReadError(Exception):
-    path: Path
-    reason: str
-
-    def __str__(self) -> str:
-        return f"unable to read config at {self.path}: {self.reason}"
-
-
-@dataclass(frozen=True, slots=True)
-class ConfigTomlError(Exception):
-    path: Path
-
-    def __str__(self) -> str:
-        return f"malformed TOML in {self.path}"
-
-
-@dataclass(frozen=True, slots=True)
-class ConfigValidationError(Exception):
-    path: Path
-    issue: str
-
-    def __str__(self) -> str:
-        return f"invalid config in {self.path}: {self.issue}"
-
-
-@dataclass(frozen=True, slots=True)
-class CliCommandRejectedError(Exception):
-    executable: str
-
-    def __str__(self) -> str:
-        return f"cli command rejected: {self.executable}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,7 +155,7 @@ def resolve_config_dir(
     if current_platform == "win32":
         appdata = environment.get("APPDATA")
         if appdata is None or not appdata.strip():
-            raise ConfigPathError(variable="APPDATA")
+            raise ConfigError("missing required config path environment variable: APPDATA")
         return Path(appdata) / "kateto"
     xdg_config_home = environment.get("XDG_CONFIG_HOME")
     if xdg_config_home:
@@ -233,13 +184,13 @@ def bootstrap_config(
     if paths.config_file.exists():
         return paths
     if not source_dir.is_dir():
-        raise ConfigBootstrapError(path=source_dir, reason="default config directory is missing")
+        raise ConfigError(f"unable to bootstrap config at {source_dir}: default config directory is missing")
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
         _copy_missing_defaults(source_dir=source_dir, target_dir=target_dir)
         paths.secrets_dir.mkdir(exist_ok=True)
     except OSError as error:
-        raise ConfigBootstrapError(path=target_dir, reason=str(error)) from error
+        raise ConfigError(f"unable to bootstrap config at {target_dir}: {error}") from error
     return paths
 
 
@@ -259,17 +210,16 @@ def load_config(*, config_dir: Path | None = None, defaults_dir: Path | None = N
     try:
         raw_config = tomllib.loads(paths.config_file.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as error:
-        raise ConfigTomlError(path=paths.config_file) from error
+        raise ConfigError(f"malformed TOML in {paths.config_file}") from error
     except UnicodeDecodeError as error:
-        raise ConfigReadError(path=paths.config_file, reason="config must use UTF-8") from error
+        raise ConfigError(f"unable to read config at {paths.config_file}: config must use UTF-8") from error
     except OSError as error:
-        raise ConfigReadError(path=paths.config_file, reason=str(error)) from error
+        raise ConfigError(f"unable to read config at {paths.config_file}: {error}") from error
     try:
         settings = KatetoConfig.model_validate(raw_config)
     except ValidationError as error:
-        raise ConfigValidationError(
-            path=paths.config_file,
-            issue=_format_validation_error(error),
+        raise ConfigError(
+            f"invalid config in {paths.config_file}: {_format_validation_error(error)}",
         ) from error
     _validate_assets(config_dir=paths.config_dir, config_file=paths.config_file, settings=settings)
     _load_dotenv(paths)
@@ -294,9 +244,9 @@ def _validate_assets(*, config_dir: Path, config_file: Path, settings: KatetoCon
             resolved_asset = (resolved_root / asset_path).resolve()
             setting_path = f"voice.{voice_name}.{field_name}"
             if not resolved_asset.is_relative_to(resolved_root):
-                raise ConfigValidationError(path=config_file, issue=f"{setting_path}: asset escapes config directory")
+                raise ConfigError(f"invalid config in {config_file}: {setting_path}: asset escapes config directory")
             if not resolved_asset.is_file():
-                raise ConfigValidationError(path=config_file, issue=f"{setting_path}: asset does not exist")
+                raise ConfigError(f"invalid config in {config_file}: {setting_path}: asset does not exist")
 
 
 def _load_dotenv(paths: ConfigPaths) -> None:
@@ -307,8 +257,8 @@ def _load_dotenv(paths: ConfigPaths) -> None:
 
 def validate_cli_command(command: Sequence[str], *, settings: CliSettings) -> tuple[str, ...]:
     if not command:
-        raise CliCommandRejectedError(executable="<empty>")
+        raise ConfigError("cli command rejected: <empty>")
     executable = command[0]
     if Path(executable).name != executable or executable not in settings.allowlist:
-        raise CliCommandRejectedError(executable=executable)
+        raise ConfigError(f"cli command rejected: {executable}")
     return tuple(command)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -8,8 +9,8 @@ import pytest
 from kateto.core.config import load_config
 from kateto.core.hot_reload import HotReloadController
 from kateto.core.plugin import Plugin
-from kateto.live import EventRuntimeConfigurationError
-from kateto.plugins.audio_input.base import AudioInputConfig, CaptureCallback
+from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
+from kateto.plugins.audio_input.base import AudioInputConfig
 from kateto.run_mode import RuntimeDependencies, RuntimeOwner, build_runtime_owner, run_event_runtime
 from kateto.plugins.system.tui_runtime import TuiPluginConfiguration
 
@@ -39,7 +40,7 @@ class RecordingCaptureFactory:
         self.started: asyncio.Event = asyncio.Event()
         self.captures: list[RecordingCapture] = []
 
-    def create(self, config: AudioInputConfig, callback: CaptureCallback) -> RecordingCapture:
+    def create(self, config: AudioInputConfig, callback: Callable) -> RecordingCapture:
         del config, callback
         capture = RecordingCapture(self.started)
         self.captures.append(capture)

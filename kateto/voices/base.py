@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
-from typing import Protocol, assert_never
+from typing import assert_never
 
 from openai import AsyncOpenAI
 from openai.types.chat import (
@@ -36,7 +36,7 @@ from kateto.core.event import (
 )
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.providers import ChatMessage
-from kateto.providers.agent import AgentProvider, ToolExecutor
+from kateto.providers.agent import OpenAIAgentProvider, ToolExecutor
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import LoadedSkill, load_skills
 
@@ -61,10 +61,6 @@ class GenerationRequest:
     voice_id: str
     reference_wav: Path
     messages: tuple[ChatMessage, ...]
-
-
-class StreamingProvider(Protocol):
-    def stream(self, request: GenerationRequest) -> AsyncIterator[str]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +144,7 @@ class VoiceAgent(Plugin):
         *,
         profile: VoiceProfile,
         config_dir: Path,
-        provider: StreamingProvider,
+        provider: OpenAICompatibleProvider,
         settings: VoiceSettings | None = None,
     ) -> None:
         super().__init__(
@@ -168,7 +164,7 @@ class VoiceAgent(Plugin):
         self._generation_task: asyncio.Task[None] | None = None
         self._interrupted = False
         self._status: VoiceStatus | None = None
-        self._agent_provider: AgentProvider | None = None
+        self._agent_provider: OpenAIAgentProvider | None = None
         self._tool_executor: ToolExecutor | None = None
         self._tools: tuple[ChatCompletionToolParam, ...] = ()
         self._extra_tools: tuple[ChatCompletionToolParam, ...] = ()
@@ -182,7 +178,7 @@ class VoiceAgent(Plugin):
         return self._skills
 
     @property
-    def agent_provider(self) -> AgentProvider | None:
+    def agent_provider(self) -> OpenAIAgentProvider | None:
         return self._agent_provider
 
     @property
@@ -192,7 +188,7 @@ class VoiceAgent(Plugin):
     def setup_agent(
         self,
         *,
-        agent_provider: AgentProvider,
+        agent_provider: OpenAIAgentProvider,
         tool_executor: ToolExecutor,
         extra_tools: tuple[ChatCompletionToolParam, ...] = (),
     ) -> None:

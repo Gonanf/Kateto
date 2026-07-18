@@ -7,7 +7,8 @@ from typing import Final, assert_never
 
 from kateto.core.event import Classification, ClassificationData, TodoItemData
 from kateto.core.manager import PluginManager
-from kateto.core.plugin import Plugin, PluginManagerProtocol
+from kateto.core.plugin import Plugin
+from kateto.core.manager import PluginManager
 from kateto.core.storage import VoiceFileStore
 
 
@@ -102,7 +103,7 @@ class TodoListExecutor(Plugin):
             source=self.name,
         )
 
-    def _manager(self) -> PluginManagerProtocol:
+    def _manager(self) -> PluginManager:
         manager = self.manager
         if manager is None:
             msg = "TODO executor must be enabled before use"

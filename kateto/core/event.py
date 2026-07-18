@@ -193,6 +193,20 @@ class WorkflowCompletedData(EventModel):
     voice: str = Field(min_length=1)
 
 
+def _parse_backlog_enum(
+    value: BacklogPriority | BacklogStatus | str,
+    *,
+    primary_first: bool = True,
+) -> BacklogPriority | BacklogStatus:
+    if isinstance(value, BacklogPriority | BacklogStatus):
+        return value
+    first, second = (BacklogPriority, BacklogStatus) if primary_first else (BacklogStatus, BacklogPriority)
+    try:
+        return first(value)
+    except ValueError:
+        return second(value)
+
+
 class BacklogItem(EventModel):
     id: str
     title: str = Field(min_length=1)
@@ -207,12 +221,7 @@ class BacklogItem(EventModel):
     @field_validator("priority", "status", mode="before")
     @classmethod
     def parse_backlog_enum(cls, value: BacklogPriority | BacklogStatus | str) -> BacklogPriority | BacklogStatus:
-        if isinstance(value, BacklogPriority | BacklogStatus):
-            return value
-        try:
-            return BacklogPriority(value)
-        except ValueError:
-            return BacklogStatus(value)
+        return _parse_backlog_enum(value, primary_first=True)
 
 
 class BacklogListData(EventModel):
@@ -222,12 +231,7 @@ class BacklogListData(EventModel):
     @field_validator("status", "priority", mode="before")
     @classmethod
     def parse_filter_enum(cls, value: BacklogPriority | BacklogStatus | str) -> BacklogPriority | BacklogStatus:
-        if isinstance(value, BacklogPriority | BacklogStatus):
-            return value
-        try:
-            return BacklogStatus(value)
-        except ValueError:
-            return BacklogPriority(value)
+        return _parse_backlog_enum(value, primary_first=False)
 
 
 class BacklogAddData(EventModel):
@@ -246,12 +250,7 @@ class BacklogUpdateData(EventModel):
     @field_validator("status", "priority", mode="before")
     @classmethod
     def parse_update_enum(cls, value: BacklogPriority | BacklogStatus | str) -> BacklogPriority | BacklogStatus:
-        if isinstance(value, BacklogPriority | BacklogStatus):
-            return value
-        try:
-            return BacklogStatus(value)
-        except ValueError:
-            return BacklogPriority(value)
+        return _parse_backlog_enum(value, primary_first=False)
 
 
 Payload = TypeVar("Payload", bound=BaseModel)

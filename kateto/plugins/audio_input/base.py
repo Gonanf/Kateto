@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Empty, Full, Queue
-from typing import Final, Protocol
+from typing import TYPE_CHECKING, Final, Protocol
 
 from kateto.core.config import PluginSettings
+
+if TYPE_CHECKING:
+    from .silero import SileroModelAdapter
 
 
 SAMPLE_RATE: Final = 16_000
@@ -108,54 +112,16 @@ class AudioInputIdentity:
     config: AudioInputConfig
 
 
-class SileroModel(Protocol):
-    def speech_probability(self, samples: bytes, sample_rate: int) -> float: ...
-
-
-class VoiceActivityDetector(Protocol):
-    def is_speech(self, samples: bytes) -> bool: ...
-
-
-class PcmBuffer(Protocol):
-    def __bytes__(self) -> bytes: ...
-
-
-class CaptureTimeInfo(Protocol):
-    pass
-
-
-class CaptureStatus(Protocol):
-    pass
-
-
-class CaptureCallback(Protocol):
-    def __call__(
-        self,
-        samples: PcmBuffer,
-        frames: int,
-        time_info: CaptureTimeInfo,
-        status: CaptureStatus,
-    ) -> None: ...
-
-
-class CaptureStream(Protocol):
-    def start(self) -> None: ...
-
-    def stop(self) -> None: ...
-
-    def close(self) -> None: ...
-
-
 class CaptureFactory(Protocol):
     def create(
         self,
         config: AudioInputConfig,
-        callback: CaptureCallback,
-    ) -> CaptureStream: ...
+        callback: Callable,
+    ) -> object: ...
 
 
 class SileroVad:
-    def __init__(self, model: SileroModel, *, threshold: float) -> None:
+    def __init__(self, model: SileroModelAdapter, *, threshold: float) -> None:
         if not 0 <= threshold <= 1:
             raise AudioInputConfigurationError(
                 field="vad_threshold",

@@ -8,8 +8,7 @@ from pathlib import Path
 import pytest
 
 from kateto.core.config import (
-    ConfigTomlError,
-    ConfigValidationError,
+    ConfigError,
     bootstrap_config,
     load_config,
 )
@@ -119,7 +118,7 @@ def test_load_config_rejects_malformed_toml(tmp_path: Path) -> None:
     _write_config(config_dir, "[kateto\ndebug = false\n")
 
     # When: the config boundary parses it.
-    with pytest.raises(ConfigTomlError, match="malformed TOML"):
+    with pytest.raises(ConfigError, match="malformed TOML"):
         load_config(config_dir=config_dir)
 
 
@@ -129,7 +128,7 @@ def test_load_config_rejects_unknown_setting_with_its_path(tmp_path: Path) -> No
     _write_config(config_dir, _MINIMAL_CONFIG.replace("hot_reload = false", "hot_reload = false\nunknown = true"))
 
     # When: schema validation runs.
-    with pytest.raises(ConfigValidationError, match=r"kateto\.unknown"):
+    with pytest.raises(ConfigError, match=r"kateto\.unknown"):
         load_config(config_dir=config_dir)
 
 
@@ -162,7 +161,7 @@ def test_load_config_rejects_invalid_endpoint_or_asset_path(
     _write_config(config_dir, _MINIMAL_CONFIG + "\n" + extra_section)
 
     # When: settings are parsed.
-    with pytest.raises(ConfigValidationError, match=rejected_setting):
+    with pytest.raises(ConfigError, match=rejected_setting):
         load_config(config_dir=config_dir)
 
 
@@ -172,7 +171,7 @@ def test_load_config_rejects_disallowed_cli_command_with_setting_name(tmp_path: 
     _write_config(config_dir, _MINIMAL_CONFIG.replace('allowlist = ["ls"]', 'allowlist = ["rm"]'))
 
     # When: CLI allowlist validation runs.
-    with pytest.raises(ConfigValidationError) as captured:
+    with pytest.raises(ConfigError) as captured:
         load_config(config_dir=config_dir)
 
     # Then: the failure names both the rejected setting and command.

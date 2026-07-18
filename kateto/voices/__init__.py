@@ -4,24 +4,18 @@ from .base import (
     OpenAICompatibleProvider,
     ProviderStreamError,
     ReferenceClipError,
-    StreamingProvider,
     VoiceAgent,
     VoiceRole,
 )
-from .conquest import Conquest
-from .doktor import Doktor
-from .jane import Jane
+from .factory import create_voice
 
 __all__ = [
     "ChatMessage",
-    "Conquest",
-    "Doktor",
     "GenerationRequest",
-    "Jane",
     "OpenAICompatibleProvider",
     "ProviderStreamError",
     "ReferenceClipError",
-    "StreamingProvider",
     "VoiceAgent",
     "VoiceRole",
+    "create_voice",
 ]

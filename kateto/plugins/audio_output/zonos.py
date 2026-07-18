@@ -2,20 +2,13 @@ from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK
 from collections.abc import AsyncIterator
-from typing import Protocol, Self, override
+from typing import override
 
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData, TextChunk
-from kateto.core.plugin import Plugin, PluginManagerProtocol
+from kateto.core.plugin import Plugin
+from kateto.core.manager import PluginManager
 from kateto.providers import ZonosProvider
-
-
-class PcmStreamingProvider(Protocol):
-    async def __aenter__(self) -> Self: ...
-
-    async def aclose(self) -> None: ...
-
-    def stream_sentence(self, sentence: TextChunk, *, voice_id: str) -> AsyncIterator[AudioOutput]: ...
 
 
 class ZonosAudioOutput(Plugin):
@@ -23,10 +16,10 @@ class ZonosAudioOutput(Plugin):
         self,
         settings: PluginSettings,
         *,
-        provider: PcmStreamingProvider | None = None,
+        provider: ZonosProvider | None = None,
     ) -> None:
         super().__init__("audio_output_zonos")
-        self._provider: PcmStreamingProvider = ZonosProvider(settings) if provider is None else provider
+        self._provider: ZonosProvider = ZonosProvider(settings) if provider is None else provider
         self._provider_active: bool = False
         self._interrupted: bool = False
         self._stream_task: asyncio.Task[None] | None = None
@@ -106,7 +99,7 @@ class ZonosAudioOutput(Plugin):
             source=self.name,
         )
 
-    def _manager(self) -> PluginManagerProtocol:
+    def _manager(self) -> PluginManager:
         manager = self.manager
         if manager is None:
             msg = "audio_output_zonos must be enabled before use"

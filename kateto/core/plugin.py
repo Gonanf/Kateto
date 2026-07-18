@@ -4,48 +4,17 @@ import asyncio  # noqa: ANYIO_OK
 import inspect
 from collections.abc import Awaitable, Callable
 from collections.abc import Iterable
-from typing import Protocol
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from .event import EventEnvelope, InterruptData
 
+if TYPE_CHECKING:
+    from kateto.core.manager import PluginManager
+
 EventHandler = Callable[[BaseModel], Awaitable[None]]
 QueuedEvent = tuple[EventEnvelope[BaseModel], EventHandler]
-
-
-class PluginManagerProtocol(Protocol):
-    def register_event(self, name: str, contract: type[BaseModel]) -> None: ...
-
-    def get_plugins(self) -> tuple[Plugin, ...]: ...
-
-    async def emit(
-        self,
-        name: str,
-        data: BaseModel,
-        *,
-        source: str = "plugin_manager",
-        target: str | None = None,
-        capabilities: Iterable[str] = (),
-        only_once: bool = False,
-        reply_to: str | None = None,
-        correlation_id: str | None = None,
-    ) -> EventEnvelope[BaseModel]: ...
-
-    async def interrupt(
-        self,
-        *,
-        target: str | None = None,
-        reason: str = "voice_activity",
-        source: str = "plugin_manager",
-    ) -> EventEnvelope[BaseModel]: ...
-
-    async def _report_plugin_error(
-        self,
-        plugin: Plugin,
-        envelope: EventEnvelope[BaseModel],
-        error: Exception,
-    ) -> None: ...
 
 
 class Plugin:
@@ -68,7 +37,7 @@ class Plugin:
         self.streaming = streaming
         self.batch_trigger = batch_trigger
         self.receive_self_events = receive_self_events
-        self.manager: PluginManagerProtocol | None = None
+        self.manager: PluginManager | None = None
         self.enabled = False
         self.queue: asyncio.Queue[QueuedEvent] = asyncio.Queue()
         self._batch_events: list[EventEnvelope[BaseModel]] = []

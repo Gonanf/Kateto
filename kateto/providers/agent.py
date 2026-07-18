@@ -24,14 +24,6 @@ class ToolExecutor(Protocol):
     async def execute(self, name: str, arguments: dict[str, Any]) -> str: ...
 
 
-class AgentProvider(Protocol):
-    async def chat_with_tools(
-        self,
-        messages: list[dict[str, object]],
-        tools: tuple[ChatCompletionToolParam, ...],
-    ) -> AgentResponse: ...
-
-
 class OpenAIAgentProvider:
     def __init__(
         self,

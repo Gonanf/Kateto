@@ -16,11 +16,11 @@ def test_packaged_defaults_assemble_classifier_fan_out(tmp_path: Path) -> None:
     config = load_config(config_dir=tmp_path)
 
     # When: the default live graph is assembled without opening audio hardware.
-    assembly = build_event_runtime(
+    _, plugins = build_event_runtime(
         config,
         shared={"vad": QuietVad()},
     )
 
     # Then: the classifier and its P0 voice fan-out targets are present.
-    plugin_names = {plugin.name for plugin in assembly._plugins}
+    plugin_names = {plugin.name for plugin in plugins}
     assert {"executor_classifier", "jane", "doktor", "conquest"} <= plugin_names

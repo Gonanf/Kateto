@@ -111,25 +111,15 @@ class McpEventServer:
         self._manager = manager
         self._options = options
         self._authorize(config)
+        self.fastmcp = FastMCP(f"kateto-{options.server_name}")
+        self.fastmcp.add_tool(self._send_event_tool, name="send_event", structured_output=True)
+        self.server_name = options.server_name
+        self.voice_name = options.voice_name
         self._reply_address = f"mcp/{options.server_name}/{options.voice_name}"
         self._waiters: dict[str, _PendingReply] = {}
         self._event_tool_names: set[str] = set()
-        self._fastmcp = FastMCP(f"kateto-{options.server_name}")
-        self._fastmcp.add_tool(self._send_event_tool, name="send_event", structured_output=True)
         self._manager.add_event_observer(self._observe_event)
         self.refresh_tools()
-
-    @property
-    def fastmcp(self) -> FastMCP:
-        return self._fastmcp
-
-    @property
-    def server_name(self) -> str:
-        return self._options.server_name
-
-    @property
-    def voice_name(self) -> str:
-        return self._options.voice_name
 
     @property
     def pending_wait_count(self) -> int:
@@ -141,7 +131,7 @@ class McpEventServer:
 
     def refresh_tools(self) -> None:
         for tool_name in self._event_tool_names:
-            self._fastmcp.remove_tool(tool_name)
+            self.fastmcp.remove_tool(tool_name)
         self._event_tool_names.clear()
         for registration in self._manager.get_event_registrations():
             if registration.receivers and registration.name != "send_event":
@@ -245,7 +235,7 @@ class McpEventServer:
         event_tool.__name__ = f"event_{registration.name}"
         event_tool.__annotations__["data"] = registration.contract
         event_tool.__annotations__["return"] = McpEventResult
-        self._fastmcp.add_tool(event_tool, name=registration.name, structured_output=True)
+        self.fastmcp.add_tool(event_tool, name=registration.name, structured_output=True)
         self._event_tool_names.add(registration.name)
 
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:

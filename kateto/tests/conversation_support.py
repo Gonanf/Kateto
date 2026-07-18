@@ -6,7 +6,7 @@ from pathlib import Path
 
 from kateto.core import Plugin, PluginManager
 from kateto.core.event import AudioData, Classification, ClassificationData, InterruptData, TextChunk, TranscriptionData
-from kateto.voices.base import GenerationRequest, StreamingProvider
+from kateto.voices.base import GenerationRequest
 from kateto.voices.conquest import Conquest
 from kateto.voices.doktor import Doktor
 from kateto.voices.jane import Jane
@@ -128,7 +128,7 @@ async def enable_voices(
     manager: PluginManager,
     *,
     config_dir: Path,
-    provider: StreamingProvider,
+    provider: object,
 ) -> tuple[Jane, Doktor, Conquest]:
     voices = (
         Jane(config_dir=config_dir, provider=provider),

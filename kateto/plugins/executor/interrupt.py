@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from kateto.core.event import AudioData, InterruptData
 from kateto.core.manager import PluginManager
-from kateto.core.plugin import Plugin, PluginManagerProtocol
+from kateto.core.plugin import Plugin
+from kateto.core.manager import PluginManager
 
 
 class InterruptExecutor(Plugin):
@@ -35,7 +36,7 @@ class InterruptExecutor(Plugin):
         self._interrupted = False
         await self._manager().emit("conversation_resumed", data, source=self.name)
 
-    def _manager(self) -> PluginManagerProtocol:
+    def _manager(self) -> PluginManager:
         manager = self.manager
         if manager is None:
             msg = "interrupt executor must be enabled before use"

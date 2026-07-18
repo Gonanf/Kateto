@@ -7,18 +7,17 @@ from kateto.plugins.audio_input.base import AudioInputConfigurationError
 from kateto.plugins.audio_input.silero import (
     InstalledSileroBackend,
     SileroBackendUnavailableError,
-    SileroModel,
     load_silero_model,
 )
 
 
 class DependencyMissingSileroModelLoader:
-    def load_model(self) -> SileroModel:
+    def load_model(self) -> object:
         raise ModuleNotFoundError("No module named 'silero_vad'")
 
 
 class ModelMissingSileroModelLoader:
-    def load_model(self) -> SileroModel:
+    def load_model(self) -> object:
         raise FileNotFoundError("silero_vad/data/silero_vad.onnx")
 
 

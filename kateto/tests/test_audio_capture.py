@@ -1,15 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 import sounddevice
 
 from kateto.plugins.audio_input.base import (
     AudioDeviceError,
     AudioInputConfig,
-    CaptureCallback,
-    CaptureStatus,
-    CaptureTimeInfo,
-    PcmBuffer,
 )
 from kateto.plugins.audio_input.capture import SoundDeviceCaptureFactory
 
@@ -40,10 +38,10 @@ def fixture_config(device: str) -> AudioInputConfig:
 
 
 def no_op_capture_callback(
-    samples: PcmBuffer,
+    samples: bytes,
     frames: int,
-    time_info: CaptureTimeInfo,
-    status: CaptureStatus,
+    time_info: object,
+    status: object,
 ) -> None:
     del samples, frames, time_info, status
 
@@ -72,7 +70,7 @@ def test_sounddevice_capture_uses_raw_int16_mono_native_rate_input(monkeypatch: 
         samplerate: int,
         channels: int,
         dtype: str,
-        callback: CaptureCallback,
+        callback: Callable,
     ) -> FixtureRawStream:
         assert callable(callback)
         captures.append((device, samplerate, channels, dtype))
@@ -100,7 +98,7 @@ def test_sounddevice_missing_device_is_actionable(monkeypatch: pytest.MonkeyPatc
         samplerate: int,
         channels: int,
         dtype: str,
-        callback: CaptureCallback,
+        callback: Callable,
     ) -> FixtureRawStream:
         del device, samplerate, channels, dtype, callback
         raise FixturePortAudioError("invalid device")

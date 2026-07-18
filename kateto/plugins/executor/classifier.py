@@ -9,7 +9,8 @@ from kateto.core.event import (
     GenerateData,
     TranscriptionData,
 )
-from kateto.core.plugin import Plugin, PluginManagerProtocol
+from kateto.core.plugin import Plugin
+from kateto.core.manager import PluginManager
 
 if TYPE_CHECKING:
     from kateto.providers import ClassifierProvider
@@ -61,7 +62,7 @@ class ClassifierExecutor(Plugin):
             case unreachable:
                 assert_never(unreachable)
 
-    def _manager(self) -> PluginManagerProtocol:
+    def _manager(self) -> PluginManager:
         manager = self.manager
         if manager is None:
             msg = "classifier executor must be enabled before use"

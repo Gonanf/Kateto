@@ -99,18 +99,10 @@ def _scan_plugins(ctx: DiscoveryContext) -> list[Plugin]:
 
 
 def _scan_voices(ctx: DiscoveryContext) -> list[Plugin]:
-    voices: list[Plugin] = []
-    base = Path(__file__).resolve().parent.parent / "voices"
-    if not base.is_dir():
-        return voices
-    for entry in sorted(base.iterdir()):
-        if entry.suffix != ".py" or entry.name.startswith("_"):
-            continue
-        mod = import_module(f"kateto.voices.{entry.stem}")
-        factory = getattr(mod, "create_voice", None)
-        if factory is None:
-            continue
-        settings = ctx.config.settings.voice.get(entry.stem)
-        if settings is not None and settings.enabled:
-            voices.append(factory(ctx, settings))
-    return voices
+    from kateto.voices.factory import create_voice as _factory
+
+    return [
+        _factory(ctx, settings, voice_name=name)
+        for name, settings in ctx.config.settings.voice.items()
+        if settings.enabled
+    ]

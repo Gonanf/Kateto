@@ -56,3 +56,15 @@ command = "kateto"
 
 [cli]
 allowlist = ["git", "ls", "pwd", "cat", "echo", "date"]
+
+[plugin.executor_interrupt]
+enabled = true
+
+[plugin.executor_todo_list]
+enabled = true
+
+[plugin.connector_cli]
+enabled = true
+
+[plugin.backlog]
+enabled = true

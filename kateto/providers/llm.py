@@ -19,7 +19,7 @@ from ._models import (
     ResponseInputText,
     ResponsesRequest,
 )
-from .errors import MalformedUpstreamResponse
+from kateto.core.exceptions import ProviderError
 
 
 class LlamaCppChatProvider(HttpProvider):
@@ -59,13 +59,13 @@ class LlamaCppChatProvider(HttpProvider):
                 try:
                     payload = ChatStreamResponse.model_validate_json(event.data)
                 except ValidationError as error:
-                    raise MalformedUpstreamResponse(provider="llama.cpp", reason="expected chat completion SSE") from error
+                    raise ProviderError("llama.cpp returned malformed upstream data: expected chat completion SSE") from error
                 text = payload.choices[0].delta.content
                 if text is not None:
                     yield TextChunk(text=text, sequence=sequence)
                     sequence += 1
         if not completed:
-            raise MalformedUpstreamResponse(provider="llama.cpp", reason="stream ended without [DONE]")
+            raise ProviderError("llama.cpp returned malformed upstream data: stream ended without [DONE]")
         yield TextChunk(text="", sequence=sequence, final=True)
 
 

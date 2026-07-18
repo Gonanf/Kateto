@@ -1,22 +1,8 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
-
-@dataclass(slots=True)
-class ProviderConfigurationError(Exception):
-    provider: str
-    setting: str
-
-    def __str__(self) -> str:
-        return f"{self.provider} provider requires config setting {self.setting}"
-
-
-@dataclass(slots=True)
-class ProviderLifecycleError(Exception):
-    provider: str
-    reason: str
-
-    def __str__(self) -> str:
-        return f"{self.provider} provider lifecycle error: {self.reason}"
+from kateto.core.exceptions import ProviderError
 
 
 @dataclass(slots=True)

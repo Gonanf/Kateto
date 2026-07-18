@@ -4,7 +4,7 @@ import json
 import asyncio  # noqa: ANYIO_OK
 from collections import deque
 from pathlib import Path
-from typing import assert_never
+from typing import Any, assert_never
 
 from pydantic import BaseModel, Field, ValidationError
 from pydantic.fields import FieldInfo
@@ -28,7 +28,7 @@ from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.core.workflow import WorkflowDefinition, WorkflowDefinitionError, WorkflowPhaseStatus, WorkflowStatus
 from kateto.core.workflow_engine import WorkflowSnapshot
-from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration, TuiRuntime
+from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration
 
 
 class TuiEventData(EventModel):
@@ -157,7 +157,7 @@ class KatetoApp(App[None]):
     def __init__(
         self,
         *,
-        runtime: TuiRuntime,
+        runtime: Any,
         fixture: bool = False,
         config_dir: Path | None = None,
         replacement_factory: ReplacementFactory | None = None,
@@ -833,7 +833,7 @@ class KatetoApp(App[None]):
 def run_tui(*, fixture: bool = False, config_dir: Path | None = None) -> None:
     resolved_config_dir = (Path.cwd() if config_dir is None else config_dir).resolve()
     if fixture:
-        runtime: TuiRuntime = _FixtureRuntime(resolved_config_dir)
+        runtime: Any = _FixtureRuntime(resolved_config_dir)
     else:
         from kateto.core.config import load_config
         from kateto.run_mode import build_runtime_owner

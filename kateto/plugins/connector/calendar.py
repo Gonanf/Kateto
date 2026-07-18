@@ -6,9 +6,11 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol, Self
+from typing import Self
 
 import httpx
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator, model_validator
 
 from kateto.core.event import EventModel
@@ -96,31 +98,6 @@ class OAuthToken(BaseModel):
     access_token: SecretStr
     refresh_token: SecretStr | None = None
     expires_at: datetime | None = None
-
-
-class InstalledAppCredentials(Protocol):
-    @property
-    def token(self) -> str: ...
-
-    @property
-    def refresh_token(self) -> str | None: ...
-
-    @property
-    def expiry(self) -> datetime | None: ...
-
-
-class InstalledAppFlow(Protocol):
-    def run_local_server(self, *, port: int) -> InstalledAppCredentials: ...
-
-
-class OAuthTokenProvider(Protocol):
-    async def get_token(self) -> OAuthToken: ...
-
-
-class CalendarTransport(Protocol):
-    async def get_events(self, *, token: OAuthToken, request: CalendarGetData) -> tuple[CalendarEvent, ...]: ...
-
-    async def create_event(self, *, token: OAuthToken, request: CalendarSetData) -> CalendarEvent: ...
 
 
 GOOGLE_CALENDAR_ENDPOINT = "https://www.googleapis.com/calendar/v3"
@@ -219,7 +196,7 @@ def _calendar_event_from_google(raw: dict[str, object]) -> CalendarEvent:
 
 
 class GoogleInstalledAppOAuthAdapter:
-    def __init__(self, flow: InstalledAppFlow) -> None:
+    def __init__(self, flow: Any) -> None:
         self._flow = flow
 
     async def get_token(self) -> OAuthToken:
@@ -295,8 +272,8 @@ class GoogleCalendarConnector(Plugin):
         self,
         *,
         config_dir: Path,
-        transport: CalendarTransport,
-        oauth: OAuthTokenProvider,
+        transport: GoogleCalendarHttpTransport,
+        oauth: GoogleInstalledAppOAuthAdapter,
         timeout_seconds: float = 5.0,
     ) -> None:
         if timeout_seconds <= 0:

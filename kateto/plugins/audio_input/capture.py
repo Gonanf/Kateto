@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from collections.abc import Callable
 
 import numpy as np
 import sounddevice
@@ -10,25 +10,12 @@ from .base import (
     SAMPLE_RATE,
     AudioDeviceError,
     AudioInputConfig,
-    CaptureCallback,
     CaptureFactory,
-    CaptureStatus,
-    CaptureStream,
-    CaptureTimeInfo,
-    PcmBuffer,
 )
 
 
-class RawInputStream(Protocol):
-    def start(self) -> None: ...
-
-    def stop(self) -> None: ...
-
-    def close(self) -> None: ...
-
-
 class SoundDeviceCapture:
-    def __init__(self, stream: RawInputStream, config: AudioInputConfig) -> None:
+    def __init__(self, stream: sounddevice.RawInputStream, config: AudioInputConfig) -> None:
         self._stream = stream
         self._config = config
 
@@ -63,7 +50,7 @@ def _resample_pcm(data: bytes, from_rate: int, to_rate: int) -> bytes:
     return np.interp(x_new, x_old, pcm).astype(np.int16).tobytes()
 
 
-def _with_resample(callback: CaptureCallback, from_rate: int) -> CaptureCallback:
+def _with_resample(callback: Callable, from_rate: int) -> Callable:
     """Wrap *callback* to resample incoming PCM from *from_rate* to SAMPLE_RATE.
 
     Buffers resampled audio until at least one VAD window (512 samples /
@@ -83,10 +70,10 @@ def _with_resample(callback: CaptureCallback, from_rate: int) -> CaptureCallback
         return callback
 
     def wrapped(
-        samples: PcmBuffer,
+        samples: bytes,
         frames: int,
-        time_source: CaptureTimeInfo,
-        status: CaptureStatus,
+        time_source: object,
+        status: object,
     ) -> None:
         nonlocal _buffer
         if status:
@@ -106,8 +93,8 @@ class SoundDeviceCaptureFactory(CaptureFactory):
     def create(
         self,
         config: AudioInputConfig,
-        callback: CaptureCallback,
-    ) -> CaptureStream:
+        callback: Callable,
+    ) -> SoundDeviceCapture:
         device = None if config.device == "default" else config.device
         self._validate_device(device, config)
         native_rate = _native_input_rate(device)

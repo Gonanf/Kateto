@@ -3,32 +3,30 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, final
+from collections.abc import Callable
+from typing import Any, final
 
 from kateto.core.config import LoadedConfig
+from kateto.core.discovery import (
+    DiscoveryContext,
+    LiveAssemblyConfigurationError,
+    discover_plugins,
+)
 from kateto.core.hot_reload import HotReloadController
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.core.workflow import WorkflowCatalog
 from kateto.core.workflow_engine import WorkflowEngine
-from kateto.live import (
-    EventRuntime,
-    EventRuntimeConfigurationError,
-    build_event_runtime,
-)
+from kateto.live import build_event_runtime
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
 from kateto.plugins.connector.calendar import CalendarFailure, build_google_calendar_connector
 from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration
 
 
-class CalendarConnectorFactory(Protocol):
-    def __call__(self, config_dir: Path) -> Plugin: ...
-
-
 @dataclass(frozen=True, slots=True)
 class RuntimeDependencies:
     shared: dict[str, Any] | None = None
-    calendar_factory: CalendarConnectorFactory | None = None
+    calendar_factory: Callable[[Path], Plugin] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,22 +42,24 @@ class RuntimeOwner(TuiConfigurationRuntime):
     def __init__(
         self,
         *,
-        event_runtime: EventRuntime,
+        manager: PluginManager,
+        plugins: tuple[Plugin, ...],
         components: RuntimeComponents,
         plugin_configurations: tuple[TuiPluginConfiguration, ...] = (),
     ) -> None:
-        self._event_runtime = event_runtime
+        self._manager = manager
+        self._plugins = plugins
         self._components = components
         self._started = False
         self._plugin_configurations = {item.plugin: item for item in plugin_configurations}
 
     @property
     def manager(self) -> PluginManager:
-        return self._event_runtime.manager
+        return self._manager
 
     @property
     def runtime_plugins(self) -> tuple[Plugin, ...]:
-        return (*self._event_runtime.plugins, *self._components.plugins)
+        return self._plugins
 
     @property
     def workflow_voices(self) -> tuple[str, ...]:
@@ -107,9 +107,8 @@ class RuntimeOwner(TuiConfigurationRuntime):
         if self._started:
             return
         try:
-            await self._event_runtime.start()
-            for plugin in self.runtime_plugins:
-                await self.manager.enable_plugin(plugin)
+            for plugin in self._plugins:
+                await self._manager.enable_plugin(plugin)
             for server in self.mcp_servers:
                 server.refresh_tools()
             controller = self.hot_reload_controller
@@ -131,7 +130,7 @@ class RuntimeOwner(TuiConfigurationRuntime):
                 try:
                     await self._close_mcp_servers()
                 finally:
-                    await self._event_runtime.stop()
+                    await self._manager.close()
         finally:
             self._started = False
 
@@ -151,18 +150,19 @@ def build_runtime_owner(
     dependencies: RuntimeDependencies | None = None,
 ) -> RuntimeOwner:
     resolved_dependencies = RuntimeDependencies() if dependencies is None else dependencies
-    event_runtime = build_event_runtime(
+    manager, discovered = build_event_runtime(
         config,
         shared=resolved_dependencies.shared,
     )
     runtime_plugins = (
+        *discovered,
         WorkflowEngine(config_dir=config.paths.config_dir),
         *_configured_calendar(config, resolved_dependencies),
     )
-    mcp_servers = _authorized_mcp_servers(event_runtime.manager, config)
+    mcp_servers = _authorized_mcp_servers(manager, config)
     controller = (
         HotReloadController(
-            manager=event_runtime.manager,
+            manager=manager,
             watched_root=config.paths.config_dir,
             source_roots=(
                 Path(__file__).resolve().parent / "plugins",
@@ -173,9 +173,10 @@ def build_runtime_owner(
         else None
     )
     return RuntimeOwner(
-        event_runtime=event_runtime,
+        manager=manager,
+        plugins=runtime_plugins,
         components=RuntimeComponents(
-            plugins=runtime_plugins,
+            plugins=(),
             mcp_servers=mcp_servers,
             hot_reload_controller=controller,
             workflow_voices=tuple(
@@ -226,14 +227,14 @@ def _configured_calendar(
                 endpoint=settings.endpoint,
             )
         except CalendarFailure as error:
-            raise EventRuntimeConfigurationError(
+            raise LiveAssemblyConfigurationError(
                 field="plugin.connector_calendar",
                 reason=f"Google Calendar provider is unavailable: {error}",
             ) from error
     else:
         connector = factory(config.paths.config_dir)
     if connector.name != "connector_calendar":
-        raise EventRuntimeConfigurationError(
+        raise LiveAssemblyConfigurationError(
             field="plugin.connector_calendar",
             reason="factory must return the connector_calendar plugin",
         )

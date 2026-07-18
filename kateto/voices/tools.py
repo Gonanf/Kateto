@@ -66,38 +66,13 @@ class VoiceToolExecutor:
             if reg.receivers
         }
 
-    async def _dispatch_event(self, event_name: str, args: dict[str, Any]) -> str:
+    async def _dispatch_event(self, event_name: str, data: dict[str, Any], *, target: str | None = None) -> str:
         manager = self._manager
         if manager is None:
             return json.dumps({"error": "no plugin manager available"})
         try:
-            registrations = list(manager.get_event_registrations())
             registration = None
-            for reg in registrations:
-                if reg.name == event_name and reg.receivers:
-                    registration = reg
-                    break
-            if registration is None:
-                return json.dumps({"error": f"event '{event_name}' has no receivers"})
-            payload = registration.contract.model_validate(args)
-            await manager.emit(event_name, payload, source="voice_agent")
-            return json.dumps({"status": "dispatched", "event_name": event_name})
-        except Exception as e:
-            return json.dumps({"error": f"failed to dispatch: {e}"})
-
-    async def _send_event(self, args: dict[str, Any]) -> str:
-        manager = self._manager
-        if manager is None:
-            return json.dumps({"error": "no plugin manager available"})
-        event_name = args.get("event_name", "")
-        if not event_name:
-            return json.dumps({"error": "event_name is required"})
-        data = args.get("data", {})
-        target = args.get("target")
-        try:
-            registrations = list(manager.get_event_registrations())
-            registration = None
-            for reg in registrations:
+            for reg in manager.get_event_registrations():
                 if reg.name == event_name and reg.receivers:
                     registration = reg
                     break
@@ -107,7 +82,15 @@ class VoiceToolExecutor:
             await manager.emit(event_name, payload, source="voice_agent", target=target)
             return json.dumps({"status": "dispatched", "event_name": event_name})
         except Exception as e:
-            return json.dumps({"error": f"failed to dispatch event: {e}"})
+            return json.dumps({"error": f"failed to dispatch: {e}"})
+
+    async def _send_event(self, args: dict[str, Any]) -> str:
+        event_name = args.get("event_name", "")
+        if not event_name:
+            return json.dumps({"error": "event_name is required"})
+        data = args.get("data", {})
+        target = args.get("target")
+        return await self._dispatch_event(event_name, data, target=target)
 
     def _list_events(self) -> str:
         manager = self._manager

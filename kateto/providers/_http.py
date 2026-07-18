@@ -9,7 +9,7 @@ import httpx
 
 from kateto.core.config import PluginSettings
 
-from .errors import ProviderConfigurationError, ProviderLifecycleError
+from kateto.core.exceptions import ProviderError
 
 
 DEFAULT_TIMEOUT_S: Final = 10.0
@@ -33,7 +33,7 @@ def configured_endpoint(
         configured = settings.model_endpoint if use_model_endpoint else settings.endpoint
     if configured is None or not configured.strip():
         setting = "model_endpoint" if use_model_endpoint else "endpoint"
-        raise ProviderConfigurationError(provider=provider, setting=setting)
+        raise ProviderError(f"{provider} missing required setting: {setting}")
     return configured.rstrip("/")
 
 
@@ -48,7 +48,7 @@ class HttpProvider:
         headers: Mapping[str, str] | None = None,
     ) -> None:
         if timeout_s <= 0:
-            raise ProviderConfigurationError(provider=provider_name, setting="timeout_s")
+            raise ProviderError(f"{provider_name} invalid timeout_s")
         self._provider_name = provider_name
         self._endpoint = endpoint
         self._provided_client = client
@@ -64,10 +64,10 @@ class HttpProvider:
 
     async def __aenter__(self) -> Self:
         if self._active:
-            raise ProviderLifecycleError(provider=self._provider_name, reason="already active")
+            raise ProviderError(f"{self._provider_name} already active")
         if self._provided_client is not None:
             if self._provided_client.is_closed:
-                raise ProviderLifecycleError(provider=self._provider_name, reason="injected client is closed")
+                raise ProviderError(f"{self._provider_name} injected client is closed")
             self._client = self._provided_client
             self._owns_client = False
         else:
@@ -95,7 +95,7 @@ class HttpProvider:
     def _client_or_raise(self) -> httpx.AsyncClient:
         client = self._client
         if not self._active or client is None or client.is_closed:
-            raise ProviderLifecycleError(provider=self._provider_name, reason="used outside an active lifecycle")
+            raise ProviderError(f"{self._provider_name} used outside an active lifecycle")
         return client
 
     def _url(self, path: str) -> str:

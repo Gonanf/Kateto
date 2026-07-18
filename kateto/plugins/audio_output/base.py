@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, override
+from typing import override
 
 
 PCM_S16LE = "pcm_s16le"
@@ -27,22 +27,3 @@ class AudioOutputDeviceError(Exception):
         selected = "default" if self.device is None else self.device
         return f"audio output cannot use configured device {selected!r}: {self.reason}"
 
-
-class AudioOutputStream(Protocol):
-    def start(self) -> None: ...
-
-    def stop(self) -> None: ...
-
-    def close(self) -> None: ...
-
-    def write(self, data: bytes) -> object: ...
-
-
-class AudioOutputFactory(Protocol):
-    def create(
-        self,
-        *,
-        device: str | None,
-        sample_rate: int,
-        channels: int,
-    ) -> AudioOutputStream: ...

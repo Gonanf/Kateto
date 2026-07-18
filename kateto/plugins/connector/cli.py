@@ -6,18 +6,18 @@ import os
 import shlex
 import shutil
 import signal
-from collections.abc import Awaitable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePath, PureWindowsPath
-from typing import Final, Protocol
+from typing import Final
 
 from pydantic import BaseModel, Field
 
 from kateto.core.config import CliCommandRejectedError, CliSettings, validate_cli_command
 from kateto.core.event import BacklogAddData, BacklogItem, BacklogPriority, BacklogStatus, EventEnvelope, EventModel, InterruptData, TodoItemData
 from kateto.core.manager import PluginManager
-from kateto.core.plugin import EventHandler, Plugin, PluginManagerProtocol
+from kateto.core.plugin import EventHandler, Plugin
+from kateto.core.manager import PluginManager
 
 
 _SHELL_CONTROL_CHARACTERS: Final[frozenset[str]] = frozenset(";&|<>`$!\r\n\x00")
@@ -45,10 +45,6 @@ class CommandResult:
     returncode: int
     stdout: bytes
     stderr: bytes
-
-
-class CommandRunner(Protocol):
-    def run(self, argv: tuple[str, ...], *, working_directory: Path) -> Awaitable[CommandResult]: ...
 
 
 class CliReplyStatus(StrEnum):
@@ -102,7 +98,7 @@ class CliConnector(Plugin):
         self,
         *,
         settings: CliSettings,
-        runner: CommandRunner | None = None,
+        runner: SubprocessCommandRunner | None = None,
         working_directory: Path | None = None,
     ) -> None:
         super().__init__("connector_cli")
@@ -192,7 +188,7 @@ class CliConnector(Plugin):
     async def _emit_reply(self, reply: CliReplyData, *, reply_to: str | None) -> None:
         await self._manager().emit("cli_reply", reply, source=self.name, target=reply_to)
 
-    def _manager(self) -> PluginManagerProtocol:
+    def _manager(self) -> PluginManager:
         manager = self.manager
         if manager is None:
             raise RuntimeError("CLI connector must be enabled before use")

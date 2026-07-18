@@ -1,31 +1,22 @@
 from __future__ import annotations
 
-from typing import Protocol, override
+from typing import override
 
 import sounddevice
 
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData
-from kateto.core.plugin import Plugin, PluginManagerProtocol
+from kateto.core.plugin import Plugin
+from kateto.core.manager import PluginManager
 
-from .base import AudioOutputDeviceError, AudioOutputFactory, AudioOutputFormatError, AudioOutputStream, PCM_S16LE
-
-
-class RawOutputStream(Protocol):
-    def start(self) -> None: ...
-
-    def stop(self) -> None: ...
-
-    def close(self) -> None: ...
-
-    def write(self, data: bytes) -> object: ...
+from .base import AudioOutputDeviceError, AudioOutputFormatError, PCM_S16LE
 
 
-class SoundDeviceOutputStream(AudioOutputStream):
-    _stream: RawOutputStream
+class SoundDeviceOutputStream:
+    _stream: sounddevice.RawOutputStream
     _device: str | None
 
-    def __init__(self, stream: RawOutputStream, *, device: str | None) -> None:
+    def __init__(self, stream: sounddevice.RawOutputStream, *, device: str | None) -> None:
         self._stream = stream
         self._device = device
 
@@ -52,7 +43,7 @@ class SoundDeviceOutputStream(AudioOutputStream):
             raise AudioOutputDeviceError(device=self._device, reason=str(error)) from error
 
 
-class SoundDeviceOutputFactory(AudioOutputFactory):
+class SoundDeviceOutputFactory:
     @override
     def create(
         self,
@@ -60,7 +51,7 @@ class SoundDeviceOutputFactory(AudioOutputFactory):
         device: str | None,
         sample_rate: int,
         channels: int,
-    ) -> AudioOutputStream:
+    ) -> SoundDeviceOutputStream:
         try:
             stream = sounddevice.RawOutputStream(
                 device=device,
@@ -78,12 +69,12 @@ class AudioOutputPlayer(Plugin):
         self,
         settings: PluginSettings,
         *,
-        player_factory: AudioOutputFactory | None = None,
+        player_factory: SoundDeviceOutputFactory | None = None,
     ) -> None:
         super().__init__("audio_output_player")
         self._device: str | None = _configured_device(settings)
-        self._factory: AudioOutputFactory = SoundDeviceOutputFactory() if player_factory is None else player_factory
-        self._stream: AudioOutputStream | None = None
+        self._factory: SoundDeviceOutputFactory = SoundDeviceOutputFactory() if player_factory is None else player_factory
+        self._stream: SoundDeviceOutputStream | None = None
         self._stream_format: tuple[int, int] | None = None
         self._playing = False
         self._status_emitted = False
@@ -118,7 +109,7 @@ class AudioOutputPlayer(Plugin):
         self._close_stream()
         await self._set_playing(False)
 
-    async def _stream_for(self, data: AudioOutput) -> AudioOutputStream:
+    async def _stream_for(self, data: AudioOutput) -> SoundDeviceOutputStream:
         requested_format = (data.sample_rate, data.channels)
         stream = self._stream
         if stream is not None and self._stream_format != requested_format:
@@ -158,7 +149,7 @@ class AudioOutputPlayer(Plugin):
             source=self.name,
         )
 
-    def _manager(self) -> PluginManagerProtocol:
+    def _manager(self) -> PluginManager:
         manager = self.manager
         if manager is None:
             msg = "audio_output_player must be enabled before use"

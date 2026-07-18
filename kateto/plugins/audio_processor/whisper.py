@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING, override
 
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioData, TranscriptionData
-from kateto.core.plugin import Plugin, PluginManagerProtocol
+from kateto.core.plugin import Plugin
+from kateto.core.manager import PluginManager
 
 if TYPE_CHECKING:
     from kateto.providers import WhisperProvider
@@ -44,7 +45,7 @@ class WhisperAudioProcessor(Plugin):
         transcription = await provider.transcribe(data)
         _ = await self._manager().emit("transcription", transcription, source=self.name)
 
-    def _manager(self) -> PluginManagerProtocol:
+    def _manager(self) -> PluginManager:
         manager = self.manager
         if manager is None:
             msg = "audio processor must be enabled before use"

@@ -3,11 +3,11 @@ from __future__ import annotations
 import importlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import Final
 
 import torch
 
-from .base import AudioInputConfigurationError, SAMPLE_RATE, SileroModel
+from .base import AudioInputConfigurationError, SAMPLE_RATE
 
 
 SILERO_WINDOW_SAMPLES: Final = 512
@@ -23,32 +23,11 @@ class SileroBackendUnavailableError(Exception):
         return f"Silero VAD backend unavailable: {self.reason}. {self.action}"
 
 
-class SileroModelLoader(Protocol):
-    def load_model(self) -> SileroModel: ...
-
-
-class SileroTensor(Protocol):
-    pass
-
-
-class SileroModelOutput(Protocol):
-    def item(self) -> float: ...
-
-
-class RawSileroModel(Protocol):
-    def __call__(
-        self,
-        samples: SileroTensor,
-        sample_rate: int,
-        /,
-    ) -> SileroModelOutput: ...
-
-
 class SileroModelAdapter:
     def __init__(
         self,
-        model: RawSileroModel,
-        to_tensor: Callable[[tuple[float, ...]], SileroTensor],
+        model: Callable,
+        to_tensor: Callable,
     ) -> None:
         self._model = model
         self._to_tensor = to_tensor
@@ -80,7 +59,7 @@ class SileroModelAdapter:
 
 
 class PythonSileroModelLoader:
-    def load_model(self) -> SileroModel:
+    def load_model(self) -> SileroModelAdapter:
         silero_vad = importlib.import_module("silero_vad")
         torch = importlib.import_module("torch")
         load_silero_vad = getattr(silero_vad, "load_silero_vad")
@@ -88,7 +67,7 @@ class PythonSileroModelLoader:
         return SileroModelAdapter(model=load_silero_vad(), to_tensor=to_tensor)
 
 
-def load_silero_model() -> SileroModel:
+def load_silero_model() -> SileroModelAdapter:
     """Load the installed Silero VAD model or explain how to repair setup."""
     try:
         return PythonSileroModelLoader().load_model()
@@ -119,12 +98,12 @@ def load_silero_model() -> SileroModel:
 
 
 class InstalledSileroBackend:
-    def __init__(self, model_loader: SileroModelLoader | None = None) -> None:
+    def __init__(self, model_loader: PythonSileroModelLoader | None = None) -> None:
         self._model_loader = (
             PythonSileroModelLoader() if model_loader is None else model_loader
         )
 
-    def load_model(self) -> SileroModel:
+    def load_model(self) -> SileroModelAdapter:
         try:
             return self._model_loader.load_model()
         except (AttributeError, ImportError) as error:

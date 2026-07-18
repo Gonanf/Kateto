@@ -9,11 +9,13 @@ from asyncio import (  # noqa: ANYIO_OK
     current_task,
     get_running_loop,
 )
+from collections.abc import Callable
 from contextlib import suppress
 from time import monotonic
 
 from kateto.core.event import AudioData, AudioInputStatus, AudioInputStatusData, AudioOutput
-from kateto.core.plugin import Plugin, PluginManagerProtocol
+from kateto.core.plugin import Plugin
+from kateto.core.manager import PluginManager
 
 from .base import (
     PCM_FORMAT,
@@ -22,13 +24,8 @@ from .base import (
     AudioInputLifecycleError,
     CallbackQueue,
     CaptureFactory,
-    CaptureCallback,
-    CaptureStream,
-    CaptureTimeInfo,
-    CaptureStatus,
-    PcmBuffer,
+    SileroVad,
     VadSegmenter,
-    VoiceActivityDetector,
     duration_ms,
 )
 
@@ -37,7 +34,7 @@ class AudioInputPlugin(Plugin):
     def __init__(
         self,
         identity: AudioInputIdentity,
-        vad: VoiceActivityDetector,
+        vad: SileroVad,
         capture_factory: CaptureFactory,
     ) -> None:
         super().__init__(identity.name)
@@ -50,7 +47,7 @@ class AudioInputPlugin(Plugin):
         self._queue_ready = Event()
         self._resumed_listening = Event()
         self._segmenter = VadSegmenter(identity.config.silence_timeout)
-        self._capture: CaptureStream | None = None
+        self._capture: object | None = None
         self._capture_task: Task[None] | None = None
         self._loop: AbstractEventLoop | None = None
         self._capture_session = 0
@@ -133,12 +130,12 @@ class AudioInputPlugin(Plugin):
     def set_playback_active(self, active: bool) -> None:
         self._playback_active = active
 
-    def _callback_for(self, session: int) -> CaptureCallback:
+    def _callback_for(self, session: int) -> Callable:
         def callback(
-            samples: PcmBuffer,
+            samples: bytes,
             frames: int,
-            time_info: CaptureTimeInfo,
-            status: CaptureStatus,
+            time_info: object,
+            status: object,
         ) -> None:
             if status:
                 return
@@ -219,7 +216,7 @@ class AudioInputPlugin(Plugin):
             source=self._event_source,
         )
 
-    def _require_manager(self) -> PluginManagerProtocol:
+    def _require_manager(self) -> PluginManager:
         manager = self.manager
         if manager is None:
             raise AudioInputLifecycleError(plugin=self.name)
