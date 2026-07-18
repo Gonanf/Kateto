@@ -37,6 +37,7 @@ enabled = true
 enabled = true
 skills = ["orchestrator"]
 mcp_servers = ["system"]
+# mempalace = ["system", "mempalace"]
 stream = false
 
 [voice.doktor]
@@ -53,6 +54,9 @@ stream = false
 
 [mcp_servers.system]
 command = "kateto"
+
+# [mcp_servers.mempalace]
+# command = "/home/chaos/.local/bin/mempalace-mcp"
 
 [cli]
 allowlist = ["git", "ls", "pwd", "cat", "echo", "date"]

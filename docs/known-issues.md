@@ -147,6 +147,63 @@ El sistema requiere servidores externos funcionando (whisper.cpp, zonos.cpp, lla
 
 ---
 
+## 8. Audio capture bloquea el event loop asyncio (timeout en LLM calls)
+
+**Severidad:** Alta
+**Componente:** `kateto/plugins/audio_input/base.py`, `kateto/voices/base.py`
+
+Cuando `audio_input_mic` está habilitado, su task de captura de audio ejecuta un loop bloqueante en el mismo event loop asyncio que usa el openai client para las llamadas HTTP al LLM. Esto impide que el client reciba la respuesta del modelo, causando timeouts silenciosos.
+
+**Reproducción:**
+1. Iniciar kateto con `audio_input_mic` habilitado (config default)
+2. Enviar un evento `generate` a jane
+3. El LLM nunca responde — timeout a los 30-60s
+4. Sin `audio_input_mic`, la misma llamada funciona en ~2s
+
+**Evidencia:**
+```
+# Con audio_input_mic habilitado:
+AGENT_LOOP START: 4 messages, 19 tools
+AGENT_LOOP iteration 0: calling LLM
+TIMEOUT  # nunca llega respuesta
+
+# Sin audio_input_mic (disabled):
+Calling with 19 tools...
+Done: '¡Hola! ¿En qué puedo ayudarle hoy?'  # funciona en ~2s
+```
+
+**Causa:** El plugin `audio_input_mic` crea un task (`kateto-audio-capture-audio_input_mic`) que ejecuta un loop de captura de audio continuo. Este loop no hace `await` con frecuencia suficiente, o el backend de audio (PyAudio/PulseAudio) realiza operaciones bloqueantes que impiden que el event loop procese las respuestas HTTP pendientes del openai client.
+
+**Impacto:** El sistema completo queda inutilizable cuando el micrófono está activo — las voces no pueden generar respuestas. Solo funciona en modo "sin audio" (sin plugins de input).
+
+**Posible solución:**
+1. Mover la captura de audio a un thread separado (usar `asyncio.to_thread()` o un executor)
+2. Reducir el batch size del callback de audio para que el loop haga `await` con más frecuencia
+3. Usar `loop.add_reader()` en vez de polling para la captura de audio
+4. Agregar un flag `audio_enabled` que desactive la captura cuando se necesita generar texto (modo CLI/TUI sin micrófono)
+
+---
+
+## 9. List plugins response lost in text_chunk capture
+
+**Severidad:** Baja
+**Componente:** `kateto/voices/base.py`, `_emit_chunk`
+
+Cuando Jane responde a un generate con una respuesta larga que incluye `\n` al inicio, el `_emit_chunk` emite un `text_chunk` event. Sin embargo, el chunk solo contiene el contenido de `response.text`, que puede estar vacío o tener solo `\n` cuando el modelo genera una respuesta de tool_call + texto combinado.
+
+**Evidencia:**
+```
+AGENT_LOOP got response: text='\n' tool_calls=1
+AGENT_LOOP got response: text='\nTodos los plugins están habilitados...' tool_calls=0
+# Pero el text_chunk capturado está vacío
+```
+
+**Causa:** El modelo LLM (Kateto) genera reasoning tokens en `<think>` tags que no se incluyen en `response.text`. El texto visible solo aparece después del tool_call, pero el primer chunk puede estar vacío.
+
+**Impacto:** Respuestas parcialmente perdidas en el TUI. No es un bug crítico pero afecta la experiencia.
+
+---
+
 ## Issues resueltos / Cerrados
 
 Actualmente ninguno.
