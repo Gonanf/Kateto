@@ -61,6 +61,7 @@ class PluginSettings(_ConfigModel):
     interrupt_tts: bool | None = None
     context_window: int | None = Field(default=None, gt=0)
     stream: bool = True
+    callback_queue_capacity: int | None = Field(default=None, gt=0)
 
     @field_validator("endpoint", "model_endpoint")
     @classmethod

@@ -225,8 +225,8 @@ class BacklogItem(EventModel):
 
 
 class BacklogListData(EventModel):
-    status: BacklogStatus | None = None
-    priority: BacklogPriority | None = None
+    status: BacklogStatus | BacklogPriority | None = None
+    priority: BacklogPriority | BacklogStatus | None = None
 
     @field_validator("status", "priority", mode="before")
     @classmethod

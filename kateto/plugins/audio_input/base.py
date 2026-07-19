@@ -58,6 +58,7 @@ class AudioInputConfig:
     silence_timeout: float
     vad_threshold: float
     interrupt_on_vad: bool
+    callback_queue_capacity: int = 32
 
     @classmethod
     def from_settings(
@@ -101,6 +102,9 @@ class AudioInputConfig:
             ),
             interrupt_on_vad=(
                 True if settings.interrupt_on_vad is None else settings.interrupt_on_vad
+            ),
+            callback_queue_capacity=(
+                32 if settings.callback_queue_capacity is None else settings.callback_queue_capacity
             ),
         )
 

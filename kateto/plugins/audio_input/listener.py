@@ -43,7 +43,7 @@ class AudioInputPlugin(Plugin):
         self._config = identity.config
         self._vad = vad
         self._capture_factory = capture_factory
-        self._callback_queue = CallbackQueue(capacity=32)
+        self._callback_queue = CallbackQueue(capacity=self._config.callback_queue_capacity)
         self._queue_ready = Event()
         self._resumed_listening = Event()
         self._segmenter = VadSegmenter(identity.config.silence_timeout)

@@ -380,7 +380,7 @@ class VoiceAgent(Plugin):
                 tools=self._tools,
             )
             if not response.tool_calls:
-                if response.text:
+                if response.text and response.text.strip():
                     await self._emit_chunk(response.text, 0, final=True)
                 break
             messages.append(
