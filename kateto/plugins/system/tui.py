@@ -130,7 +130,7 @@ class KatetoApp(App[None]):
     #plugin-list { height: auto; }
     .plugin-row { height: 3; }
     .plugin-row > Grid { grid-size: 3; grid-columns: 1fr auto 8; }
-    Switch { margin: 0 1; }
+    Switch { width: 8; margin: 0 1; }
     .plugin-name.selected { background: $accent; color: $surface; }
     #plugin-history { height: auto; max-height: 12; overflow-y: auto; min-height: 0; border-top: solid $secondary; margin-top: 1; padding: 1; }
     #plugin-config-section { height: auto; max-height: 12; overflow-y: auto; border-top: solid $secondary; margin-top: 1; padding: 1; }
@@ -471,7 +471,8 @@ class KatetoApp(App[None]):
                 await self.manager.enable_plugin(plugin)
         else:
             await self.manager.disable_plugin(name)
-        self._refresh_view()
+        self._refresh_plugin_switches()
+        self._refresh_plugin_config()
 
     async def _configure_plugin(self, name: str) -> None:
         if not isinstance(self.runtime, TuiConfigurationRuntime):
@@ -600,6 +601,19 @@ class KatetoApp(App[None]):
         plugins = {plugin.name: plugin for plugin in self.manager.get_plugins()}
         if not plugins:
             plugins = {plugin.name: plugin for plugin in self.runtime.runtime_plugins}
+        config = getattr(self.runtime, "config", None)
+        if config is not None:
+            for name in config.settings.plugin:
+                if name not in plugins:
+                    p = Plugin(name)
+                    p.enabled = config.settings.plugin[name].enabled
+                    plugins[name] = p
+            for name in config.settings.voice:
+                plugin_name = f"voice_{name}"
+                if plugin_name not in plugins:
+                    p = Plugin(plugin_name)
+                    p.enabled = config.settings.voice[name].enabled
+                    plugins[plugin_name] = p
         return tuple(plugins.values())
 
     def _history_text(self) -> str:

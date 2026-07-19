@@ -83,6 +83,10 @@ class RuntimeOwner(TuiConfigurationRuntime):
     def workflow_voices(self) -> tuple[str, ...]:
         return self._components.workflow_voices
 
+    @property
+    def config(self) -> LoadedConfig | None:
+        return self._config
+
     def voice_enabled(self, name: str) -> bool:
         if self._config is None:
             return True
