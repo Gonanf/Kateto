@@ -503,17 +503,16 @@ class VoiceAgent(Plugin):
         soul = await self._memory.read_soul()
         memories = await self._memory.read_memories()
         journal = await self._memory.read_journal()
-        messages = [ChatMessage(role="system", content=self.profile.system_prompt)]
+        parts = [self.profile.system_prompt]
         if soul:
-            messages.append(ChatMessage(role="system", content=soul))
+            parts.append(soul)
         if memories:
-            messages.append(ChatMessage(role="system", content=memories))
+            parts.append(memories)
         if journal:
-            messages.append(ChatMessage(role="system", content=journal))
-        messages.extend(
-            ChatMessage(role="system", content=skill.instructions)
-            for skill in self._skills
-        )
+            parts.append(journal)
+        for skill in self._skills:
+            parts.append(skill.instructions)
+        messages = [ChatMessage(role="system", content="\n\n".join(parts))]
         context = self._untrusted_context()
         if context:
             messages.append(ChatMessage(role="user", content=context))
