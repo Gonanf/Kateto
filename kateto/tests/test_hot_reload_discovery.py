@@ -4,16 +4,36 @@ from pathlib import Path
 
 import pytest
 
+from pydantic import BaseModel
+
 from kateto.core.discovery import PluginRegistry
 from kateto.core.hot_reload import HotReloadController
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 
 
+class _TestEventData(BaseModel):
+    payload: str = "ping"
+
+
 class _DiscoveredPlugin(Plugin):
-    def __init__(self, version: str) -> None:
+    def __init__(self, version: str = "") -> None:
         super().__init__("discovered_plugin")
         self.version = version
+        self.handled_events: list[str] = []
+
+    async def on_test_event(self, data: object) -> None:
+        self.handled_events.append("test_event")
+
+
+class _ReplaceablePlugin(Plugin):
+    def __init__(self, name: str = "replaceable_plugin", marker: str = "") -> None:
+        super().__init__(name, streaming=True)
+        self.marker = marker
+        self.handled_events: list[str] = []
+
+    async def on_test_event(self, data: object) -> None:
+        self.handled_events.append(f"test_event:{self.marker}")
 
 
 def _write_config(root: Path) -> None:
@@ -21,6 +41,101 @@ def _write_config(root: Path) -> None:
         "[kateto]\n\n[cli]\nallowlist = [\"echo\"]\n",
         encoding="utf-8",
     )
+
+
+@pytest.mark.asyncio
+async def test_hot_reload_replaces_plugin_via_replacement_factory(tmp_path: Path) -> None:
+    _write_config(tmp_path)
+    manager = PluginManager()
+    manager.register_event("test_event", _TestEventData)
+    original = _ReplaceablePlugin(marker="original")
+    await manager.enable_plugin(original)
+    assert original.enabled
+    assert original.marker == "original"
+
+    replacement = _ReplaceablePlugin(marker="replacement")
+    assert replacement is not original
+
+    def factory(plugin: Plugin, context: object) -> Plugin:
+        return replacement
+
+    controller = HotReloadController(
+        manager=manager,
+        watched_root=tmp_path,
+        replacement_factory=factory,
+    )
+    config_path = tmp_path / "config.toml"
+    await controller.handle_change(config_path)
+
+    plugins = {p.name: p for p in manager.get_plugins()}
+    assert "replaceable_plugin" in plugins
+    assert plugins["replaceable_plugin"] is replacement
+    assert replacement.enabled
+    assert replacement.marker == "replacement"
+    await controller.close()
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_hot_reload_preserves_observers_after_replacement(tmp_path: Path) -> None:
+    _write_config(tmp_path)
+    manager = PluginManager()
+    manager.register_event("test_event", _TestEventData)
+    original = _ReplaceablePlugin(marker="original")
+    await manager.enable_plugin(original)
+
+    observed: list[str] = []
+
+    def observer(envelope: object) -> None:
+        observed.append("observed")
+
+    manager.add_event_observer(observer)
+    await manager.emit("test_event", _TestEventData(), source="test")
+    assert len(observed) == 1
+
+    replacement = _ReplaceablePlugin(marker="replacement")
+
+    def factory(plugin: Plugin, context: object) -> Plugin:
+        return replacement
+
+    controller = HotReloadController(
+        manager=manager,
+        watched_root=tmp_path,
+        replacement_factory=factory,
+    )
+    await controller.handle_change(tmp_path / "config.toml")
+    observed.clear()
+    await manager.emit("test_event", _TestEventData(), source="test")
+    assert len(observed) == 1
+    await controller.close()
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_hot_reload_replaced_plugin_receives_events(tmp_path: Path) -> None:
+    _write_config(tmp_path)
+    manager = PluginManager()
+    manager.register_event("test_event", _TestEventData)
+    original = _ReplaceablePlugin(marker="original")
+    await manager.enable_plugin(original)
+
+    replacement = _ReplaceablePlugin(marker="replacement")
+
+    def factory(plugin: Plugin, context: object) -> Plugin:
+        return replacement
+
+    controller = HotReloadController(
+        manager=manager,
+        watched_root=tmp_path,
+        replacement_factory=factory,
+    )
+    await controller.handle_change(tmp_path / "config.toml")
+    await manager.emit("test_event", _TestEventData(), source="test")
+    await manager.wait_for_idle(timeout=2)
+    assert len(replacement.handled_events) == 1
+    assert replacement.handled_events[0] == "test_event:replacement"
+    await controller.close()
+    await manager.close()
 
 
 def test_hot_reload_accepts_repository_plugin_and_voice_roots(tmp_path: Path) -> None:
