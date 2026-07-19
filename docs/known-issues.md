@@ -273,6 +273,125 @@ Los items de TODO se almacenan en `~/.config/kateto/voices/shared/TODO.md`, no e
 
 ---
 
+## 13. Archivos y carpetas duplicados en múltiples ubicaciones
+
+**Severidad:** Alta
+**Componente:** Estructura del proyecto
+
+El proyecto tiene contenido duplicado en 3-4 ubicaciones diferentes, creando confusión sobre cuál es la fuente de verdad:
+
+### Duplicación de config.toml
+
+| Ubicación | Idioma | Debug | Hot reload | ¿Se usa? |
+|-----------|--------|-------|------------|----------|
+| `./config.toml` (raíz) | es | true | false | Sí (desarrollo) |
+| `config/defaults/config.toml` | en | false | false | Sí (defaults) |
+| `~/.config/kateto/config.toml` | es | true | true | Sí (usuario) |
+
+**Problema:** Tres config.toml con valores diferentes. No está claro cuál prevalece.
+
+### Duplicación de voces
+
+| Ubicación | Voces | Formato nombres |
+|-----------|-------|-----------------|
+| `voices/` (raíz) | jane, doktor, conquest | minúsculas |
+| `config/defaults/voices/` | Conquest, Doktor | Capitalized |
+| `~/.config/kateto/voices/` | jane, doktor, conquest, Conquest, Doktor, shared | **Mixto** |
+
+**Problema:** `~/.config/kateto/voices/` tiene 6 directorios: `jane/`, `doktor/`, `conquest/` (con SOUL.md) Y `Doktor/`, `Conquest/` (con workflows). Los workflows están en los capitalizados, los SOUL.md en los minúsculos. El WorkflowCatalog busca por `casefold()`, pero la duplicación crea ambigüedad.
+
+### Duplicación de skills
+
+| Ubicación | Skills |
+|-----------|--------|
+| `skills/` (raíz) | backlog, orchestrator, planning-poker, risk-analysis |
+| `config/defaults/skills/` | backlog, orchestrator, planning-poker, risk-analysis |
+| `~/.config/kateto/skills/` | backlog, calendar, orchestrator, planning-poker, risk-analysis |
+
+**Problema:** Tres copias de los mismos skills. La ubicación `skills/` en la raíz no se usa por el código (el code busca en `config_dir/skills/`).
+
+### Duplicación de scripts
+
+| Ubicación | Contenido |
+|-----------|-----------|
+| `script/` | qa/web-terminal-visual-qa.mjs, qa/web-terminal-visual-qa.test.mjs |
+| `scripts/` | qa/ (vacío) |
+
+**Problema:** `script/` tiene archivos, `scripts/` está vacío. Ambos existen.
+
+### Duplicación de TODO.md
+
+| Ubicación | Contenido |
+|-----------|-----------|
+| `./TODO.md` (raíz) | "[] Classifier is not correctly implemented" |
+| `~/.config/kateto/voices/shared/TODO.md` | Items de TODO del sistema |
+
+**Problema:** Dos TODO.md con contenido diferente. El de la raíz es un archivo estático del proyecto, el del user config es dinámico.
+
+### Duplicación de workflows
+
+| Ubicación | Contenido |
+|-----------|-----------|
+| `config/defaults/voices/*/workflows/` | 4 workflows (Doktor: 2, Conquest: 2) |
+| `~/.config/kateto/voices/*/workflows/` | 4 workflows (mismos) |
+| `~/.config/kateto/workflows/` | daily-standup/ (vacío) |
+
+**Problema:** Los mismos workflows existen en defaults y en user config. El directorio global `workflows/` está vacío.
+
+### Impacto
+
+- Desarrolladores no saben dónde editar (¿raíz? ¿defaults? ¿user config?)
+- Changes en un lugar no se reflejan en otros
+- El WorkflowCatalog carga desde `config_dir` (user config), ignorando `config/defaults/`
+- Skills se cargan desde `config_dir/skills/`, ignorando `skills/` en raíz
+
+### Solución propuesta
+
+1. **Eliminar** `skills/` y `voices/` de la raíz del proyecto (no se usan)
+2. **Eliminar** `scripts/` (vacío), mantener `script/`
+3. **Mover** `config/defaults/` a un solo lugar canónico
+4. **Unificar** nombres de voces: todo minúscula (`doktor`, `conquest`)
+5. **Eliminar** `TODO.md` de la raíz (el sistema usa `voices/shared/TODO.md`)
+6. **Documentar** el orden de precedencia: user config > defaults > hardcoded
+
+---
+
+## 14. Sin herramientas para crear/modificar Skills, Workflows y Voces desde el runtime
+
+**Severidad:** Media
+**Componente:** `kateto/voices/tools.py`, `kateto/core/workflow.py`
+
+Actualmente no hay manera de que una voz (o el usuario a través de una voz) cree, modifique o elimine:
+- **Skills** (archivos SKILL.md)
+- **Workflows** (archivos workflow.py)
+- **Voces** (archivos SOUL.md + config)
+
+Todo requiere edición manual de archivos en `~/.config/kateto/`.
+
+**Impacto:**
+- Jane no puede crear un nuevo skill para doktor sin acceso al filesystem
+- No se pueden definir workflows dinámicamente durante una sesión
+- Las voces no pueden evolucionar sus propias instrucciones
+
+**Solución propuesta:** Agregar tools al VoiceToolExecutor:
+
+```python
+# Tools a agregar:
+"create_skill"     # Crea ~/.config/kateto/skills/{name}/SKILL.md
+"update_skill"     # Modifica un SKILL.md existente
+"create_workflow"  # Crea ~/.config/kateto/voices/{voice}/workflows/{name}/workflow.py
+"update_workflow"  # Modifica un workflow.py existente
+"update_soul"      # Modifica ~/.config/kateto/voices/{name}/SOUL.md
+```
+
+**Seguridad:** Estos tools deben:
+1. Validar que las rutas no escapen `config_dir`
+2. Hacer backup antes de modificar
+3. Emitir eventos `skill_created`, `workflow_created` para hot-reload
+4. Estar sujetos a confirmación del usuario (opcional)
+
+---
+
 ## Issues resueltos / Cerrados
 
 ### 3. CallbackQueue con capacity fijo en 32 — ✅ RESUELTO
