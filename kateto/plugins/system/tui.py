@@ -128,8 +128,7 @@ class KatetoApp(App[None]):
     #plugin-panel-left { width: 40%; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
     #plugin-panel-right { width: 1fr; height: 1fr; border: round $secondary; padding: 1; }
     #plugin-list { height: auto; }
-    .plugin-row { height: 3; }
-    .plugin-row > Grid { grid-size: 3; grid-columns: 1fr auto 8; }
+    .plugin-row { height: 3; grid-size: 3; grid-columns: 1fr auto 8; }
     Switch { width: 8; margin: 0 1; }
     .plugin-name.selected { background: $accent; color: $surface; }
     #plugin-history { height: auto; max-height: 12; overflow-y: auto; min-height: 0; border-top: solid $secondary; margin-top: 1; padding: 1; }
@@ -585,15 +584,13 @@ class KatetoApp(App[None]):
             except Exception:
                 pass
 
-    def _plugin_row(self, plugin: Plugin) -> Horizontal:
+    def _plugin_row(self, plugin: Plugin) -> Grid:
         audio = self._audio_status.get(plugin.name, "?")
         selected_class = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
-        return Horizontal(
-            Grid(
-                Button(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
-                Static(audio, id=f"audio-status-{plugin.name}"),
-                Switch(value=plugin.enabled, id=f"switch-{plugin.name}"),
-            ),
+        return Grid(
+            Button(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
+            Static(audio, id=f"audio-status-{plugin.name}"),
+            Switch(value=plugin.enabled, id=f"switch-{plugin.name}"),
             classes="plugin-row",
         )
 
