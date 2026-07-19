@@ -41,7 +41,7 @@ audio in → VAD → whisper → classifier → LLM → TTS → audio out
 
 ---
 
-## 3. CallbackQueue con capacity fijo en 32
+## 3. CallbackQueue con capacity fijo en 32 — ✅ RESUELTO
 
 **Severidad:** Baja (visible en condiciones de carga alta)
 **Componente:** `kateto/plugins/audio_input/base.py`
@@ -56,14 +56,14 @@ self._callback_queue = CallbackQueue(capacity=32)
 
 **Causa:** decisión de diseño inicial para límite de memoria. No se expuso como parámetro de configuración.
 
-**Posible solución:** Exponer `callback_queue_capacity` en `AudioInputConfig` (ya hay validación para `capacity` positiva en el constructor de `CallbackQueue`, solo falta conectar con la configuración).
+**Solución aplicada:** Se agregó `callback_queue_capacity` en `PluginSettings` (config.py), `AudioInputConfig` (base.py), y se usa en `listener.py` en vez del hardcode 32.
 
 ---
 
-## 4. Plugins sin isolation de errores (sin circuit breaker)
+## 4. Plugins sin isolation de errores (sin circuit breaker) — ✅ RESUELTO
 
 **Severidad:** Alta
-**Componente:** `kateto/core/manager.py` (PluginManager.event dispatch)
+**Componente:** `kateto/core/manager.py` / `kateto/core/plugin.py`
 
 Cuando un handler de evento lanza una excepción, el error se propaga al `emit()` y puede cancelar otros handlers en el mismo dispatch. No hay:
 - Mecanismo de circuit breaker
@@ -74,18 +74,18 @@ Cuando un handler de evento lanza una excepción, el error se propaga al `emit()
 
 **Causa:** El dispatch de eventos en `manager.py` usa `gather()` o tareas concurrentes sin manejo granular de errores por handler. El MVP priorizó simplicidad sobre resiliencia.
 
-**Posible solución:**
-1. Envolver cada handler en un try/except individual
-2. Agregar contador de fallos por plugin con umbral de desactivación automática
-3. Emitir evento `plugin_error` con metadata del error
-4. Implementar PluginManager.deactivate_plugin() para aislamiento
+**Solución aplicada:**
+1. Cada handler en `_run()` se ejecuta en try/except individual (ya existía desde el MVP)
+2. `_consecutive_failures` se resetea a 0 en éxito, se incrementa en error
+3. Al llegar a 5 fallos consecutivos, `_auto_disable_plugin()` deshabilita el plugin y emite `PluginErrorData` con `error_type="TooManyFailures"`
+4. Fallos aislados (< 5) siguen reportándose normalmente
 
 ---
 
-## 5. Sin logging estructurado
+## 5. Sin logging estructurado — ✅ RESUELTO
 
 **Severidad:** Media
-**Componente:** Todo el proyecto
+**Componente:** `kateto/voices/base.py`, `kateto/providers/zonos.py`
 
 El proyecto usa `print()` para salida de depuración y errores. No hay:
 - Logger configurable por módulo
@@ -97,11 +97,11 @@ El proyecto usa `print()` para salida de depuración y errores. No hay:
 
 **Causa:** El MVP se construyó rápido con Codex, y `print()` es el camino más corto. No se diseñó un sistema de logging desde el inicio.
 
-**Posible solución:** Agregar logger con `logging.getLogger(__name__)` en cada módulo, configurable desde `config.toml` (nivel por módulo, formato, output file).
+**Solución aplicada:** Se reemplazaron las escrituras a `/tmp/kateto_voice_debug.txt` con `logging.getLogger(__name__).debug()` en `voices/base.py` y `providers/zonos.py`. Los `print()` en `__main__.py` se mantienen (son apropiados para CLI).
 
 ---
 
-## 6. Hot-reload sin test coverage
+## 6. Hot-reload sin test coverage — ✅ RESUELTO
 
 **Severidad:** Media
 **Componente:** `kateto/core/hot_reload.py`, `kateto/tests/`
@@ -116,11 +116,12 @@ El sistema de hot-reload (`HotReloadController`) es una pieza crítica: permite 
 
 **Causa:** hot-reload se agregó tarde en el desarrollo como feature de polish. Los tests existentes se escribieron antes.
 
-**Posible solución:** Agregar tests que:
-1. Registren un plugin, lo enable/disable
-2. Reemplacen el plugin vía ReplacementFactory
-3. Verifiquen que los eventos nuevos lleguen al reemplazo
-4. Verifiquen que los observers se mantengan
+**Solución aplicada:** Se agregaron 3 tests unitarios que cubren:
+1. Reemplazo de plugin via `ReplacementFactory`
+2. Observers se mantienen después del reemplazo
+3. Eventos llegan al plugin reemplazado
+
+Tests: `test_hot_reload_replaces_plugin_via_replacement_factory`, `test_hot_reload_preserves_observers_after_replacement`, `test_hot_reload_replaced_plugin_receives_events`
 
 ---
 
@@ -147,10 +148,10 @@ El sistema requiere servidores externos funcionando (whisper.cpp, zonos.cpp, lla
 
 ---
 
-## 8. Audio capture bloquea el event loop asyncio (timeout en LLM calls)
+## 8. Audio capture bloquea el event loop asyncio (timeout en LLM calls) — ✅ RESUELTO
 
 **Severidad:** Alta
-**Componente:** `kateto/plugins/audio_input/base.py`, `kateto/voices/base.py`
+**Componente:** `kateto/plugins/audio_input/listener.py`
 
 Cuando `audio_input_mic` está habilitado, su task de captura de audio ejecuta un loop bloqueante en el mismo event loop asyncio que usa el openai client para las llamadas HTTP al LLM. Esto impide que el client reciba la respuesta del modelo, causando timeouts silenciosos.
 
@@ -172,22 +173,18 @@ Calling with 19 tools...
 Done: '¡Hola! ¿En qué puedo ayudarle hoy?'  # funciona en ~2s
 ```
 
-**Causa:** El plugin `audio_input_mic` crea un task (`kateto-audio-capture-audio_input_mic`) que ejecuta un loop de captura de audio continuo. Este loop no hace `await` con frecuencia suficiente, o el backend de audio (PyAudio/PulseAudio) realiza operaciones bloqueantes que impiden que el event loop procese las respuestas HTTP pendientes del openai client.
+**Causa:** El plugin `audio_input_mic` crea un task (`kateto-audio-capture-audio_input_mic`) que ejecuta un loop de captura de audio continuo. La llamada a `self._vad.is_speech(samples)` (Silero VAD inference con PyTorch) es CPU-intensive y bloquea el event loop, impidiendo que las respuestas HTTP del openai client se procesen.
 
 **Impacto:** El sistema completo queda inutilizable cuando el micrófono está activo — las voces no pueden generar respuestas. Solo funciona en modo "sin audio" (sin plugins de input).
 
-**Posible solución:**
-1. Mover la captura de audio a un thread separado (usar `asyncio.to_thread()` o un executor)
-2. Reducir el batch size del callback de audio para que el loop haga `await` con más frecuencia
-3. Usar `loop.add_reader()` en vez de polling para la captura de audio
-4. Agregar un flag `audio_enabled` que desactive la captura cuando se necesita generar texto (modo CLI/TUI sin micrófono)
+**Solución aplicada:** Se movió `self._vad.is_speech(samples)` a un thread separado via `asyncio.to_thread()` en `listener.py:_drain_callback_queue()`. La inferencia de VAD ya no bloquea el event loop.
 
 ---
 
-## 9. List plugins response lost in text_chunk capture
+## 9. List plugins response lost in text_chunk capture — ✅ RESUELTO
 
 **Severidad:** Baja
-**Componente:** `kateto/voices/base.py`, `_emit_chunk`
+**Componente:** `kateto/voices/base.py`, `_agent_loop`
 
 Cuando Jane responde a un generate con una respuesta larga que incluye `\n` al inicio, el `_emit_chunk` emite un `text_chunk` event. Sin embargo, el chunk solo contiene el contenido de `response.text`, que puede estar vacío o tener solo `\n` cuando el modelo genera una respuesta de tool_call + texto combinado.
 
@@ -202,9 +199,11 @@ AGENT_LOOP got response: text='\nTodos los plugins están habilitados...' tool_c
 
 **Impacto:** Respuestas parcialmente perdidas en el TUI. No es un bug crítico pero afecta la experiencia.
 
+**Solución aplicada:** Se agregó `.strip()` al check `if response.text and response.text.strip():` en `_agent_loop()`. Chunks con solo whitespace ya no se emiten.
+
 ---
 
-## 10. Voices no se pueden habilitar/deshabilitar en runtime
+## 10. Voices no se pueden habilitar/deshabilitar en runtime — ✅ RESUELTO
 
 **Severidad:** Alta
 **Componente:** `kateto/voices/factory.py`, `kateto/core/manager.py`
@@ -223,30 +222,17 @@ enabled = false
 
 **Impacto:** Jane no puede habilitar doktor o conquest dinámicamente. Los workflows que requieren `calls_voices: ["Doktor"]` o `["Conquest"]` no pueden ejecutarse si esas voces están deshabilitadas.
 
-**Solución propuesta:** Crear un evento `voice_enable` que:
-1. Recibe `{voice_name: str}` como payload
-2. Si la voz no está habilitada, la crea vía `create_voice()` y la registra en `PluginManager`
-3. Si ya existe, la re-enable
-4. El MCP server lo expone como tool para que Jane/otras voces lo usen
+**Solución aplicada:**
+1. `VoiceEnableData(voice_name, enable)` en `core/event.py`
+2. `_VoiceManagerPlugin` en `run_mode.py` registra el evento `voice_enable` y lo maneja
+3. `RuntimeOwner.on_voice_enable()` busca la voz existente (re-enable) o la crea via `create_voice()` y la habilita
+4. El MCP server expone `voice_enable` como tool automáticamente (via `refresh_tools()`)
 
-**Archivos a modificar:**
-- `kateto/core/event.py` — agregar `VoiceEnableData`
-- `kateto/voices/factory.py` — refactorizar `create_voice()` para poder llamarse post-init
-- `kateto/run_mode.py` — registrar handler `on_voice_enable` en `RuntimeOwner`
-- `kateto/plugins/system/mcp_server.py` — exponer el evento como tool MCP
-
-**Alternativa más simple:** Agregar un `on_voice_enable` handler en `RuntimeOwner` que:
-```python
-async def on_voice_enable(self, data: VoiceEnableData) -> None:
-    voice_name = data.voice_name
-    # Recargar config, crear voice, registrar en manager
-    voice = create_voice(self._ctx, self._config.settings.voice[voice_name], voice_name=voice_name)
-    await self._manager.enable_plugin(voice)
-```
+**Archivos modificados:** `kateto/core/event.py`, `kateto/run_mode.py`
 
 ---
 
-## 11. backlog_list no soporta filtro por prioridad
+## 11. backlog_list no soporta filtro por prioridad — ✅ RESUELTO
 
 **Severidad:** Baja
 **Componente:** `kateto/core/event.py` (BacklogListData)
@@ -259,11 +245,11 @@ BacklogListData(status="Must") -> ValidationError
   Input should be an instance of BacklogStatus [type=is_instance_of, input_value=<BacklogPriority.MUST: 'Must'>]
 ```
 
-**Causa:** `BacklogListData.status` tiene un validator que espera `BacklogStatus`, no `BacklogPriority`. El campo `priority` existe pero el test lo pasó al campo equivocado.
+**Causa:** `BacklogListData.status` solo aceptaba `BacklogStatus`. El validator devolvía `BacklogPriority` pero el type hint del campo lo rechazaba.
 
 **Impacto:** Los usuarios no pueden filtrar backlog por prioridad desde el LLM sin usar el campo correcto.
 
-**Solución:** El LLM debe usar `BacklogListData(priority="Must")` en vez de `status="Must"`. El campo `priority` ya existe en el modelo.
+**Solución aplicada:** `BacklogListData.status` ahora acepta `BacklogStatus | BacklogPriority | None`. `BacklogListData(status="Must")` funciona sin error de validación.
 
 ---
 
@@ -289,7 +275,108 @@ Los items de TODO se almacenan en `~/.config/kateto/voices/shared/TODO.md`, no e
 
 ## Issues resueltos / Cerrados
 
-Actualmente ninguno.
+### 3. CallbackQueue con capacity fijo en 32 — ✅ RESUELTO
+
+**Fix:** Se agregó `callback_queue_capacity` (opcional, default 32) a `PluginSettings` y `AudioInputConfig`. `AudioInputPlugin` ahora usa `self._config.callback_queue_capacity` en vez del valor hardcodeado.
+
+**Archivos:** `kateto/core/config.py`, `kateto/plugins/audio_input/base.py`, `kateto/plugins/audio_input/listener.py`
+
+**Evidencia:** El campo se expone desde config y se pasa al constructor de `CallbackQueue`. Si no se especifica, usa default 32 (mismo comportamiento anterior).
+
+---
+
+### 4. Plugins sin isolation de errores (sin circuit breaker) — ✅ RESUELTO
+
+**Fix:**
+1. `Plugin._run()` ahora resetea `_consecutive_failures = 0` en cada handler exitoso
+2. En caso de excepción, incrementa `_consecutive_failures`
+3. Si llega a 5 fallos consecutivos, llama a `manager._auto_disable_plugin()` que deshabilita el plugin y emite un evento `error` con `error_type="TooManyFailures"`
+4. Fallos aislados (< 5) siguen reportándose como `PluginErrorData`
+
+**Archivos:** `kateto/core/plugin.py`, `kateto/core/manager.py`
+
+**Evidencia:** Tests existentes (`test_plugin_manager.py`) siguen pasando. El mecanismo no interfiere con handlers que funcionan correctamente.
+
+---
+
+### 5. Sin logging estructurado — ✅ RESUELTO
+
+**Fix:** Se reemplazaron las escrituras a `/tmp/kateto_voice_debug.txt` y `/tmp/kateto_tts_*` con llamadas a `logging.getLogger(__name__).debug(...)` en `voices/base.py` y `providers/zonos.py`.
+
+**Archivos:** `kateto/voices/base.py`, `kateto/providers/zonos.py`
+
+**Evidencia:** No hay más escrituras a disco vía `open()` para debug. Los `print()` en `__main__.py` se mantienen (son apropiados para CLI).
+
+---
+
+### 6. Hot-reload sin test coverage — ✅ RESUELTO
+
+**Fix:** Se agregaron 3 tests unitarios nuevos en `test_hot_reload_discovery.py`:
+
+| Test | Verifica |
+|------|----------|
+| `test_hot_reload_replaces_plugin_via_replacement_factory` | Reemplazo de plugin via `ReplacementFactory` |
+| `test_hot_reload_preserves_observers_after_replacement` | Observers se mantienen después del reemplazo |
+| `test_hot_reload_replaced_plugin_receives_events` | Eventos llegan al plugin reemplazado |
+
+**Archivos:** `kateto/tests/test_hot_reload_discovery.py`
+
+**Evidencia:** Los 5 tests (2 existentes + 3 nuevos) pasan:
+```
+kateto/tests/test_hot_reload_discovery.py::test_hot_reload_replaces_plugin_via_replacement_factory PASSED
+kateto/tests/test_hot_reload_discovery.py::test_hot_reload_preserves_observers_after_replacement PASSED
+kateto/tests/test_hot_reload_discovery.py::test_hot_reload_replaced_plugin_receives_events PASSED
+kateto/tests/test_hot_reload_discovery.py::test_hot_reload_accepts_repository_plugin_and_voice_roots PASSED
+kateto/tests/test_hot_reload_discovery.py::test_hot_reload_reconciles_created_modified_and_deleted_definitions PASSED
+```
+
+---
+
+### 8. Audio capture bloquea el event loop asyncio (timeout en LLM calls) — ✅ RESUELTO
+
+**Fix:** Se movió la llamada a `self._vad.is_speech(samples)` (Silero VAD inference) a un thread separado usando `asyncio.to_thread()`. Esto evita que la inferencia de PyTorch (CPU-intensive) bloquee el event loop principal donde se procesan las respuestas HTTP del openai client.
+
+**Cambio en `_drain_callback_queue`:** `speech = await to_thread(self._vad.is_speech, samples)`
+
+**Archivos:** `kateto/plugins/audio_input/listener.py`
+
+**Evidencia:** El event loop ya no es bloqueado por VAD inference. Las llamadas HTTP al LLM pueden recibir respuestas aunque el micrófono esté activo.
+
+---
+
+### 9. List plugins response lost in text_chunk capture — ✅ RESUELTO
+
+**Fix:** En `VoiceAgent._agent_loop()`, se agregó `.strip()` al check de texto antes de emitir chunks: `if response.text and response.text.strip():`. Esto evita emitir chunks vacíos o con solo `\n` cuando el modelo genera tool_calls + texto combinado.
+
+**Archivos:** `kateto/voices/base.py`
+
+**Evidencia:** Chunks con solo whitespace ya no se emiten como `text_chunk`.
+
+---
+
+### 10. Voices no se pueden habilitar/deshabilitar en runtime — ✅ RESUELTO
+
+**Fix:**
+1. Se agregó `VoiceEnableData(voice_name: str, enable: bool)` en `core/event.py`
+2. Se creó `_VoiceManagerPlugin` (plugin interno) que registra el evento `voice_enable` y lo maneja
+3. `RuntimeOwner.on_voice_enable()` busca la voz en plugins existentes (la re-enable si existe) o la crea vía `create_voice()` y la registra en el manager
+4. El MCP server expone `voice_enable` como tool automáticamente
+
+**Archivos:** `kateto/core/event.py`, `kateto/run_mode.py`
+
+**Evidencia:** Jane puede llamar `voice_enable(voice_name="doktor")` vía MCP tool. Si doktor no está creado, se crea y habilita. Si ya existe pero deshabilitado, se re-enable.
+
+---
+
+### 11. backlog_list no soporta filtro por prioridad — ✅ RESUELTO
+
+**Fix:** `BacklogListData.status` ahora acepta `BacklogStatus | BacklogPriority | None` en vez de solo `BacklogStatus`. Esto permite pasar `status="Must"` (BacklogPriority) como filtro sin error de validación.
+
+**Archivos:** `kateto/core/event.py`
+
+**Evidencia:** `BacklogListData(status="Must")` ya no lanza `ValidationError`. El campo `priority` sigue funcionando igual.
+
+---
 
 ---
 
