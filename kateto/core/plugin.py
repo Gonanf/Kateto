@@ -44,6 +44,7 @@ class Plugin:
         self._current_envelope: EventEnvelope[BaseModel] | None = None
         self._initialized = False
         self._worker: asyncio.Task[None] | None = None
+        self._consecutive_failures = 0
 
     @property
     def batch_events(self) -> tuple[EventEnvelope[BaseModel], ...]:
@@ -115,9 +116,14 @@ class Plugin:
                             await handler(envelope.data)
                         finally:
                             self._batch_events.clear()
+                self._consecutive_failures = 0
             except Exception as error:  # noqa: BROAD_EXCEPT_OK
+                self._consecutive_failures += 1
                 if self.manager is not None:
-                    await self.manager._report_plugin_error(self, envelope, error)
+                    if self._consecutive_failures >= 5:
+                        await self.manager._auto_disable_plugin(self, error)
+                    else:
+                        await self.manager._report_plugin_error(self, envelope, error)
             finally:
                 self._current_envelope = None
                 self.queue.task_done()

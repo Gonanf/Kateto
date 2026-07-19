@@ -249,6 +249,24 @@ class PluginManager:
                 correlation_id=envelope.correlation_id,
             )
 
+    async def _auto_disable_plugin(
+        self,
+        plugin: Plugin,
+        error: Exception,
+    ) -> None:
+        msg = f"auto-disabled after {plugin._consecutive_failures} consecutive failures: {error}"
+        await self.emit(
+            "error",
+            PluginErrorData(
+                plugin=plugin.name,
+                event_name="plugin_failure",
+                error_type="TooManyFailures",
+                message=msg,
+            ),
+            source=plugin.name,
+        )
+        await self.disable_plugin(plugin.name)
+
     def _remove_subscribers(self, plugin_name: str) -> None:
         for event_name, subscribers in tuple(self._subscribers.items()):
             remaining = [subscriber for subscriber in subscribers if subscriber[0] != plugin_name]
