@@ -14,6 +14,7 @@
 | 7 | Proyecto no runneable sin configuración externa | Alta | `README.md`, `config/defaults/` | [07-not-runnable.md](./bugs/07-not-runnable.md) |
 | 12 | TODO.md se escribe en voices/shared/ | Informativa | `plugins/executor/todo_list.py` | [12-todo-md-location.md](./bugs/12-todo-md-location.md) |
 
+
 ## Resueltos (✅)
 
 | # | Bug | Severidad | Componente | Archivo |
@@ -30,6 +31,12 @@
 | 14 | Sin herramientas runtime para Skills/Workflows/Voces | Media | `voices/tools.py` | [14-no-runtime-tools.md](./bugs/14-no-runtime-tools.md) |
 | 15 | Hot reload reemplaza todos los plugins sin verificar cambio | Crítica | `core/hot_reload.py` | [15-hot-reload-unnecessary-replacement.md](./bugs/15-hot-reload-unnecessary-replacement.md) |
 | 16 | TUI plugins tab: test con botones enable/disable inexistentes | Media | `tests/test_tui.py` | [16-tui-plugin-toggle.md](./bugs/16-tui-plugin-toggle.md) |
+| 17 | TUI: Switch de plugins no visible, voces deshabilitadas no aparecen en tree | Media | `tui.py`, `run_mode.py` | [17-tui-plugin-switch-voice-visibility.md](./bugs/17-tui-plugin-switch-voice-visibility.md) |
+| 18 | TUI usa `Path.cwd()` como config_dir, ignorando user config y reactivando duplicados | Crítica | `tui.py` | [18-tui-cwd-config-priority.md](./bugs/18-tui-cwd-config-priority.md) |
+| 19 | `_agent_loop` no hace streaming aunque `stream=true` en config | Alta | `base.py`, `agent.py`, `factory.py` | [19-agent-loop-no-stream.md](./bugs/19-agent-loop-no-stream.md) |
+| 20 | TUI events tab: autocomplete genera JSON multilinea que rompe el Input | Media | `tui.py` | [20-tui-autocomplete-multiline-json.md](./bugs/20-tui-autocomplete-multiline-json.md) |
+| 21 | TUI conversation tab: todas las respuestas de una voz se escriben en la primera burbuja | Media | `tui.py` | [21-tui-conversation-single-bubble.md](./bugs/21-tui-conversation-single-bubble.md) |
+| 22 | config/defaults/voices/ no incluye SOUL.md para jane, doktor, conquest | Media | `config/defaults/voices/` | [22-default-voices-no-soul.md](./bugs/22-default-voices-no-soul.md) |
 
 ---
 
