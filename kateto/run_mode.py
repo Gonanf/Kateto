@@ -274,11 +274,7 @@ def build_runtime_owner(
             plugins=(),
             mcp_servers=mcp_servers,
             hot_reload_controller=controller,
-            workflow_voices=tuple(
-                name
-                for name, settings in config.settings.voice.items()
-                if settings.enabled
-            ),
+            workflow_voices=tuple(config.settings.voice.keys()),
             external_mcp=external_mcp if external_mcp._clients else None,
         ),
         plugin_configurations=_tui_plugin_configurations(config),

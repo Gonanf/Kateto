@@ -39,7 +39,7 @@ from kateto.core.event import (
 )
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.providers import ChatMessage
-from kateto.providers.agent import OpenAIAgentProvider, ToolExecutor
+from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolExecutor
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import LoadedSkill, load_skills
 
@@ -378,62 +378,51 @@ class VoiceAgent(Plugin):
         for _ in range(max_iterations):
             if self._interrupted:
                 break
-            response = await provider.chat_with_tools(
-                messages=messages,
-                tools=self._tools,
-            )
-            if not response.tool_calls:
-                if response.text and response.text.strip():
-                    await self._emit_chunk(response.text, 0, final=True)
-                break
-            messages.append(
-                ChatCompletionAssistantMessageParam(
-                    role="assistant",
-                    content=response.text or None,
-                    tool_calls=[
-                        {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
-                        for tc in response.tool_calls
-                    ],
+            if self._settings.stream:
+                sequence = 0
+                previous: str | None = None
+                had_tool_calls = False
+                async for item in provider.chat_with_tools_stream(
+                    messages=messages,
+                    tools=self._tools,
+                ):
+                    if self._interrupted:
+                        break
+                    match item:
+                        case StreamToken(text=token) if token:
+                            if self._status is not VoiceStatus.TALKING:
+                                await self._set_status(VoiceStatus.TALKING)
+                            if previous is not None:
+                                await self._emit_chunk(previous, sequence, final=False)
+                                sequence += 1
+                            previous = token
+                        case AgentResponse() as response if response.tool_calls:
+                            if previous is not None:
+                                await self._emit_chunk(previous, sequence, final=True)
+                                previous = None
+                            await self._handle_tool_calls(
+                                messages=messages, response=response, executor=executor,
+                            )
+                            had_tool_calls = True
+                        case _:
+                            pass
+                if self._interrupted:
+                    break
+                if previous is not None:
+                    await self._emit_chunk(previous, sequence, final=True)
+                if not had_tool_calls:
+                    break
+            else:
+                response = await provider.chat_with_tools(
+                    messages=messages,
+                    tools=self._tools,
                 )
-            )
-            for tc in response.tool_calls:
-                correlation_id = uuid4().hex
-                manager = self.manager
-                if manager is not None:
-                    await manager.emit(
-                        "tool_call",
-                        ToolCallData(
-                            tool_name=tc.name,
-                            arguments=tc.arguments,
-                            correlation_id=correlation_id,
-                            voice=self.name,
-                        ),
-                        source=self.name,
-                    )
-                try:
-                    result = await executor.execute(tc.name, tc.arguments)
-                    error = None
-                except Exception as e:
-                    result = ""
-                    error = str(e)
-                if manager is not None:
-                    await manager.emit(
-                        "tool_result",
-                        ToolResultData(
-                            correlation_id=correlation_id,
-                            tool_name=tc.name,
-                            result=result,
-                            error=error,
-                            voice=self.name,
-                        ),
-                        source=self.name,
-                    )
-                messages.append(
-                    ChatCompletionToolMessageParam(
-                        role="tool",
-                        tool_call_id=tc.id,
-                        content=result if error is None else f"Error: {error}",
-                    )
+                if not response.tool_calls:
+                    if response.text and response.text.strip():
+                        await self._emit_chunk(response.text, 0, final=True)
+                    break
+                await self._handle_tool_calls(
+                    messages=messages, response=response, executor=executor,
                 )
         manager = self.manager
         if manager is not None:
@@ -441,6 +430,62 @@ class VoiceAgent(Plugin):
                 "voice_idle", VoiceIdleData(voice=self.name), source=self.name
             )
         await self._set_status(VoiceStatus.IDLE)
+
+    async def _handle_tool_calls(
+        self,
+        messages: list[dict[str, object]],
+        response: AgentResponse,
+        executor: ToolExecutor,
+    ) -> None:
+        messages.append(
+            ChatCompletionAssistantMessageParam(
+                role="assistant",
+                content=response.text or None,
+                tool_calls=[
+                    {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
+                    for tc in response.tool_calls
+                ],
+            )
+        )
+        for tc in response.tool_calls:
+            correlation_id = uuid4().hex
+            manager = self.manager
+            if manager is not None:
+                await manager.emit(
+                    "tool_call",
+                    ToolCallData(
+                        tool_name=tc.name,
+                        arguments=tc.arguments,
+                        correlation_id=correlation_id,
+                        voice=self.name,
+                    ),
+                    source=self.name,
+                )
+            try:
+                result = await executor.execute(tc.name, tc.arguments)
+                error = None
+            except Exception as e:
+                result = ""
+                error = str(e)
+            if manager is not None:
+                await manager.emit(
+                    "tool_result",
+                    ToolResultData(
+                        correlation_id=correlation_id,
+                        tool_name=tc.name,
+                        result=result,
+                        error=error,
+                        voice=self.name,
+                    ),
+                    source=self.name,
+                )
+            messages.append(
+                ChatCompletionToolMessageParam(
+                    role="tool",
+                    tool_call_id=tc.id,
+                    content=result if error is None else f"Error: {error}",
+                )
+            )
 
     async def _set_status(self, status: VoiceStatus) -> None:
         if self._status is status:

@@ -124,11 +124,10 @@ class KatetoApp(App[None]):
     #plugin-panel { height: 1fr; }
     #plugin-panel-left { width: 40%; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
     #plugin-panel-right { width: 1fr; height: 1fr; border: round $secondary; padding: 1; }
-    .plugin-row { height: 3; width: 1fr; align: center middle; }
-    .plugin-status { width: 3; content-align: center middle; }
-    .plugin-name { width: 24; }
+    .plugin-row { height: 3; width: 1fr; }
+    .plugin-name { width: 1fr; margin-right: 1; }
+    Switch { width: 8; margin: 0 2; }
     .plugin-name.selected { background: $accent; color: $surface; }
-    Switch { margin: 0 2; }
     #plugin-history { height: auto; max-height: 12; overflow-y: auto; min-height: 0; border-top: solid $secondary; margin-top: 1; padding: 1; }
     #plugin-config-section { height: auto; max-height: 12; overflow-y: auto; border-top: solid $secondary; margin-top: 1; padding: 1; }
     #event-autocomplete { height: auto; max-height: 10; border: solid $secondary; display: none; overflow-y: auto; }
@@ -176,6 +175,7 @@ class KatetoApp(App[None]):
         self._controller: HotReloadController | None = None
         self._stop_runtime_started = False
         self._voice_texts: dict[str, str] = {}
+        self._voice_bubble_seq: dict[str, int] = {}
         self.manager.register_event("tui_event", TuiEventData)
         self.manager.add_event_observer(self._observe_event)
 
@@ -444,17 +444,18 @@ class KatetoApp(App[None]):
         if placeholder:
             placeholder.remove()
         self._hide_typing_indicator(voice)
-        self._voice_texts.setdefault(voice, "")
-        self._voice_texts[voice] += chunk.text
-        bubble_id = f"bubble-{voice}"
+        seq = self._voice_bubble_seq.get(voice, 0)
+        bubble_id = f"bubble-{voice}-{seq}"
+        self._voice_texts.setdefault(bubble_id, "")
+        self._voice_texts[bubble_id] += chunk.text
         existing = messages.query(f"#{bubble_id}")
         if existing:
-            existing[0].update(f"[bold]{voice}[/bold]  {self._voice_texts[voice]}")
+            existing[0].update(f"[bold]{voice}[/bold]  {self._voice_texts[bubble_id]}")
         else:
-            msg = Static(f"[bold]{voice}[/bold]  {self._voice_texts[voice]}", id=bubble_id, classes="chat-message chat-agent")
+            msg = Static(f"[bold]{voice}[/bold]  {self._voice_texts[bubble_id]}", id=bubble_id, classes="chat-message chat-agent")
             messages.mount(msg)
         if chunk.final:
-            self._voice_texts.pop(voice, None)
+            self._voice_bubble_seq[voice] = seq + 1
         self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
 
     async def _emit_manual(self, message: str) -> None:
@@ -575,11 +576,9 @@ class KatetoApp(App[None]):
                 pass
 
     def _plugin_row(self, plugin: Plugin) -> Horizontal:
-        enabled_status = "🟢" if plugin.enabled else "⚪"
         audio = self._audio_status.get(plugin.name, "?")
         selected_class = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
         return Horizontal(
-            Static(enabled_status, classes="plugin-status"),
             Button(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
             Static(audio, id=f"audio-status-{plugin.name}"),
             Switch(value=plugin.enabled, id=f"switch-{plugin.name}"),
@@ -777,7 +776,7 @@ class KatetoApp(App[None]):
                 val = field_info.default
                 if val is not None and not isinstance(val, type):
                     fields[field_name] = val
-        return json.dumps(fields, indent=2, default=str)
+        return json.dumps(fields, default=str)
 
     def _voice_text(self) -> str:
         return "\n".join(
@@ -831,7 +830,9 @@ class KatetoApp(App[None]):
 
 
 def run_tui(*, fixture: bool = False, config_dir: Path | None = None) -> None:
-    resolved_config_dir = (Path.cwd() if config_dir is None else config_dir).resolve()
+    from kateto.core.config import resolve_config_dir as _resolve_config_dir
+
+    resolved_config_dir = (_resolve_config_dir() if config_dir is None else config_dir).resolve()
     if fixture:
         runtime: Any = _FixtureRuntime(resolved_config_dir)
     else:
