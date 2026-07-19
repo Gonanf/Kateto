@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
 from typing import assert_never
+
+log = logging.getLogger(__name__)
 
 from openai import AsyncOpenAI
 from openai.types.chat import (
@@ -322,9 +325,9 @@ class VoiceAgent(Plugin):
             reference_wav=self.reference_wav,
             messages=await self._messages_for(prompt),
         )
-        open("/tmp/kateto_voice_debug.txt", "a").write(f"[{self.name}] _settings.stream={self._settings.stream} (type={type(self._settings).__name__})\n")
+        log.debug("[%s] _settings.stream=%s", self.name, self._settings.stream)
         if self._settings.stream:
-            open("/tmp/kateto_voice_debug.txt", "a").write(f"[{self.name}] stream=true mode, emitting per token\n")
+            log.debug("[%s] stream=true mode, emitting per token", self.name)
             previous: str | None = None
             sequence = 0
             async for token in self._provider.stream(request):
@@ -341,7 +344,7 @@ class VoiceAgent(Plugin):
             if previous is not None:
                 await self._emit_chunk(previous, sequence, final=True)
         else:
-            open("/tmp/kateto_voice_debug.txt", "a").write(f"[{self.name}] stream=false mode, accumulating tokens...\n")
+            log.debug("[%s] stream=false mode, accumulating tokens...", self.name)
             tokens: list[str] = []
             async for token in self._provider.stream(request):
                 if not isinstance(token, str) or not token:
@@ -353,7 +356,7 @@ class VoiceAgent(Plugin):
                 tokens.append(token)
             if tokens:
                 full = "".join(tokens)
-                open("/tmp/kateto_voice_debug.txt", "a").write(f"[{self.name}] stream=false accumulated {len(tokens)} tokens -> {full!r}\n")
+                log.debug("[%s] stream=false accumulated %d tokens -> %r", self.name, len(tokens), full)
                 await self._emit_chunk(full, 0, final=True)
         manager = self.manager
         if manager is not None:
