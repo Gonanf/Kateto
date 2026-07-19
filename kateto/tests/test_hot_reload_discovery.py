@@ -26,6 +26,16 @@ class _DiscoveredPlugin(Plugin):
         self.handled_events.append("test_event")
 
 
+class _DiscoveredPluginV2(Plugin):
+    def __init__(self) -> None:
+        super().__init__("discovered_plugin")
+        self.version = "v2"
+        self.handled_events: list[str] = []
+
+    async def on_test_event(self, data: object) -> None:
+        self.handled_events.append("test_event")
+
+
 class _ReplaceablePlugin(Plugin):
     def __init__(self, name: str = "replaceable_plugin", marker: str = "") -> None:
         super().__init__(name, streaming=True)
@@ -177,9 +187,9 @@ async def test_hot_reload_reconciles_created_modified_and_deleted_definitions(tm
         del config
         if not source_path.exists():
             return PluginRegistry(plugins=frozenset())
-        version = versions["modified"] if source_path.read_text(encoding="utf-8") == "v2" else versions["created"]
-        plugin = _DiscoveredPlugin(version)
-        return PluginRegistry(plugins=frozenset({plugin}))
+        if source_path.read_text(encoding="utf-8") == "v2":
+            return PluginRegistry(plugins=frozenset({_DiscoveredPluginV2()}))
+        return PluginRegistry(plugins=frozenset({_DiscoveredPlugin("v1")}))
 
     controller = HotReloadController(
         manager=manager,
@@ -196,12 +206,13 @@ async def test_hot_reload_reconciles_created_modified_and_deleted_definitions(tm
     source_path.write_text("v2", encoding="utf-8")
     await controller.handle_change(source_path)
     modified = manager.get_plugins()[0]
-    assert isinstance(modified, _DiscoveredPlugin)
+    assert isinstance(modified, _DiscoveredPluginV2)
     source_path.unlink()
     await controller.handle_change(source_path)
 
     # Then: each filesystem transition is reflected in active event registrations.
     assert created.version == "v1"
+    assert isinstance(modified, _DiscoveredPluginV2)
     assert modified.version == "v2"
     assert modified is not created
     assert manager.get_plugins() == (modified,)

@@ -198,7 +198,7 @@ class HotReloadController:
             if replacement is None:
                 if active.name in self._discovered_names:
                     await self.manager.disable_plugin(active.name)
-            else:
+            elif type(replacement) is not type(active):
                 await self.manager.replace_plugin(active, replacement)
         self._discovered_names.intersection_update({plugin.name for plugin in registry.plugins})
         for replacement in desired.values():
