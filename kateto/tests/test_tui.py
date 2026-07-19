@@ -90,6 +90,9 @@ class _RuntimeOwnerLike:
     def plugin_configuration(self, name: str) -> TuiPluginConfiguration | None:
         return self._plugin_configurations.get(name)
 
+    def voice_enabled(self, name: str) -> bool:
+        return True
+
     async def configure_plugin(self, name: str, configuration: TuiPluginConfiguration) -> None:
         self._plugin_configurations[name] = configuration
 

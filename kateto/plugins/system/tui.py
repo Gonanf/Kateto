@@ -9,7 +9,7 @@ from typing import Any, assert_never
 from pydantic import BaseModel, Field, ValidationError
 from pydantic.fields import FieldInfo
 from textual.app import App, ComposeResult, Screen
-from textual.containers import Horizontal, Vertical
+from textual.containers import Grid, Horizontal, Vertical
 from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static, Switch, TabbedContent, TabPane, Tree
 
 from kateto.core.event import (
@@ -63,6 +63,9 @@ class _FixtureRuntime:
     @property
     def workflow_engine(self):
         return self._workflow_engine
+
+    def voice_enabled(self, name: str) -> bool:
+        return True
 
     async def start(self) -> None:
         for plugin in self.runtime_plugins:
@@ -124,9 +127,10 @@ class KatetoApp(App[None]):
     #plugin-panel { height: 1fr; }
     #plugin-panel-left { width: 40%; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
     #plugin-panel-right { width: 1fr; height: 1fr; border: round $secondary; padding: 1; }
-    .plugin-row { height: 3; width: 1fr; }
-    .plugin-name { width: 1fr; margin-right: 1; }
-    Switch { width: 8; margin: 0 2; }
+    #plugin-list { height: auto; }
+    .plugin-row { height: 3; }
+    .plugin-row > Grid { grid-size: 3; grid-columns: 1fr auto 8; }
+    Switch { margin: 0 1; }
     .plugin-name.selected { background: $accent; color: $surface; }
     #plugin-history { height: auto; max-height: 12; overflow-y: auto; min-height: 0; border-top: solid $secondary; margin-top: 1; padding: 1; }
     #plugin-config-section { height: auto; max-height: 12; overflow-y: auto; border-top: solid $secondary; margin-top: 1; padding: 1; }
@@ -225,8 +229,7 @@ class KatetoApp(App[None]):
                 with Horizontal(id="plugin-panel"):
                     with Vertical(id="plugin-panel-left"):
                         yield Static("PLUGINS", classes="section-title")
-                        for plugin in self._available_plugins():
-                            yield self._plugin_row(plugin)
+                        yield Vertical(id="plugin-list")
                     with Vertical(id="plugin-panel-right"):
                         yield Static("Plugin History", classes="section-title")
                         yield Static(id="plugin-history")
@@ -535,12 +538,18 @@ class KatetoApp(App[None]):
         if not self.is_mounted:
             return
         self.query_one("#plugin-history", Static).update(self._history_text())
-        self._refresh_plugin_switches()
+        self._populate_plugin_list()
         self._refresh_plugin_config()
         self._populate_event_tree()
         self._populate_voice_tree()
         self._populate_workflow_tree()
         self.query_one("#mcp-state", Static).update(self._mcp_state())
+
+    def _populate_plugin_list(self) -> None:
+        container = self.query_one("#plugin-list", Vertical)
+        container.remove_children()
+        for plugin in self._available_plugins():
+            container.mount(self._plugin_row(plugin))
 
     def _refresh_plugin_switches(self) -> None:
         for plugin in self._available_plugins():
@@ -579,15 +588,18 @@ class KatetoApp(App[None]):
         audio = self._audio_status.get(plugin.name, "?")
         selected_class = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
         return Horizontal(
-            Button(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
-            Static(audio, id=f"audio-status-{plugin.name}"),
-            Switch(value=plugin.enabled, id=f"switch-{plugin.name}"),
+            Grid(
+                Button(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
+                Static(audio, id=f"audio-status-{plugin.name}"),
+                Switch(value=plugin.enabled, id=f"switch-{plugin.name}"),
+            ),
             classes="plugin-row",
         )
 
     def _available_plugins(self) -> tuple[Plugin, ...]:
-        plugins: dict[str, Plugin] = {plugin.name: plugin for plugin in self.runtime.runtime_plugins}
-        plugins.update({plugin.name: plugin for plugin in self.manager.get_plugins()})
+        plugins = {plugin.name: plugin for plugin in self.manager.get_plugins()}
+        if not plugins:
+            plugins = {plugin.name: plugin for plugin in self.runtime.runtime_plugins}
         return tuple(plugins.values())
 
     def _history_text(self) -> str:
@@ -621,7 +633,12 @@ class KatetoApp(App[None]):
         tree.clear()
         for voice in self.runtime.workflow_voices:
             status = self._voice_status.get(voice, "idle")
-            voice_node = tree.root.add(f"{voice} · {status.upper()}")
+            enabled = self.runtime.voice_enabled(voice)
+            tag = "✅" if enabled else "⛔"
+            label = f"{tag} {voice} · {status.upper()}"
+            if not enabled:
+                label += " (disabled)"
+            voice_node = tree.root.add(label)
             try:
                 definitions = self.runtime.workflow_catalog.discover(voice=voice)
             except WorkflowDefinitionError as error:

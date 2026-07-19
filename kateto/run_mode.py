@@ -83,6 +83,12 @@ class RuntimeOwner(TuiConfigurationRuntime):
     def workflow_voices(self) -> tuple[str, ...]:
         return self._components.workflow_voices
 
+    def voice_enabled(self, name: str) -> bool:
+        if self._config is None:
+            return True
+        voice_cfg = self._config.settings.voice.get(name)
+        return voice_cfg.enabled if voice_cfg else True
+
     @property
     def mcp_servers(self) -> tuple[McpEventServer, ...]:
         return self._components.mcp_servers
