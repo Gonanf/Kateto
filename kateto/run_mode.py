@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any, final
 
 from kateto.core.config import LoadedConfig
+from kateto.core.event import VoiceEnableData
 from kateto.core.discovery import (
     DiscoveryContext,
     LiveAssemblyConfigurationError,
@@ -39,6 +40,19 @@ class RuntimeComponents:
     external_mcp: ExternalMcpManager | None = None
 
 
+class _VoiceManagerPlugin(Plugin):
+    def __init__(self, owner: RuntimeOwner) -> None:
+        super().__init__("voice_manager", streaming=True)
+        self._owner = owner
+
+    async def initialize(self) -> None:
+        if self.manager is not None:
+            self.manager.register_event("voice_enable", VoiceEnableData)
+
+    async def on_voice_enable(self, data: VoiceEnableData) -> None:
+        await self._owner.on_voice_enable(data)
+
+
 @final
 class RuntimeOwner(TuiConfigurationRuntime):
     def __init__(
@@ -47,11 +61,13 @@ class RuntimeOwner(TuiConfigurationRuntime):
         manager: PluginManager,
         plugins: tuple[Plugin, ...],
         components: RuntimeComponents,
+        config: LoadedConfig | None = None,
         plugin_configurations: tuple[TuiPluginConfiguration, ...] = (),
     ) -> None:
         self._manager = manager
         self._plugins = plugins
         self._components = components
+        self._config = config
         self._started = False
         self._plugin_configurations = {item.plugin: item for item in plugin_configurations}
 
@@ -115,6 +131,8 @@ class RuntimeOwner(TuiConfigurationRuntime):
         try:
             for plugin in self._plugins:
                 await self._manager.enable_plugin(plugin)
+            voice_mgr = _VoiceManagerPlugin(self)
+            await self._manager.enable_plugin(voice_mgr)
             # Start external MCP servers after plugins so voice enable runs first,
             # but before internal event-server refresh so external tools are visible.
             external_mcp = self.external_mcp
@@ -179,6 +197,28 @@ class RuntimeOwner(TuiConfigurationRuntime):
             if isinstance(result, BaseException):
                 raise result
 
+    async def on_voice_enable(self, data: VoiceEnableData) -> None:
+        voice_name = data.voice_name
+        config = self._config
+        if config is None:
+            msg = "runtime config not available for voice enable"
+            raise RuntimeError(msg)
+        voice_settings = config.settings.voice.get(voice_name)
+        if voice_settings is None:
+            msg = f"voice not configured: {voice_name}"
+            raise ValueError(msg)
+        for plugin in self._manager.get_plugins():
+            if plugin.name == voice_name:
+                if plugin.enabled:
+                    return
+                await self._manager.enable_plugin(plugin)
+                return
+        from kateto.voices.factory import create_voice
+
+        ctx = DiscoveryContext(config=config, shared={})
+        voice = create_voice(ctx, voice_settings, voice_name=voice_name)
+        await self._manager.enable_plugin(voice)
+
 
 def build_runtime_owner(
     config: LoadedConfig,
@@ -229,6 +269,7 @@ def build_runtime_owner(
     return RuntimeOwner(
         manager=manager,
         plugins=runtime_plugins,
+        config=config,
         components=RuntimeComponents(
             plugins=(),
             mcp_servers=mcp_servers,

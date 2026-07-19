@@ -8,6 +8,7 @@ from asyncio import (  # noqa: ANYIO_OK
     create_task,
     current_task,
     get_running_loop,
+    to_thread,
 )
 from collections.abc import Callable
 from contextlib import suppress
@@ -163,10 +164,8 @@ class AudioInputPlugin(Plugin):
                 samples = self._callback_queue.pop()
                 if samples is None:
                     break
-                update = self._segmenter.consume(
-                    samples,
-                    speech=self._vad.is_speech(samples),
-                )
+                speech = await to_thread(self._vad.is_speech, samples)
+                update = self._segmenter.consume(samples, speech=speech)
                 if update.voice_started:
                     await self._set_recording(True)
                     await self._interrupt_playback()
