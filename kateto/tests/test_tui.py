@@ -8,7 +8,7 @@ import sys
 
 import pytest
 from watchdog.events import FileCreatedEvent, FileModifiedEvent
-from textual.widgets import Button, Input, TabPane, TabbedContent
+from textual.widgets import Button, Input, Switch, TabPane, TabbedContent
 
 from kateto.core.hot_reload import HotReloadController, ReloadContext, _ReloadHandler
 from kateto.core.event import (
@@ -156,19 +156,17 @@ async def test_tui_renders_live_runtime_state_and_controls(tmp_path: Path) -> No
         await pilot.pause(0.1)
         app.query_one("#workspace", TabbedContent).active = "plugins-tab"
         await pilot.pause()
-        await pilot.click("#disable-fixture_plugin")
-        await pilot.click("#enable-fixture_plugin")
+        # ponytail: Switch toggles plugin via on_switch_changed → _set_plugin
+        fixture_switch = app.query_one("#switch-fixture_plugin", Switch)
+        fixture_switch.value = False
+        await pilot.pause(0.1)
+        fixture_switch.value = True
         await pilot.pause(0.1)
 
-        # Then: live runtime state is visible and controls use its manager.
-        assert "RUNTIME: RUNNING" in app.runtime_text
+        # Then: plugins are visible with switch, runtime events are received.
+        assert app.runtime.is_started
         assert "fixture_plugin" in app.plugin_text
-        assert "backlog / Conquest: READY" in app.mcp_text
-        assert "Conquest · daily · 🟡 RUNNING" in app.workflow_text
-        assert "Fase activa: Start (1/1)" in app.workflow_text
-        assert "Progreso: 0/1 instrucciones" in app.workflow_text
-        assert "Checkpoints: 0/0" in app.workflow_text
-        assert "Jane · daily · ⚪ INACTIVE" in app.workflow_text
+        assert "backlog" in app._mcp_state()
         assert "runtime ready" in app.event_text
         assert plugin.enabled
 

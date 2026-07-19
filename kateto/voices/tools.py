@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shlex
 import shutil
 from pathlib import Path
@@ -57,6 +58,16 @@ class VoiceToolExecutor:
                 return await self._disable_plugin(arguments)
             case "list_plugins":
                 return self._list_plugins()
+            case "create_skill":
+                return await self._create_skill(arguments)
+            case "update_skill":
+                return await self._update_skill(arguments)
+            case "create_workflow":
+                return await self._create_workflow(arguments)
+            case "update_workflow":
+                return await self._update_workflow(arguments)
+            case "update_soul":
+                return await self._update_soul(arguments)
             case _:
                 if self._external_manager is not None and self._mcp_server_names:
                     result = await self._external_manager.try_call_tool(
@@ -173,6 +184,110 @@ class VoiceToolExecutor:
                 "capabilities": list(plugin.capabilities),
             })
         return json.dumps({"plugins": plugins})
+
+    # ponytail: name validation shared across skill/workflow/soul tools
+    @staticmethod
+    def _validate_name(name: str) -> None:
+        if not re.match(r"^[A-Za-z0-9][A-Za-z0-9_-]*\Z", name):
+            raise ValueError(f"invalid name: {name!r}")
+
+    # ponytail: thin wrappers around write_file with path construction + validation.
+    #   skip backup, skip event emission, skip confirmation.
+    #   add if users actually hit data-loss or need hot-reload notification.
+    async def _create_skill(self, args: dict[str, Any]) -> str:
+        name = args.get("name", "")
+        content = args.get("content", "")
+        if not name or content is None:
+            return json.dumps({"error": "name and content are required"})
+        try:
+            self._validate_name(name)
+        except ValueError as e:
+            return json.dumps({"error": str(e)})
+        path = self._config_dir / "skills" / name / "SKILL.md"
+        if path.exists():
+            return json.dumps({"error": f"skill '{name}' already exists; use update_skill"})
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            return json.dumps({"status": "created", "name": name, "path": str(path.relative_to(self._config_dir))})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    async def _update_skill(self, args: dict[str, Any]) -> str:
+        name = args.get("name", "")
+        content = args.get("content", "")
+        if not name or content is None:
+            return json.dumps({"error": "name and content are required"})
+        try:
+            self._validate_name(name)
+        except ValueError as e:
+            return json.dumps({"error": str(e)})
+        path = self._config_dir / "skills" / name / "SKILL.md"
+        if not path.exists():
+            return json.dumps({"error": f"skill '{name}' not found; use create_skill"})
+        try:
+            path.write_text(content, encoding="utf-8")
+            return json.dumps({"status": "updated", "name": name, "path": str(path.relative_to(self._config_dir))})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    async def _create_workflow(self, args: dict[str, Any]) -> str:
+        name = args.get("name", "")
+        content = args.get("content", "")
+        voice = args.get("voice", "")
+        if not name or content is None or not voice:
+            return json.dumps({"error": "name, voice, and content are required"})
+        try:
+            self._validate_name(name)
+            self._validate_name(voice)
+        except ValueError as e:
+            return json.dumps({"error": str(e)})
+        path = self._config_dir / "voices" / voice / "workflows" / name / "workflow.py"
+        if path.exists():
+            return json.dumps({"error": f"workflow '{name}' for voice '{voice}' already exists; use update_workflow"})
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            return json.dumps({"status": "created", "name": name, "voice": voice, "path": str(path.relative_to(self._config_dir))})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    async def _update_workflow(self, args: dict[str, Any]) -> str:
+        name = args.get("name", "")
+        content = args.get("content", "")
+        voice = args.get("voice", "")
+        if not name or content is None or not voice:
+            return json.dumps({"error": "name, voice, and content are required"})
+        try:
+            self._validate_name(name)
+            self._validate_name(voice)
+        except ValueError as e:
+            return json.dumps({"error": str(e)})
+        path = self._config_dir / "voices" / voice / "workflows" / name / "workflow.py"
+        if not path.exists():
+            return json.dumps({"error": f"workflow '{name}' for voice '{voice}' not found; use create_workflow"})
+        try:
+            path.write_text(content, encoding="utf-8")
+            return json.dumps({"status": "updated", "name": name, "voice": voice, "path": str(path.relative_to(self._config_dir))})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
+    async def _update_soul(self, args: dict[str, Any]) -> str:
+        name = args.get("name", "")
+        content = args.get("content", "")
+        if not name or content is None:
+            return json.dumps({"error": "name and content are required"})
+        try:
+            self._validate_name(name)
+        except ValueError as e:
+            return json.dumps({"error": str(e)})
+        path = self._config_dir / "voices" / name / "SOUL.md"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            return json.dumps({"status": "updated" if path.exists() else "created", "name": name, "path": str(path.relative_to(self._config_dir))})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
 
     async def _run_command(self, args: dict[str, Any]) -> str:
         command = args.get("command", "")
@@ -417,6 +532,83 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
             "parameters": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "create_skill",
+            "description": "Create a new skill file (SKILL.md) for a voice.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Skill name (lowercase-kebab)"},
+                    "content": {"type": "string", "description": "Full SKILL.md content"},
+                },
+                "required": ["name", "content"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "update_skill",
+            "description": "Update an existing skill file (SKILL.md).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Skill name"},
+                    "content": {"type": "string", "description": "New SKILL.md content"},
+                },
+                "required": ["name", "content"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "create_workflow",
+            "description": "Create a new workflow for a specific voice.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Workflow name (kebab-case)"},
+                    "voice": {"type": "string", "description": "Voice name to attach the workflow to"},
+                    "content": {"type": "string", "description": "Full workflow.py content"},
+                },
+                "required": ["name", "voice", "content"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "update_workflow",
+            "description": "Update an existing workflow file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Workflow name"},
+                    "voice": {"type": "string", "description": "Voice name"},
+                    "content": {"type": "string", "description": "New workflow.py content"},
+                },
+                "required": ["name", "voice", "content"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "update_soul",
+            "description": "Update a voice's SOUL.md file (creates if missing).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Voice name"},
+                    "content": {"type": "string", "description": "New SOUL.md content"},
+                },
+                "required": ["name", "content"],
             },
         },
     ),
