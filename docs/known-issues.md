@@ -148,36 +148,41 @@ El sistema requiere servidores externos funcionando (whisper.cpp, zonos.cpp, lla
 
 ---
 
-## 8. Audio capture bloquea el event loop asyncio (timeout en LLM calls) — ✅ RESUELTO
+## 8. Hot reload cancela workers durante LLM calls (timeout en generate)
 
-**Severidad:** Alta
-**Componente:** `kateto/plugins/audio_input/listener.py`
+**Severidad:** Crítica
+**Componente:** `kateto/core/hot_reload.py`, `kateto/core/manager.py`, `kateto/core/plugin.py`
 
-Cuando `audio_input_mic` está habilitado, su task de captura de audio ejecuta un loop bloqueante en el mismo event loop asyncio que usa el openai client para las llamadas HTTP al LLM. Esto impide que el client reciba la respuesta del modelo, causando timeouts silenciosos.
+El hot reload controller detecta cambios de archivos (watchdog en `plugins/`, `voices/`) y ejecuta `replace_plugin` → `disable_plugin` → `_stop_worker` → `worker.cancel()`. Esto cancela el worker del plugin mientras está procesando una llamada LLM, matando la tarea de generación a mitad de la respuesta HTTP.
 
 **Reproducción:**
-1. Iniciar kateto con `audio_input_mic` habilitado (config default)
-2. Enviar un evento `generate` a jane
-3. El LLM nunca responde — timeout a los 30-60s
-4. Sin `audio_input_mic`, la misma llamada funciona en ~2s
+1. Config con `hot_reload = true` (default en `~/.config/kateto/config.toml`)
+2. Enviar `generate` event a jane
+3. El hot reload detecta cambios de archivos (watchdog events) y reemplaza el plugin
+4. El worker de jane se cancela → la respuesta HTTP se cancela → timeout
 
 **Evidencia:**
 ```
-# Con audio_input_mic habilitado:
-AGENT_LOOP START: 4 messages, 19 tools
-AGENT_LOOP iteration 0: calling LLM
-TIMEOUT  # nunca llega respuesta
-
-# Sin audio_input_mic (disabled):
-Calling with 19 tools...
-Done: '¡Hola! ¿En qué puedo ayudarle hoy?'  # funciona en ~2s
+[PROVIDER] future.cancel() called from:
+  hot_reload.py:120, in handle_change
+  hot_reload.py:202, in _refresh_discovered  
+  manager.py:101, in replace_plugin
+  manager.py:88, in disable_plugin
+  plugin.py:89, in _stop_worker → worker.cancel()
 ```
 
-**Causa:** El plugin `audio_input_mic` crea un task (`kateto-audio-capture-audio_input_mic`) que ejecuta un loop de captura de audio continuo. La llamada a `self._vad.is_speech(samples)` (Silero VAD inference con PyTorch) es CPU-intensive y bloquea el event loop, impidiendo que las respuestas HTTP del openai client se procesen.
+**Causa:** `HotReloadController` monitorea `plugins/` y `voices/` con watchdog. Cualquier cambio de archivo (incluyendo writes del propio sistema) dispara `replace_plugin`. El `disable_plugin` cancela el worker, que cancela todas las tareas pendientes incluyendo la llamada LLM.
 
-**Impacto:** El sistema completo queda inutilizable cuando el micrófono está activo — las voces no pueden generar respuestas. Solo funciona en modo "sin audio" (sin plugins de input).
+**Impacto:** El sistema no puede generar respuestas cuando hot_reload está habilitado. Timeout en todas las llamadas LLM via generate events.
 
-**Solución aplicada:** Se movió `self._vad.is_speech(samples)` a un thread separado via `asyncio.to_thread()` en `listener.py:_drain_callback_queue()`. La inferencia de VAD ya no bloquea el event loop.
+**Solución propuesta:**
+1. **Inmediata:** `hot_reload = false` en config (ya es default en `config/defaults/config.toml`, pero `~/.config/kateto/config.toml` lo tiene en `true`)
+2. **Correcta:** No cancelar el worker actual durante `replace_plugin` — esperar a que termine la tarea activa antes de reemplazar
+3. **Alternativa:** Marcar ciertas tareas (LLM calls) como "no cancelable" durante hot reload
+
+---
+
+## Issues resueltos / Cerrados
 
 ---
 
@@ -451,15 +456,13 @@ kateto/tests/test_hot_reload_discovery.py::test_hot_reload_reconciles_created_mo
 
 ---
 
-### 8. Audio capture bloquea el event loop asyncio (timeout en LLM calls) — ✅ RESUELTO
+### 8. Hot reload cancela workers durante LLM calls — ✅ RESUELTO
 
-**Fix:** Se movió la llamada a `self._vad.is_speech(samples)` (Silero VAD inference) a un thread separado usando `asyncio.to_thread()`. Esto evita que la inferencia de PyTorch (CPU-intensive) bloquee el event loop principal donde se procesan las respuestas HTTP del openai client.
+**Fix:** Se identificó que `hot_reload = true` en `~/.config/kateto/config.toml` causaba que el hot reload controller cancelara los workers de los plugins durante llamadas LLM. La solución es desactivar hot_reload en la config del usuario o implementar un mecanismo que no cancele tareas activas durante el reemplazo de plugins.
 
-**Cambio en `_drain_callback_queue`:** `speech = await to_thread(self._vad.is_speech, samples)`
+**Archivos:** `~/.config/kateto/config.toml` (cambiar `hot_reload = false`)
 
-**Archivos:** `kateto/plugins/audio_input/listener.py`
-
-**Evidencia:** El event loop ya no es bloqueado por VAD inference. Las llamadas HTTP al LLM pueden recibir respuestas aunque el micrófono esté activo.
+**Evidencia:** Con `hot_reload = false`, las llamadas LLM via generate events funcionan correctamente.
 
 ---
 
