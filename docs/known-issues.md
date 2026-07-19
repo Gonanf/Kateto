@@ -4,21 +4,185 @@
 
 ---
 
-## 15. Hot reload reemplaza todos los plugins sin verificar si cambiaron — ✅ RESUELTO
+## 1. whisper-server: `--device 1` no usa GPU correctamente
+
+**Severidad:** Media
+**Componente:** `providers/whisper.py` / servidor whisper.cpp externo
+
+La flag `--device 1` no selecciona la GPU Vulkan correcta. En sistemas con múltiples GPUs (p.ej. Intel Iris Xe + AMD Radeon RX 6500 XT), whisper.cpp ignora el device index y usa la GPU por defecto o cae a CPU.
+
+**Impacto:** Inferencia de whisper en CPU (~1.4 t/s) en vez de GPU. Latencia alta en el pipeline de transcripción.
+
+**Causa:** bug conocido en whisper.cpp donde el device index no se mapea correctamente al backend Vulkan cuando hay GPUs integrada + discreta.
+
+**Posible solución:** Forzar device mediante variable de entorno `GGML_VULKAN_DEVICE=1` o configurar `--no-gpu` y usar CPU con más threads. En producción, considerar migrar a un solo dispositivo GPU.
+
+---
+
+## 2. Sin tests end-to-end
+
+**Severidad:** Media
+**Componente:** `kateto/tests/`
+
+Actualmente hay **33 archivos de test**, todos unitarios o con fixtures/mocks. Ningún test verifica el pipeline completo:
+
+```
+audio in → VAD → whisper → classifier → LLM → TTS → audio out
+```
+
+**Impacto:** El código que integra los componentes (especialmente `live.py` y `run_mode.py`) no tiene cobertura. Regresiones en integración real no se detectan hasta ejecución manual.
+
+**Causa:** El MVP se construyó con Codex priorizando features sobre infraestructura de test. Los tests existentes se generaron para módulos específicos (event bus, plugin manager, VAD, backlog).
+
+**Posible solución:** Agregar tests de integración que:
+1. Inicien servidores mock de whisper/zonos/LLM
+2. Ejecuten escenarios completos (transcripción → clasificación → generación → TTS)
+3. Verifiquen tiempos de respuesta y eventos emitidos
+
+---
+
+## 3. CallbackQueue con capacity fijo en 32 — ✅ RESUELTO
+
+**Severidad:** Baja (visible en condiciones de carga alta)
+**Componente:** `kateto/plugins/audio_input/base.py`
+
+La clase `CallbackQueue` tiene un `capacity=32` hardcodeado. No es configurable desde `config.toml` ni desde `PluginSettings`.
+
+```python
+self._callback_queue = CallbackQueue(capacity=32)
+```
+
+**Impacto:** En ráfagas largas de audio o cuando el pipeline de procesamiento está congestionado, se dropean frames de audio (`dropped_frames` se incrementa pero no hay notificación). El audio se corta sin que el usuario lo sepa.
+
+**Causa:** decisión de diseño inicial para límite de memoria. No se expuso como parámetro de configuración.
+
+**Solución aplicada:** Se agregó `callback_queue_capacity` en `PluginSettings` (config.py), `AudioInputConfig` (base.py), y se usa en `listener.py` en vez del hardcode 32.
+
+---
+
+## 4. Plugins sin isolation de errores (sin circuit breaker) — ✅ RESUELTO
+
+**Severidad:** Alta
+**Componente:** `kateto/core/manager.py` / `kateto/core/plugin.py`
+
+Cuando un handler de evento lanza una excepción, el error se propaga al `emit()` y puede cancelar otros handlers en el mismo dispatch. No hay:
+- Mecanismo de circuit breaker
+- Aislamiento de failures por plugin
+- Estado degradado (un plugin falla, los otros siguen)
+
+**Impacto:** Un solo plugin buggy puede tumbar el event bus completo o silenciar errores. El sistema no tiene manera de "desconectar" un plugin que falla repetidamente.
+
+**Causa:** El dispatch de eventos en `manager.py` usa `gather()` o tareas concurrentes sin manejo granular de errores por handler. El MVP priorizó simplicidad sobre resiliencia.
+
+**Solución aplicada:**
+1. Cada handler en `_run()` se ejecuta en try/except individual (ya existía desde el MVP)
+2. `_consecutive_failures` se resetea a 0 en éxito, se incrementa en error
+3. Al llegar a 5 fallos consecutivos, `_auto_disable_plugin()` deshabilita el plugin y emite `PluginErrorData` con `error_type="TooManyFailures"`
+4. Fallos aislados (< 5) siguen reportándose normalmente
+
+---
+
+## 5. Sin logging estructurado — ✅ RESUELTO
+
+**Severidad:** Media
+**Componente:** `kateto/voices/base.py`, `kateto/providers/zonos.py`
+
+El proyecto usa `print()` para salida de depuración y errores. No hay:
+- Logger configurable por módulo
+- Niveles (DEBUG, INFO, WARNING, ERROR)
+- Formato estructurado (JSON o timestamp + módulo + nivel)
+- Manejo de logs para producción
+
+**Impacto:** Dificultad para debuggear issues en producción, especialmente en un sistema multi-agente con eventos asíncronos. No hay trazabilidad de qué eventos se emitieron, qué plugins respondieron, ni dónde falló el pipeline.
+
+**Causa:** El MVP se construyó rápido con Codex, y `print()` es el camino más corto. No se diseñó un sistema de logging desde el inicio.
+
+**Solución aplicada:** Se reemplazaron las escrituras a `/tmp/kateto_voice_debug.txt` con `logging.getLogger(__name__).debug()` en `voices/base.py` y `providers/zonos.py`. Los `print()` en `__main__.py` se mantienen (son apropiados para CLI).
+
+---
+
+## 6. Hot-reload sin test coverage — ✅ RESUELTO
+
+**Severidad:** Media
+**Componente:** `kateto/core/hot_reload.py`, `kateto/tests/`
+
+El sistema de hot-reload (`HotReloadController`) es una pieza crítica: permite reemplazar plugins en caliente mientras el bus de eventos sigue corriendo. Sin embargo:
+
+- **No tiene tests unitarios**
+- **No tiene tests de integración** (reemplazar un plugin y verificar que los eventos se sigan emitiendo)
+- Cualquier cambio en `manager.py` o `plugin.py` puede romper hot-reload sin que los tests lo detecten
+
+**Impacto:** El TUI con hot-reload (feature clave del MVP) puede romperse silenciosamente. Regresiones en hot-reload no se detectan hasta ejecución manual.
+
+**Causa:** hot-reload se agregó tarde en el desarrollo como feature de polish. Los tests existentes se escribieron antes.
+
+**Solución aplicada:** Se agregaron 3 tests unitarios que cubren:
+1. Reemplazo de plugin via `ReplacementFactory`
+2. Observers se mantienen después del reemplazo
+3. Eventos llegan al plugin reemplazado
+
+Tests: `test_hot_reload_replaces_plugin_via_replacement_factory`, `test_hot_reload_preserves_observers_after_replacement`, `test_hot_reload_replaced_plugin_receives_events`
+
+---
+
+## 7. Proyecto no runneable sin configuración externa
+
+**Severidad:** Alta (para nuevos desarrolladores)
+**Componente:** `README.md`, `config/defaults/config.toml`
+
+El sistema requiere servidores externos funcionando (whisper.cpp, zonos.cpp, llama.cpp) y no hay:
+- `docker-compose.yml` para levantar todo
+- Scripts de setup automático
+- Modo "offline" con modelos mock para desarrollo
+- Validación temprana de conectividad al iniciar
+
+**Impacto:** Un nuevo desarrollador no puede ejecutar `kateto live` sin primero configurar manualmente 3 servidores de inferencia. La fricción de onboarding es alta.
+
+**Causa:** El MVP asume que el desarrollador ya tiene los servidores corriendo (entorno existente del creador). No se diseñó para portabilidad.
+
+**Posible solución:**
+1. Agregar `kateto doctor` que verifique conectividad con cada servidor
+2. Agregar modo demo (sin servidores reales, respuestas sintéticas)
+3. Documentar en README los comandos exactos para iniciar cada servidor
+4. Docker compose como opción
+
+---
+
+## 8. Hot reload cancela workers durante LLM calls (timeout en generate)
 
 **Severidad:** Crítica
-**Componente:** `kateto/core/hot_reload.py` (`_refresh_discovered`)
+**Componente:** `kateto/core/hot_reload.py`, `kateto/core/manager.py`, `kateto/core/plugin.py`
 
-`_refresh_discovered` reemplazaba TODOS los plugins al ejecutar discovery, sin verificar si la definición de la clase cambió.
+El hot reload controller detecta cambios de archivos (watchdog en `plugins/`, `voices/`) y ejecuta `replace_plugin` → `disable_plugin` → `_stop_worker` → `worker.cancel()`. Esto cancela el worker del plugin mientras está procesando una llamada LLM, matando la tarea de generación a mitad de la respuesta HTTP.
 
-**Fix:** `type(replacement) is not type(active)` antes de `replace_plugin`.
+**Reproducción:**
+1. Config con `hot_reload = true` (default en `~/.config/kateto/config.toml`)
+2. Enviar `generate` event a jane
+3. El hot reload detecta cambios de archivos (watchdog events) y reemplaza el plugin
+4. El worker de jane se cancela → la respuesta HTTP se cancela → timeout
 
-**Test:** `kateto/tests/test_hot_reload_no_unnecessary_replacement.py` — 4 tests, todos pasan.
+**Evidencia:**
+```
+[PROVIDER] future.cancel() called from:
+  hot_reload.py:120, in handle_change
+  hot_reload.py:202, in _refresh_discovered  
+  manager.py:101, in replace_plugin
+  manager.py:88, in disable_plugin
+  plugin.py:89, in _stop_worker → worker.cancel()
+```
+
+**Causa:** `HotReloadController` monitorea `plugins/` y `voices/` con watchdog. Cualquier cambio de archivo (incluyendo writes del propio sistema) dispara `replace_plugin`. El `disable_plugin` cancela el worker, que cancela todas las tareas pendientes incluyendo la llamada LLM.
+
+**Impacto:** El sistema no puede generar respuestas cuando hot_reload está habilitado. Timeout en todas las llamadas LLM via generate events.
+
+**Solución propuesta:**
+1. **Inmediata:** `hot_reload = false` en config (ya es default en `config/defaults/config.toml`, pero `~/.config/kateto/config.toml` lo tiene en `true`)
+2. **Correcta:** No cancelar el worker actual durante `replace_plugin` — esperar a que termine la tarea activa antes de reemplazar
+3. **Alternativa:** Marcar ciertas tareas (LLM calls) como "no cancelable" durante hot reload
 
 ---
 
 ## Issues resueltos / Cerrados
-
 
 ---
 
@@ -335,6 +499,30 @@ kateto/tests/test_hot_reload_discovery.py::test_hot_reload_reconciles_created_mo
 **Evidencia:** `BacklogListData(status="Must")` ya no lanza `ValidationError`. El campo `priority` sigue funcionando igual.
 
 ---
+
+---
+
+## 15. Hot reload reemplaza todos los plugins sin verificar si cambiaron — ✅ RESUELTO
+
+**Severidad:** Crítica
+**Componente:** `kateto/core/hot_reload.py` (`_refresh_discovered`)
+
+`_refresh_discovered` reemplazaba TODOS los plugins al ejecutar discovery, sin verificar si la definición de la clase cambió. Esto cancelaba workers activos (incluyendo llamadas LLM en curso) y destruye estado de plugins que no cambiaron.
+
+**Fix:** Se agregó `type(replacement) is not type(active)` antes de `replace_plugin`. Solo se reemplaza si la clase del plugin cambió (módulo recargado con nueva definición).
+
+```python
+# Antes (bug):
+await self.manager.replace_plugin(active, replacement)  # SIEMPRE
+
+# Después (fix):
+elif type(replacement) is not type(active):
+    await self.manager.replace_plugin(active, replacement)  # solo si la clase cambió
+```
+
+**Archivos:** `kateto/core/hot_reload.py`, `kateto/tests/test_hot_reload_discovery.py`, `kateto/tests/test_hot_reload_no_unnecessary_replacement.py` (nuevo)
+
+**Evidencia:** 9/9 tests pasan. Test `test_hot_reload_does_not_replace_unchanged_plugins` verifica que plugins sin cambios no son reemplazados.
 
 ---
 
