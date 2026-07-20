@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kateto — Interactive Sandbox</title>
+  <script defer src="app.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface-2: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-dim: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --orange: #d29922;
+      --red: #f85149;
+      --purple: #bc8cff;
+      --radius: 8px;
+      --font: system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      max-width: 960px;
+      width: 100%;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      padding: 2rem 0 1.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2rem;
+    }
+
+    .logo {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .logo-sub {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .tagline {
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      margin-top: 0.75rem;
+      max-width: 600px;
+      margin-inline: auto;
+    }
+
+    /* Status Bar */
+    .status-bar {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-dot.offline { background: var(--red); }
+    .status-dot.idle { background: var(--orange); }
+
+    /* Section */
+    .section-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--text);
+    }
+
+    /* Capabilities */
+    .capabilities {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .card-icon {
+      font-size: 1.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+
+    .card p {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    /* Voices */
+    .voices {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .voice-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      position: relative;
+    }
+
+    .voice-name {
+      font-weight: 600;
+      font-size: 1rem;
+    }
+
+    .voice-role {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-top: 0.15rem;
+    }
+
+    .voice-status-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+    }
+
+    /* Event Stream (placeholder) */
+    .event-stream {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-bottom: 2.5rem;
+      min-height: 160px;
+    }
+
+    .event-stream .placeholder {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 1.5rem 0;
+    }
+
+    .event-entry {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.4rem 0;
+      font-size: 0.82rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      border-bottom: 1px solid var(--surface-2);
+    }
+
+    .event-entry:last-child { border-bottom: none; }
+
+    .event-tag {
+      background: var(--surface-2);
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      white-space: nowrap;
+      color: var(--accent);
+    }
+
+    .event-text { color: var(--text-dim); word-break: break-all; }
+    .event-text .highlight { color: var(--green); }
+
+    /* Sandbox CTA */
+    .sandbox-cta {
+      text-align: center;
+      padding: 2rem;
+      background: linear-gradient(135deg, var(--surface), var(--surface-2));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 1.5rem;
+    }
+
+    .sandbox-cta h2 {
+      font-size: 1.3rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .sandbox-cta p {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 0.65rem 1.5rem;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      text-decoration: none;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+
+    .btn-primary:hover { background: #79c0ff; }
+
+    .btn-secondary {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover { background: var(--border); }
+
+    .btn-group { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.8rem;
+      padding: 1.5rem 0;
+      border-top: 1px solid var(--border);
+      margin-top: 1rem;
+    }
+
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* WS indicator */
+    .ws-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 1rem 0.75rem; }
+      .logo { font-size: 1.8rem; }
+      .capabilities { grid-template-columns: 1fr; }
+      .voices { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">⌘ Kateto</div>
+      <div class="logo-sub">Event-Driven Voice Team</div>
+      <p class="tagline">
+        Three AI voices — Jane, Doktor, Conquest — collaborate in real time
+        through an event-driven architecture. Plan sprints, analyze risks,
+        run standups, and manage backlogs by voice.
+      </p>
+    </header>
+
+    <!-- Status Bar -->
+    <div class="status-bar" id="statusBar">
+      <span class="status-badge">
+        <span class="status-dot offline" id="systemDot"></span>
+        <span id="systemStatus">Disconnected</span>
+      </span>
+      <span class="status-badge">
+        <span id="wsIndicator" class="ws-indicator">⚡ Standalone</span>
+      </span>
+      <span class="status-badge">
+        <span id="voicesOnline">0</span> / <span id="voicesTotal">3</span> voices active
+      </span>
+    </div>
+
+    <!-- Capabilities -->
+    <h2 class="section-title">Core Capabilities</h2>
+    <div class="capabilities" id="capabilitiesGrid"></div>
+
+    <!-- Voices -->
+    <h2 class="section-title">Voices</h2>
+    <div class="voices" id="voicesGrid"></div>
+
+    <!-- Event Stream -->
+    <h2 class="section-title">Live Event Stream</h2>
+    <div class="event-stream" id="eventStream">
+      <div class="placeholder">⏳ Waiting for connection…<br><small>Events will appear here in real time</small></div>
+    </div>
+
+    <!-- Sandbox CTA -->
+    <div class="sandbox-cta">
+      <h2>🚀 Try Kateto in Your Browser</h2>
+      <p>
+        Spin up a sandboxed Kateto instance running in fixture mode —
+        no installation, no API keys, no setup. Just click and explore.
+      </p>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btnSandbox" disabled>
+          ⏳ Preparing sandbox…
+        </button>
+        <button class="btn btn-secondary" id="btnRefresh">
+          ↻ Refresh status
+        </button>
+      </div>
+      <p style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-dim);">
+        Sandbox connects to a Kateto instance via WebSocket.
+        <a href="#" id="setupGuideLink" style="color: var(--accent);">Setup guide →</a>
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>
+        Kateto — Open source · <a href="https://github.com/OpenaiBuildWeek/Kateto">GitHub</a>
+        · Built with Python 3.12+ · Textual TUI · MCP
+      </p>
+    </footer>
+  </div>
+</body>
+</html>

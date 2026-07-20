@@ -19,6 +19,12 @@
 
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|
+| 25 | Web sandbox: presentación interactiva del sistema Kateto | Media | `web/` (nuevo) | [25-web-sandbox-presentation.md](./bugs/25-web-sandbox-presentation.md) |
+| 24 | TUI: conflictos de nombres entre voces activadas y plugins auto-detectados | Media | `kateto/plugins/system/tui.py` | [24-tui-voice-name-conflict.md](./bugs/24-tui-voice-name-conflict.md) |
+| 23 | Nuevo plugin VoiceSOULManager: gestión centralizada de SOUL/JOURNAL/workflows | Media | `kateto/plugins/voice_soul_manager/` | [23-plugin-soul-journal-manager.md](./bugs/23-plugin-soul-journal-manager.md) |
+
+| # | Bug | Severidad | Componente | Archivo |
+|---|-----|-----------|------------|---------|
 | 3 | CallbackQueue con capacity fijo en 32 | Baja | `plugins/audio_input/base.py` | [03-callbackqueue-capacity.md](./bugs/03-callbackqueue-capacity.md) |
 | 4 | Plugins sin isolation de errores | Alta | `core/manager.py` | [04-plugin-error-isolation.md](./bugs/04-plugin-error-isolation.md) |
 | 5 | Sin logging estructurado | Media | `voices/base.py` | [05-no-structured-logging.md](./bugs/05-no-structured-logging.md) |

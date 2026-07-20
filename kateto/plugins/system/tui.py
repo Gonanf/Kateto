@@ -606,6 +606,8 @@ class KatetoApp(App[None]):
                     p.enabled = config.settings.plugin[name].enabled
                     plugins[name] = p
             for name in config.settings.voice:
+                if name in plugins:
+                    continue
                 plugin_name = f"voice_{name}"
                 if plugin_name not in plugins:
                     p = Plugin(plugin_name)

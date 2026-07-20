@@ -67,3 +67,6 @@ enabled = true
 
 [plugin.backlog]
 enabled = true
+
+[plugin.voice_soul_manager]
+enabled = true
