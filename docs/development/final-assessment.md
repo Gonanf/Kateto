@@ -46,4 +46,6 @@ The release is not yet a general hosted voice service. Microphone capture, model
 - [ ] Required Codex `/feedback` session ID is recorded in the submission form.
 - [ ] Final dependency/provider/model licenses and terms are checked against the official sources.
 
+Current release blocker: `kateto smoke --fixture` still references the removed `scripts/qa/acceptance.py`; this is tracked as [bug 26](../bugs/26-smoke-cli-deleted-qa-path.md). The focused event-manager and TUI regression tests pass, but the smoke command must be repaired before publishing.
+
 The complete deployment sequence and provider safety controls live in [`free-publishing-plan.md`](./free-publishing-plan.md).

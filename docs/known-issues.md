@@ -13,6 +13,7 @@
 | 2 | Sin tests end-to-end | Media | `kateto/tests/` | [02-no-e2e-tests.md](./bugs/02-no-e2e-tests.md) |
 | 7 | Proyecto no runneable sin configuración externa | Alta | `README.md`, `config/defaults/` | [07-not-runnable.md](./bugs/07-not-runnable.md) |
 | 12 | TODO.md se escribe en voices/shared/ | Informativa | `plugins/executor/todo_list.py` | [12-todo-md-location.md](./bugs/12-todo-md-location.md) |
+| 26 | CLI smoke apunta a scripts/qa eliminado | Media | `kateto/__main__.py`, `script/qa` | [26-smoke-cli-deleted-qa-path.md](./bugs/26-smoke-cli-deleted-qa-path.md) |
 
 
 ## Resueltos (✅)

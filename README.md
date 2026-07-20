@@ -49,10 +49,10 @@ This is the no-network path used for a reliable recording or review.
 2. **0:20–1:05 — conversation loop**
 
    ```bash
-   uv run python scripts/qa/vertical_slice.py --fixture --prompt "plan tomorrow standup"
+   uv run pytest kateto/tests/test_conversation_loop.py -q
    ```
 
-   Show `TRANSCRIPTION`, `CLASSIFICATION category=EXECUTE`, three `GENERATE` lines, `STREAMED_RESPONSE`, `AUDIO_CHUNK`, and `TTS_PCM`.
+   This validates the fixture conversation loop without requiring external services.
 
 3. **1:05–1:35 — live event surface**
 
@@ -65,20 +65,18 @@ This is the no-network path used for a reliable recording or review.
 4. **1:35–2:00 — interruption and resume**
 
    ```bash
-   uv run python scripts/qa/vertical_slice.py --fixture --prompt "plan tomorrow standup" --interrupt-at token:3
+   uv run pytest kateto/tests/test_conversation_adversarial.py -q
    ```
 
-   Point out `INTERRUPT cancellation_streams=...` followed by `RESUME count=1`.
+   Point out the interrupt and stream-recovery assertions in the fixture test output.
 
 5. **2:00–2:40 — real work-shaped fixture**
 
    ```bash
-   uv run python scripts/qa/mcp_fixture.py send_event --event backlog_list --wait
-   uv run python scripts/qa/backlog_fixture.py add --title "Demo task" --priority Must
-   uv run python scripts/qa/workflow_fixture.py --workflow daily-standup --voice Conquest
+   uv run pytest kateto/tests/test_conversation_loop.py kateto/tests/test_workflow.py -q
    ```
 
-   These commands exercise the authorized MCP event, atomic backlog write, and declarative workflow lifecycle. The complete bounded smoke is also available as `XDG_CONFIG_HOME="$(mktemp -d)" uv run kateto smoke --fixture`; it writes its own evidence under `.omo/evidence/kateto-mvp/task-15/cli-smoke`.
+   These tests exercise the event-driven conversation and declarative workflow lifecycle. The complete bounded CLI smoke is tracked separately in [bug 26](docs/bugs/26-smoke-cli-deleted-qa-path.md) until its deleted QA runner path is repaired.
 
 ## Provider and audio preflight
 
