@@ -177,6 +177,36 @@ async def test_tui_renders_live_runtime_state_and_controls(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
+async def test_tui_keeps_plugin_switch_visible_in_narrow_panel(tmp_path: Path) -> None:
+    # Given: a plugin panel rendered at a narrow terminal width.
+    manager = PluginManager()
+    plugin = _FixturePlugin()
+    engine = WorkflowEngine(config_dir=tmp_path)
+    runtime = _RuntimeOwnerLike(
+        manager=manager,
+        runtime_plugins=(plugin, engine),
+        workflow_engine=engine,
+    )
+    app = KatetoApp(runtime=runtime)
+
+    # When: the plugins tab is rendered in a narrow terminal.
+    async with app.run_test(size=(30, 24)) as pilot:
+        app.query_one("#workspace", TabbedContent).active = "plugins-tab"
+        await pilot.pause()
+        row = app.query_one(".plugin-row")
+        selector = app.query_one("#select-fixture_plugin", Button)
+        switch = app.query_one("#switch-fixture_plugin", Switch)
+
+        # Then: the real Switch and its row remain visibly contained.
+        assert switch.region.width == 6
+        assert switch.region.x >= row.region.x
+        assert switch.region.right <= row.region.right
+        assert selector.region.width > 0
+
+    assert not runtime.is_started
+
+
+@pytest.mark.asyncio
 async def test_tui_uses_bounded_manager_history_and_applies_audio_configuration(tmp_path: Path) -> None:
     # Given: a manager with a bounded history and typed device configuration controls.
     manager = PluginManager(event_limit=2)

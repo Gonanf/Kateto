@@ -128,8 +128,9 @@ class KatetoApp(App[None]):
     #plugin-panel-left { width: 40%; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
     #plugin-panel-right { width: 1fr; height: 1fr; border: round $secondary; padding: 1; }
     #plugin-list { height: auto; }
-    .plugin-row { height: 3; grid-size: 3; grid-columns: 1fr auto 8; }
-    Switch { width: 8; margin: 0 1; }
+    .plugin-row { width: 1fr; height: 3; grid-size: 3; grid-columns: 1fr auto 6; }
+    .plugin-name { width: 1fr; min-width: 1; }
+    .plugin-switch { width: 6; margin: 0; }
     .plugin-name.selected { background: $accent; color: $surface; }
     #plugin-history { height: auto; max-height: 12; overflow-y: auto; min-height: 0; border-top: solid $secondary; margin-top: 1; padding: 1; }
     #plugin-config-section { height: auto; max-height: 12; overflow-y: auto; border-top: solid $secondary; margin-top: 1; padding: 1; }
@@ -604,7 +605,7 @@ class KatetoApp(App[None]):
         return Grid(
             Button(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
             Static(audio, id=f"audio-status-{plugin.name}"),
-            Switch(value=plugin.enabled, id=f"switch-{plugin.name}"),
+            Switch(value=plugin.enabled, id=f"switch-{plugin.name}", classes="plugin-switch"),
             classes="plugin-row",
         )
 

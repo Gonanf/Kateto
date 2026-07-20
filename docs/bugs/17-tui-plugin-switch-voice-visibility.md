@@ -3,14 +3,14 @@ id: 17
 title: "TUI: Switch de plugins no visible, voces deshabilitadas no aparecen en el tree"
 severity: Media
 status: resolved
-resolved: 2026-07-19
-component: kateto/plugins/system/tui.py / kateto/run_mode.py
+resolved: 2026-07-20
+component: kateto/plugins/system/tui.py / kateto/tests/test_tui.py / kateto/run_mode.py
 ---
 
 ## 17. TUI: Switch de plugins no visible, voces deshabilitadas no aparecen en el tree
 
 **Severidad:** Media
-**Componente:** `kateto/plugins/system/tui.py`, `kateto/run_mode.py`
+**Componente:** `kateto/plugins/system/tui.py`, `kateto/tests/test_tui.py`, `kateto/run_mode.py`
 
 ### Descripción
 
@@ -40,11 +40,12 @@ Dos problemas de visibilidad en el TUI (modo real, sin `--fixture`):
 
 **Solución aplicada:**
 
-1. Eliminado `Static(enabled_status)` redundante (el Switch ya muestra on/off).
-2. Cambiado `.plugin-name { width: 24; }` a `width: 1fr` para que el Button no acapare espacio fijo.
-3. Cambiado `workflow_voices` en `run_mode.py` para incluir todas las voces configuradas, no solo las habilitadas. La voz deshabilitada ahora aparece en el tree (con workflows INACTIVE o similares).
+1. El `Grid` de cada fila reserva una columna de seis celdas para el `Switch` real y el selector del plugin usa el espacio restante, con un ancho mínimo de una celda.
+2. El `Switch` recibe una clase específica y margen cero para que su pista y control permanezcan dentro de la fila en terminales angostas.
+3. Se agregó una prueba de regresión con terminal de 30 columnas que verifica la geometría renderizada del `Switch` y que el selector no colapse.
+4. Se conserva la corrección previa que incluye las voces configuradas aunque estén deshabilitadas, permitiendo mostrarlas en el tree.
 
-**Archivos modificados:** `kateto/plugins/system/tui.py`, `kateto/run_mode.py`
+**Archivos modificados:** `kateto/plugins/system/tui.py`, `kateto/tests/test_tui.py`, `kateto/run_mode.py`
 
 **Posible solución (original):**
 
