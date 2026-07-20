@@ -1,7 +1,7 @@
 # Final MVP assessment
 
-**Assessment date:** 2026-07-20  
-**Track:** Work and Productivity  
+**Assessment date:** 2026-07-20
+**Track:** Work and Productivity
 **Project:** Kateto
 
 ## Verdict

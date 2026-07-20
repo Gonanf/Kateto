@@ -8,7 +8,7 @@ component: kateto/__main__.py / script/qa
 
 ## 26. CLI smoke apunta a scripts/qa eliminado
 
-**Severidad:** Media  
+**Severidad:** Media
 **Componente:** `kateto/__main__.py`, `script/qa`
 
 ### Descripción
