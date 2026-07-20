@@ -39,7 +39,7 @@ class FixtureClassifier:
     async def aclose(self) -> None:
         pass
 
-    async def classify(self, text: str) -> ClassificationData:
+    async def classify(self, text: str, *, agents: tuple[str, ...] = ()) -> ClassificationData:
         self.received.append(text)
         return ClassificationData(text=text, category=self._category)
 

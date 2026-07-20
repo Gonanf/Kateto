@@ -1,35 +1,17 @@
 from __future__ import annotations
 
+import asyncio  # noqa: ANYIO_OK
 import logging
-import subprocess
 from collections.abc import AsyncIterator
 from types import TracebackType
 from typing import Self
-from wave import Wave_read
 
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, TextChunk
 
 log = logging.getLogger(__name__)
 
-
-def _mp3_to_pcm(mp3_data: bytes, *, sample_rate: int = 24000) -> tuple[bytes, int]:
-    proc = subprocess.run(
-        [
-            "ffmpeg",
-            "-i", "pipe:0",
-            "-f", "wav",
-            "-acodec", "pcm_s16le",
-            "-ar", str(sample_rate),
-            "-ac", "1",
-            "pipe:1",
-        ],
-        input=mp3_data,
-        capture_output=True,
-        check=True,
-    )
-    with Wave_read(__import__("io").BytesIO(proc.stdout)) as w:
-        return w.readframes(w.getnframes()), w.getframerate()
+_CHUNK_SIZE = 8192  # ~170ms PCM at 24000Hz s16le mono
 
 
 class EdgeTTSProvider:
@@ -62,38 +44,69 @@ class EdgeTTSProvider:
         *,
         voice: str,
     ) -> AsyncIterator[AudioOutput]:
-        # ponytail: edge-tts returns MP3; convert to PCM s16le via ffmpeg subprocess
+        # ponytail: stream MP3 chunks through ffmpeg stdin, read raw PCM from stdout
         import edge_tts  # noqa: PLC0415
 
         communicate = edge_tts.Communicate(text=sentence.text, voice=voice)
-        mp3_chunks: list[bytes] = []
-        async for chunk in communicate.stream():
-            if chunk.get("type") == "audio":
-                audio_data: bytes | None = chunk.get("data")
-                if audio_data:
-                    mp3_chunks.append(audio_data)
-        if not mp3_chunks:
-            return
-        mp3_data = b"".join(mp3_chunks)
-        log.debug(
-            "[edgetts] TTS for voice=%s text=%r: %d MP3 bytes",
-            voice, sentence.text, len(mp3_data),
+
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg",
+            "-i", "pipe:0",
+            "-f", "s16le",
+            "-acodec", "pcm_s16le",
+            "-ar", "24000",
+            "-ac", "1",
+            "pipe:1",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
         )
-        pcm, sample_rate = _mp3_to_pcm(mp3_data)
-        yield AudioOutput(
-            samples=pcm,
-            sample_rate=sample_rate,
-            channels=1,
-            format="pcm_s16le",
-            voice_id=voice,
-            sequence=0,
+        stdin = proc.stdin
+        stdout = proc.stdout
+        assert stdin is not None and stdout is not None
+
+        async def _feed() -> None:
+            async for chunk in communicate.stream():
+                if chunk.get("type") == "audio":
+                    audio_data: bytes | None = chunk.get("data")
+                    if audio_data:
+                        stdin.write(audio_data)
+                        await stdin.drain()
+            await stdin.drain()
+            stdin.close()
+
+        feed_task = asyncio.create_task(_feed())
+        seq = 0
+        total_pcm = 0
+        try:
+            while True:
+                pcm = await stdout.read(_CHUNK_SIZE)
+                if not pcm:
+                    break
+                total_pcm += len(pcm)
+                yield AudioOutput(
+                    samples=pcm,
+                    sample_rate=24_000,
+                    channels=1,
+                    format="pcm_s16le",
+                    voice_id=voice,
+                    sequence=seq,
+                )
+                seq += 1
+        finally:
+            await feed_task
+            await proc.wait()
+
+        log.debug(
+            "[edgetts] TTS for voice=%s text=%r: %d PCM bytes across %d chunks",
+            voice, sentence.text, total_pcm, seq,
         )
         yield AudioOutput(
             samples=b"",
-            sample_rate=sample_rate,
+            sample_rate=24_000,
             channels=1,
             format="pcm_s16le",
             voice_id=voice,
-            sequence=1,
+            sequence=seq,
             final=True,
         )

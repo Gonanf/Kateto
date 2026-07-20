@@ -179,6 +179,7 @@ class KatetoApp(App[None]):
         self._stop_runtime_started = False
         self._voice_texts: dict[str, str] = {}
         self._voice_bubble_seq: dict[str, int] = {}
+        self._pending_refresh = False
         self.manager.register_event("tui_event", TuiEventData)
         self.manager.add_event_observer(self._observe_event)
 
@@ -503,8 +504,10 @@ class KatetoApp(App[None]):
         if not self.is_mounted:
             return
         self._record_event(envelope)
-        self._refresh_view_after_event()
         source_voice = envelope.source.split("/")[0]
+        is_streaming = isinstance(envelope.data, TextChunk | VoiceStatusData | AudioInputStatusData | AudioOutputStatusData)
+        if not is_streaming:
+            self._refresh_view_after_event()
         if source_voice not in self.runtime.workflow_voices:
             return
         if isinstance(envelope.data, VoiceStatusData):
@@ -534,8 +537,16 @@ class KatetoApp(App[None]):
         self._update_audio_status(envelope)
 
     def _refresh_view_after_event(self) -> None:
-        if self.is_mounted:
-            self.call_after_refresh(self._refresh_view)
+        if self._pending_refresh:
+            return
+        self._pending_refresh = True
+
+        def _do_refresh() -> None:
+            self._pending_refresh = False
+            if self.is_mounted:
+                self._refresh_view()
+
+        self.call_after_refresh(_do_refresh)
 
     def _refresh_view(self) -> None:
         if not self.is_mounted:

@@ -14,7 +14,6 @@ from kateto.core.manager import PluginManager
 
 if TYPE_CHECKING:
     from kateto.providers import ClassifierProvider
-    from kateto.voices.base import VoiceAgent
 
 
 class ClassifierExecutor(Plugin):
@@ -65,6 +64,8 @@ class ClassifierExecutor(Plugin):
                 assert_never(unreachable)
 
     def _collect_agent_names(self) -> tuple[str, ...]:
+        from kateto.voices.base import VoiceAgent
+
         manager = self.manager
         if manager is None:
             return ()

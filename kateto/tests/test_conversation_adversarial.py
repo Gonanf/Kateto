@@ -42,7 +42,7 @@ class _TestableClassifierExecutor(ClassifierExecutor):
 
 
 class MalformedClassifier:
-    async def classify(self, text: str) -> ClassificationData:
+    async def classify(self, text: str, *, agents: tuple[str, ...] = ()) -> ClassificationData:
         raise MalformedUpstreamResponse(provider="classifier", reason="fixture malformed response")
 
 
@@ -99,7 +99,7 @@ async def test_transcription_prompt_injection_stays_untrusted_text_not_a_todo_co
     manager = PluginManager()
 
     class ExecuteClassifier:
-        async def classify(self, text: str) -> ClassificationData:
+        async def classify(self, text: str, *, agents: tuple[str, ...] = ()) -> ClassificationData:
             return ClassificationData(text=text, category=Classification.EXECUTE)
 
     await _enable_adversarial_pipeline(
