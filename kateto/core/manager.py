@@ -17,6 +17,9 @@ EventHandler = Callable[[BaseModel], Awaitable[None]]
 Subscriber = tuple[str, EventHandler]
 EventObserver = Callable[[EventEnvelope[BaseModel]], None]
 DEFAULT_EVENT_LIMIT: Final = 1_000
+HISTORY_BYTES_LIMIT: Final = 4_096
+HISTORY_TEXT_LIMIT: Final = 4_096
+HISTORY_COLLECTION_LIMIT: Final = 128
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,8 +183,9 @@ class PluginManager:
             reply_to=reply_to,
             correlation_id=correlation_id,
         )
-        self._events.append(envelope)
-        self._history_for(self._sent_events, envelope.source.split("/", maxsplit=1)[0]).append(envelope)
+        history_envelope = self._compact_history_envelope(envelope)
+        self._events.append(history_envelope)
+        self._history_for(self._sent_events, envelope.source.split("/", maxsplit=1)[0]).append(history_envelope)
         log.debug("emit %s source=%s target=%s", name, source, target or "*")
         for observer in tuple(self._event_observers):
             observer(envelope)
@@ -190,11 +194,44 @@ class PluginManager:
             recipients = recipients[:1]
         log.debug("dispatch %s to %s", name, [p.name for p, _ in recipients])
         for plugin, handler in recipients:
-            self._history_for(self._received_events, plugin.name).append(envelope)
+            self._history_for(self._received_events, plugin.name).append(history_envelope)
             task = asyncio.create_task(plugin._enqueue(envelope, handler))
             self._dispatch_tasks.add(task)
             task.add_done_callback(self._complete_dispatch)
         return envelope
+
+    def _compact_history_envelope(
+        self,
+        envelope: EventEnvelope[BaseModel],
+    ) -> EventEnvelope[BaseModel]:
+        return envelope.model_copy(update={"data": self._compact_history_data(envelope.data)})
+
+    def _compact_history_data(self, data: BaseModel) -> BaseModel:
+        compacted = data
+        for field_name in type(data).model_fields:
+            value = getattr(data, field_name)
+            match value:
+                case BaseModel() as nested:
+                    replacement = self._compact_history_data(nested)
+                case bytes() as payload if len(payload) > HISTORY_BYTES_LIMIT:
+                    replacement = b""
+                case str() as text if len(text) > HISTORY_TEXT_LIMIT:
+                    replacement = f"<compacted {len(text)} character payload>"
+                case dict() as collection if len(collection) > HISTORY_COLLECTION_LIMIT:
+                    replacement = {}
+                case list() as collection if len(collection) > HISTORY_COLLECTION_LIMIT:
+                    replacement = []
+                case tuple() as collection if len(collection) > HISTORY_COLLECTION_LIMIT:
+                    replacement = ()
+                case set() as collection if len(collection) > HISTORY_COLLECTION_LIMIT:
+                    replacement = set()
+                case frozenset() as collection if len(collection) > HISTORY_COLLECTION_LIMIT:
+                    replacement = frozenset()
+                case _:
+                    replacement = value
+            if replacement is not value:
+                compacted = compacted.model_copy(update={field_name: replacement})
+        return compacted
 
     async def wait_for_idle(self, *, timeout: float = 5) -> None:
         try:

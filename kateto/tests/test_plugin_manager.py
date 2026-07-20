@@ -3,15 +3,47 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from pydantic import BaseModel
 
 import kateto.core as core
 
 from kateto.core import Plugin, PluginEventHistory, PluginManager, get_plugin_manager
-from kateto.core.event import EventModel, GenerateData, InterruptData
+from kateto.core.event import AudioData, AudioOutput, EventEnvelope, EventModel, GenerateData, InterruptData
 
 
 class ContextData(EventModel):
     text: str
+
+
+class CollectionData(EventModel):
+    text: str
+    values: list[int]
+    metadata: dict[str, int]
+
+
+class HistoryReceiver(Plugin):
+    def __init__(self) -> None:
+        super().__init__("receiver")
+        self.audio_chunks: list[bytes] = []
+        self.audio_outputs: list[bytes] = []
+        self.contexts: list[str] = []
+        self.delivered = asyncio.Event()
+
+    async def on_audio_chunk(self, data: AudioData) -> None:
+        self.audio_chunks.append(data.samples)
+        self._mark_delivered()
+
+    async def on_audio_output(self, data: AudioOutput) -> None:
+        self.audio_outputs.append(data.samples)
+        self._mark_delivered()
+
+    async def on_context(self, data: ContextData) -> None:
+        self.contexts.append(data.text)
+        self._mark_delivered()
+
+    def _mark_delivered(self) -> None:
+        if len(self.audio_chunks) + len(self.audio_outputs) + len(self.contexts) == 3:
+            self.delivered.set()
 
 
 class LifecyclePlugin(Plugin):
@@ -257,4 +289,75 @@ async def test_default_event_history_limit_is_finite() -> None:
     assert isinstance(last, ContextData)
     assert first.text == "1"
     assert last.text == "1000"
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_history_compacts_large_audio_payloads_but_preserves_dispatch_payloads() -> None:
+    # Given: a manager retaining events and a receiver for audio and text events.
+    manager = PluginManager()
+    manager.register_event("audio_chunk", AudioData)
+    manager.register_event("audio_output", AudioOutput)
+    manager.register_event("collection", CollectionData)
+    receiver = HistoryReceiver()
+    observed: list[EventEnvelope[BaseModel]] = []
+    manager.add_event_observer(observed.append)
+    await manager.enable_plugin(receiver)
+    audio_samples = b"input" * 20_000
+    output_samples = b"output" * 20_000
+
+    # When: large audio events and a normal text event are emitted.
+    emitted = [
+        await manager.emit(
+            "audio_chunk",
+            AudioData(samples=audio_samples, sample_rate=16_000),
+            source="source",
+        ),
+        await manager.emit(
+            "audio_output",
+            AudioOutput(samples=output_samples, sample_rate=24_000, channels=1),
+            source="source",
+        ),
+        await manager.emit("context", ContextData(text="hello"), source="source"),
+        await manager.emit(
+            "collection",
+            CollectionData(
+                text="x" * 5_000,
+                values=list(range(129)),
+                metadata={str(index): index for index in range(129)},
+            ),
+            source="source",
+        ),
+    ]
+    await receiver.delivered.wait()
+    await manager.wait_for_idle()
+
+    # Then: handlers and observers receive the original payloads.
+    assert receiver.audio_chunks == [audio_samples]
+    assert receiver.audio_outputs == [output_samples]
+    assert receiver.contexts == ["hello"]
+    assert [envelope.data for envelope in observed] == [envelope.data for envelope in emitted]
+
+    # Then: history retains typed envelopes without pinning large payloads.
+    history = manager.get_plugin_event_history("source")
+    assert isinstance(history.sent[0].data, AudioData)
+    assert isinstance(history.sent[1].data, AudioOutput)
+    assert isinstance(history.sent[2].data, ContextData)
+    assert isinstance(history.sent[3].data, CollectionData)
+    assert history.sent[0].data.samples == b""
+    assert history.sent[1].data.samples == b""
+    assert history.sent[2].data.text == "hello"
+    assert history.sent[3].data.text == "<compacted 5000 character payload>"
+    assert history.sent[3].data.values == []
+    assert history.sent[3].data.metadata == {}
+    events = manager.get_events()
+    assert [event.name for event in events] == [event.name for event in emitted]
+    assert isinstance(events[0].data, AudioData)
+    assert isinstance(events[1].data, AudioOutput)
+    assert isinstance(events[2].data, ContextData)
+    assert events[0].data.samples == b""
+    assert events[1].data.samples == b""
+    assert events[2].data.text == "hello"
+    assert isinstance(events[3].data, CollectionData)
+    assert events[3].data.values == []
     await manager.close()
