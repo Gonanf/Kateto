@@ -1,5 +1,7 @@
 # Build Week Requirements
 
+Kateto targets **Work and Productivity**. The public judge path is fixture-first, while live model/audio providers are optional deployment configuration. See [`free-publishing-plan.md`](./free-publishing-plan.md) and [`final-assessment.md`](./final-assessment.md) for the release plan, safety boundaries, and evidence of the work completed.
+
 ## Deliverables
 
 1. **Working project** built with Codex (all code written by Codex)

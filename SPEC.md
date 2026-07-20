@@ -5,6 +5,10 @@
 **Stack:** Python 3.12+ (async/await), uv, pytest, Pydantic, Textual, OpenAI Python SDK
 **Architecture:** Decentralized broker-based event bus. No central mediator.
 
+![Kateto voices](public/jane1.svg) ![Kateto team](public/the_lovers1.svg)
+
+> This file is the canonical MVP page. The implementation is event-oriented: plugins and voices subscribe to event contracts and emit new events through the PluginManager; there is no live-conversation mode or custom pipeline.
+
 ---
 
 ## 1. Goal

@@ -1,6 +1,20 @@
-# Kateto MVP
+# Kateto — an event-driven voice team for Work and Productivity
+
+![Jane](public/jane1.svg) ![Doktor](public/doktor1.svg) ![Conquest](public/conquest1.svg)
 
 Kateto is a small, event-driven voice team for project work. Jane orchestrates, Doktor handles planning and backlog work, and Conquest keeps progress moving. The MVP can run entirely with deterministic fixtures, so setup and demo do not require API keys, model weights, microphones, or audio recordings.
+
+Kateto is built for the OpenAI Build Week **Work and Productivity** track. A request becomes observable work: typed events move through the runtime, agents create plans and workflow progress, and connectors can turn the result into backlog/TODO artifacts. The architecture has no custom conversation pipeline: plugins publish and subscribe to events through the PluginManager.
+
+![The Kateto team](public/the_lovers1.svg)
+
+## What to look for in the demo
+
+- **Events:** send typed events, inspect registrations, and see errors as notifications.
+- **Agents:** watch Jane, Doktor, and Conquest report input, thinking, talking, and idle states.
+- **Plans and work:** inspect global/per-voice workflows, phases, checkpoints, current tasks, backlog, and TODO results.
+- **Runtime:** inspect discovered plugins, MCP servers, configuration, sent/received event history, and hot-reload state.
+- **Safe fallback:** `--fixture` demonstrates the same event-driven behavior without network services or secrets.
 
 ## Setup
 
@@ -98,3 +112,13 @@ For an explicit config directory, call `load_config(config_dir=...)` and `load_s
 ## Safety and repository boundaries
 
 Never commit `.env`, tokens, model weights, private reference audio, generated runtime state, or copyrighted media. The repository defaults contain only non-secret skill instructions and configuration. The full test suite and long acceptance run are separate gates; task-14 validation is limited to clean config bootstrap, skill resolution, and the fixture smoke/runbook surfaces.
+
+## Publishing safely for free
+
+The recommended public deployment is a fixture-first Hugging Face Space on free CPU hardware. Live providers are optional and user-owned: OpenRouter BYOK or a tested local/Ternary-Bonsai classifier, and Edge TTS or Camb.AI for speech. The maintainer key must never be shipped to browsers or shared with anonymous users. ZeroGPU is an experiment rather than the baseline because hosting and quotas depend on the current Hugging Face account tier.
+
+Read the complete [free and safe publishing plan](docs/development/free-publishing-plan.md) and [final MVP assessment](docs/development/final-assessment.md). The latter records what is implemented, what the demo must show, and what remains a deployment caveat.
+
+## Build Week and Codex
+
+This is a solo OpenAI Build Week project in the **Work and Productivity** category. The implementation was developed with Codex and GPT-5.6. The dated commit history is the evidence of incremental work; the final submission must also include the required Codex `/feedback` session ID. The README deliberately separates the reproducible fixture MVP from optional live infrastructure so judges can test the project without rebuilding external model servers.
