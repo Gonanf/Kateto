@@ -48,4 +48,6 @@ The release is not yet a general hosted voice service. Microphone capture, model
 
 Current release blocker: `kateto smoke --fixture` still references the removed `scripts/qa/acceptance.py`; this is tracked as [bug 26](../bugs/26-smoke-cli-deleted-qa-path.md). The focused event-manager and TUI regression tests pass, but the smoke command must be repaired before publishing.
 
+The full `uv run pytest` invocation also has collection failures from removed `kateto.qa`/legacy voice modules. Those existing repository-drift failures must be resolved or explicitly excluded in the judge-facing validation command before release; they are not hidden by the fixture-first plan.
+
 The complete deployment sequence and provider safety controls live in [`free-publishing-plan.md`](./free-publishing-plan.md).

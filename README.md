@@ -49,10 +49,10 @@ This is the no-network path used for a reliable recording or review.
 2. **0:20–1:05 — conversation loop**
 
    ```bash
-   uv run pytest kateto/tests/test_conversation_loop.py -q
+   uv run pytest kateto/tests/test_plugin_manager.py -q
    ```
 
-   This validates the fixture conversation loop without requiring external services.
+   This validates typed event dispatch, plugin lifecycle, and bounded runtime history without requiring external services.
 
 3. **1:05–1:35 — live event surface**
 
@@ -65,18 +65,18 @@ This is the no-network path used for a reliable recording or review.
 4. **1:35–2:00 — interruption and resume**
 
    ```bash
-   uv run pytest kateto/tests/test_conversation_adversarial.py -q
+   uv run kateto tui --fixture
    ```
 
-   Point out the interrupt and stream-recovery assertions in the fixture test output.
+   Point out the event stream, statuses, plugin controls, and error notifications in the live TUI.
 
 5. **2:00–2:40 — real work-shaped fixture**
 
    ```bash
-   uv run pytest kateto/tests/test_conversation_loop.py kateto/tests/test_workflow.py -q
+   uv run pytest kateto/tests/test_workflow.py -q
    ```
 
-   These tests exercise the event-driven conversation and declarative workflow lifecycle. The complete bounded CLI smoke is tracked separately in [bug 26](docs/bugs/26-smoke-cli-deleted-qa-path.md) until its deleted QA runner path is repaired.
+   This exercises declarative workflow discovery and lifecycle. The complete bounded CLI smoke is tracked separately in [bug 26](docs/bugs/26-smoke-cli-deleted-qa-path.md) until its deleted QA runner path is repaired.
 
 ## Provider and audio preflight
 
