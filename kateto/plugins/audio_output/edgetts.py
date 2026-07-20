@@ -26,11 +26,14 @@ class EdgeTTSAudioOutput(Plugin):
         self._provider: EdgeTTSProvider = EdgeTTSProvider(settings) if provider is None else provider
         self._voice_map = dict(voice_map) if voice_map is not None else {}
         self._default_voice: str = default_voice or settings.default_language or "en-US-JennyNeural"
+        self._stream: bool = settings.stream
         self._provider_active: bool = False
         self._interrupted: bool = False
         self._stream_task: asyncio.Task[None] | None = None
         self._playing = False
         self._status_emitted = False
+        self._buffer: dict[str, list[str]] = {}
+        self._buffer_task: asyncio.Task[None] | None = None
 
     @override
     async def initialize(self) -> None:
@@ -57,21 +60,40 @@ class EdgeTTSAudioOutput(Plugin):
         if data.voice_id is None:
             return
         self._interrupted = False
-        task = asyncio.create_task(self._emit_pcm(data), name=f"kateto-edgetts-{data.voice_id}")
-        self._stream_task = task
-        try:
-            await task
-        except asyncio.CancelledError:
-            if not self._interrupted:
-                raise
-        finally:
-            if self._stream_task is task:
-                self._stream_task = None
-            await self._set_playing(False)
+        if self._stream:
+            task = asyncio.create_task(self._emit_pcm(data), name=f"kateto-edgetts-{data.voice_id}")
+            self._stream_task = task
+            try:
+                await task
+            except asyncio.CancelledError:
+                if not self._interrupted:
+                    raise
+            finally:
+                if self._stream_task is task:
+                    self._stream_task = None
+                await self._set_playing(False)
+        else:
+            self._buffer.setdefault(data.voice_id, []).append(data.text)
+            if data.final:
+                full_text = "".join(self._buffer.pop(data.voice_id, []))
+                if full_text.strip():
+                    synthetic = TextChunk(text=full_text, sequence=data.sequence, final=True, voice_id=data.voice_id)
+                    task = asyncio.create_task(self._emit_pcm(synthetic), name=f"kateto-edgetts-{data.voice_id}")
+                    self._buffer_task = task
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        if not self._interrupted:
+                            raise
+                    finally:
+                        if self._buffer_task is task:
+                            self._buffer_task = None
+                        await self._set_playing(False)
 
     async def on_interrupt(self, data: InterruptData) -> None:
         del data
         self._interrupted = True
+        self._buffer.clear()
         await self._cancel_stream()
 
     async def _emit_pcm(self, data: TextChunk) -> None:
@@ -88,14 +110,16 @@ class EdgeTTSAudioOutput(Plugin):
             _ = await self._manager().emit("audio_output", output, source=self.name)
 
     async def _cancel_stream(self) -> None:
-        task = self._stream_task
-        if task is None or task.done():
-            return
-        _ = task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            return
+        for task in (self._stream_task, self._buffer_task):
+            if task is None or task.done():
+                continue
+            _ = task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._stream_task = None
+        self._buffer_task = None
 
     async def _set_playing(self, playing: bool) -> None:
         if self._status_emitted and self._playing == playing:
