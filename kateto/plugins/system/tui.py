@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pydantic.fields import FieldInfo
 from textual.app import App, ComposeResult, Screen
 from textual.containers import Grid, Horizontal, Vertical
+from textual.events import Click
 from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static, Switch, TabbedContent, TabPane, Tree
 
 from kateto.core.event import (
@@ -125,12 +126,12 @@ class KatetoApp(App[None]):
 
     /* Plugins tab */
     #plugin-panel { height: 1fr; }
-    #plugin-panel-left { width: 40%; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
+    #plugin-panel-left { width: 40%; min-width: 16; height: 1fr; overflow-y: auto; border: round $secondary; padding: 1; }
     #plugin-panel-right { width: 1fr; height: 1fr; border: round $secondary; padding: 1; }
     #plugin-list { height: auto; }
-    .plugin-row { width: 1fr; height: 3; grid-size: 3; grid-columns: 1fr auto 6; }
-    .plugin-name { width: 1fr; min-width: 1; }
-    .plugin-switch { width: 6; margin: 0; }
+    .plugin-row { width: 1fr; height: 3; grid-size: 3; grid-columns: 1fr auto auto; }
+    .plugin-name { width: 1fr; min-width: 1; padding: 0 1; }
+    .plugin-switch { width: 10; min-width: 10; margin: 0; }
     .plugin-name.selected { background: $accent; color: $surface; }
     #plugin-history { height: auto; max-height: 12; overflow-y: auto; min-height: 0; border-top: solid $secondary; margin-top: 1; padding: 1; }
     #plugin-config-section { height: auto; max-height: 12; overflow-y: auto; border-top: solid $secondary; margin-top: 1; padding: 1; }
@@ -289,6 +290,14 @@ class KatetoApp(App[None]):
             plugin_name = switch_id.removeprefix("switch-")
             self.run_worker(self._set_plugin(plugin_name, event.value), exclusive=False)
 
+    def on_click(self, event: Click) -> None:
+        widget = event.widget
+        if widget is None:
+            return
+        widget_id = widget.id or ""
+        if widget_id.startswith("select-"):
+            self._select_plugin(widget_id.removeprefix("select-"))
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id or ""
         if button_id == "send-event":
@@ -299,9 +308,7 @@ class KatetoApp(App[None]):
             self.run_worker(self._submit_prompt(), exclusive=False)
             return
         if button_id.startswith("select-"):
-            self._selected_plugin = button_id.removeprefix("select-")
-            self._refresh_plugin_selection()
-            self._refresh_view()
+            self._select_plugin(button_id.removeprefix("select-"))
             return
         if button_id.startswith("apply-config-"):
             self.run_worker(self._configure_plugin(button_id.removeprefix("apply-config-")), exclusive=False)
@@ -452,9 +459,9 @@ class KatetoApp(App[None]):
         bubble_id = f"bubble-{voice}-{seq}"
         self._voice_texts.setdefault(bubble_id, "")
         self._voice_texts[bubble_id] += chunk.text
-        existing = messages.query(f"#{bubble_id}")
+        existing = messages.query(Static).filter(f"#{bubble_id}")
         if existing:
-            existing[0].update(f"[bold]{voice}[/bold]  {self._voice_texts[bubble_id]}")
+            existing.first().update(f"[bold]{voice}[/bold]  {self._voice_texts[bubble_id]}")
         else:
             msg = Static(f"[bold]{voice}[/bold]  {self._voice_texts[bubble_id]}", id=bubble_id, classes="chat-message chat-agent")
             messages.mount(msg)
@@ -594,18 +601,23 @@ class KatetoApp(App[None]):
     def _refresh_plugin_selection(self) -> None:
         for plugin in self._available_plugins():
             try:
-                btn = self.query_one(f"#select-{plugin.name}", Button)
-                btn.classes = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
+                label = self.query_one(f"#select-{plugin.name}", Static)
+                label.classes = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
             except Exception:
                 pass
+
+    def _select_plugin(self, plugin_name: str) -> None:
+        self._selected_plugin = plugin_name
+        self._refresh_plugin_selection()
+        self._refresh_view()
 
     def _plugin_row(self, plugin: Plugin) -> Grid:
         audio = self._audio_status.get(plugin.name, "?")
         selected_class = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
         return Grid(
-            Button(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
+            Static(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
             Static(audio, id=f"audio-status-{plugin.name}"),
-            Switch(value=plugin.enabled, id=f"switch-{plugin.name}", classes="plugin-switch"),
+            Switch(value=plugin.enabled, animate=False, id=f"switch-{plugin.name}", classes="plugin-switch"),
             classes="plugin-row",
         )
 

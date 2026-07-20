@@ -8,7 +8,7 @@ import sys
 
 import pytest
 from watchdog.events import FileCreatedEvent, FileModifiedEvent
-from textual.widgets import Button, Input, Switch, TabPane, TabbedContent
+from textual.widgets import Button, Input, Static, Switch, TabPane, TabbedContent
 
 from kateto.core.hot_reload import HotReloadController, ReloadContext, _ReloadHandler
 from kateto.core.event import (
@@ -194,14 +194,21 @@ async def test_tui_keeps_plugin_switch_visible_in_narrow_panel(tmp_path: Path) -
         app.query_one("#workspace", TabbedContent).active = "plugins-tab"
         await pilot.pause()
         row = app.query_one(".plugin-row")
-        selector = app.query_one("#select-fixture_plugin", Button)
+        selector = app.query_one("#select-fixture_plugin", Static)
         switch = app.query_one("#switch-fixture_plugin", Switch)
 
-        # Then: the real Switch and its row remain visibly contained.
-        assert switch.region.width == 6
+        # Then: the real Switch, not a Button styled as one, remains visibly contained.
+        assert not isinstance(selector, Switch)
+        assert switch.region.width >= 10
         assert switch.region.x >= row.region.x
         assert switch.region.right <= row.region.right
         assert selector.region.width > 0
+
+        # Then: the native switch remains interactive at the narrow width.
+        initial_value = switch.value
+        switch.toggle()
+        await pilot.pause(0.1)
+        assert switch.value is not initial_value
 
     assert not runtime.is_started
 
@@ -237,7 +244,7 @@ async def test_tui_uses_bounded_manager_history_and_applies_audio_configuration(
         configured = runtime.plugin_configuration("audio_input_mic")
         assert configured is not None
         assert configured.microphone == "configured-mic"
-        assert any(notification.startswith("CONFIGURED audio_input_mic") for notification in app._notifications)
+        assert any(str(notification).startswith("CONFIGURED audio_input_mic") for notification in app._notifications)
 
     assert not runtime.is_started
 
@@ -517,11 +524,11 @@ async def test_tui_workspace_tabs_status_history_and_json_composer(tmp_path: Pat
         composer.value = '{"message":3}'
         app.query_one("#send-event", Button).press()
         await pilot.pause(0.1)
-        assert any("invalid JSON" in notification for notification in app._notifications)
+        assert any("invalid JSON" in str(notification) for notification in app._notifications)
 
         await manager.emit("error", PluginErrorData(plugin="fixture_plugin", event_name="tui_event", error_type="RuntimeError", message="boom"), source="fixture_plugin")
         await pilot.pause()
-        assert "ERROR [fixture_plugin]: boom" in app._notifications
+        assert any("ERROR [fixture_plugin]: boom" in str(notification) for notification in app._notifications)
 
     assert not runtime.is_started
 
