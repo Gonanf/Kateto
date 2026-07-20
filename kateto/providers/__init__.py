@@ -6,10 +6,14 @@ from .errors import (
 )
 from .llm import ChatMessage, LlamaCppChatProvider, OpenAIResponsesProvider
 from .whisper import WhisperProvider
+from .camb import CambProvider
+from .edgetts import EdgeTTSProvider
 from .zonos import ZonosProvider
 
 __all__ = [
     "AgentResponse",
+    "CambProvider",
+    "EdgeTTSProvider",
     "ChatMessage",
     "ClassifierProvider",
     "LlamaCppChatProvider",

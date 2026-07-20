@@ -62,6 +62,8 @@ class PluginSettings(_ConfigModel):
     context_window: int | None = Field(default=None, gt=0)
     stream: bool = True
     callback_queue_capacity: int | None = Field(default=None, gt=0)
+    default_voice_id: int | None = None
+    default_language: str | None = None
 
     @field_validator("endpoint", "model_endpoint")
     @classmethod
@@ -86,6 +88,9 @@ class VoiceSettings(_ConfigModel):
     reference_audio: str | None = None
     reference_clip: str | None = None
     stream: bool = True
+    camb_voice_id: int | None = None
+    camb_language: str | None = None
+    edge_tts_voice: str | None = None
 
     @field_validator(*_ASSET_FIELDS)
     @classmethod

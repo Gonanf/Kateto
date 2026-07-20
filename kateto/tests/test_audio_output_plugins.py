@@ -7,6 +7,8 @@ import pytest
 from kateto.core import Plugin, PluginManager
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, TextChunk
+from kateto.plugins.audio_output.camb import CambAudioOutput
+from kateto.plugins.audio_output.edgetts import EdgeTTSAudioOutput
 from kateto.plugins.audio_output.player import AudioOutputPlayer
 from kateto.plugins.audio_output.zonos import ZonosAudioOutput
 
@@ -188,3 +190,283 @@ async def test_player_consumes_pcm_and_stops_on_final_and_interrupt() -> None:
         AudioOutputStatusData(status=AudioOutputStatus.IDLE),
     ]
     await manager.close()
+
+
+class RecordingCambProvider:
+    def __init__(self) -> None:
+        self.entered: bool = False
+        self.closed: bool = False
+        self.requests: list[tuple[TextChunk, int, str]] = []
+
+    async def __aenter__(self) -> RecordingCambProvider:
+        self.entered = True
+        return self
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+    async def stream_sentence(
+        self, sentence: TextChunk, *, voice_id: int, language: str
+    ) -> AsyncIterator[AudioOutput]:
+        self.requests.append((sentence, voice_id, language))
+        yield AudioOutput(
+            samples=b"\x05\x00\x06\x00",
+            sample_rate=48_000,
+            channels=1,
+            format="pcm_s16le",
+            voice_id=str(voice_id),
+            sequence=sentence.sequence,
+        )
+        yield AudioOutput(
+            samples=b"",
+            sample_rate=48_000,
+            channels=1,
+            format="pcm_s16le",
+            voice_id=str(voice_id),
+            sequence=sentence.sequence + 1,
+            final=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_camb_streams_pcm_with_voice_map_lookup() -> None:
+    manager = PluginManager()
+    provider = RecordingCambProvider()
+    voice_map = {
+        "jane": {"camb_voice_id": 999, "camb_language": "es-es"},
+    }
+    camb = CambAudioOutput(
+        PluginSettings(endpoint="http://camb.test"),
+        provider=provider,
+        voice_map=voice_map,
+        default_voice_id=147320,
+        default_language="en-us",
+    )
+    recorder = RecordingAudioOutput()
+    await manager.enable_plugin(recorder)
+    await manager.enable_plugin(camb)
+
+    _ = await manager.emit(
+        "text_chunk",
+        TextChunk(text="hola", sequence=2, final=True, voice_id="jane"),
+        source="jane",
+    )
+    await manager.wait_for_idle()
+
+    assert provider.entered
+    assert provider.requests == [(TextChunk(text="hola", sequence=2, final=True, voice_id="jane"), 999, "es-es")]
+    assert recorder.outputs == [
+        AudioOutput(samples=b"\x05\x00\x06\x00", sample_rate=48_000, channels=1, format="pcm_s16le", voice_id="999", sequence=2),
+        AudioOutput(samples=b"", sample_rate=48_000, channels=1, format="pcm_s16le", voice_id="999", sequence=3, final=True),
+    ]
+    assert [event.source for event in manager.get_events() if event.name == "audio_output"] == ["audio_output_camb"] * 2
+    await manager.close()
+    assert provider.closed
+
+
+@pytest.mark.asyncio
+async def test_camb_falls_back_to_default_voice_id_and_language() -> None:
+    manager = PluginManager()
+    provider = RecordingCambProvider()
+    camb = CambAudioOutput(
+        PluginSettings(endpoint="http://camb.test"),
+        provider=provider,
+        voice_map={},
+        default_voice_id=147320,
+        default_language="en-us",
+    )
+    recorder = RecordingAudioOutput()
+    await manager.enable_plugin(recorder)
+    await manager.enable_plugin(camb)
+
+    _ = await manager.emit(
+        "text_chunk",
+        TextChunk(text="hello", sequence=0, final=True, voice_id="unknown"),
+        source="unknown",
+    )
+    await manager.wait_for_idle()
+
+    assert provider.requests == [(TextChunk(text="hello", sequence=0, final=True, voice_id="unknown"), 147320, "en-us")]
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_camb_ignores_text_chunk_without_voice_id() -> None:
+    manager = PluginManager()
+    provider = RecordingCambProvider()
+    camb = CambAudioOutput(
+        PluginSettings(endpoint="http://camb.test"),
+        provider=provider,
+    )
+    await manager.enable_plugin(camb)
+
+    _ = await manager.emit(
+        "text_chunk",
+        TextChunk(text="skip me", sequence=0, final=True, voice_id=None),
+        source="test",
+    )
+    await manager.wait_for_idle()
+
+    assert provider.requests == []
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_camb_plugin_lifecycle_provider_open_and_close() -> None:
+    manager = PluginManager()
+    provider = RecordingCambProvider()
+    camb = CambAudioOutput(
+        PluginSettings(endpoint="http://camb.test"),
+        provider=provider,
+    )
+    await manager.enable_plugin(camb)
+    assert provider.entered
+
+    _ = await manager.emit(
+        "text_chunk",
+        TextChunk(text="test", sequence=0, final=True, voice_id="jane"),
+        source="jane",
+    )
+    await manager.wait_for_idle()
+
+    await manager.close()
+    assert provider.closed
+
+
+class RecordingEdgeTTSProvider:
+    def __init__(self) -> None:
+        self.entered: bool = False
+        self.closed: bool = False
+        self.requests: list[tuple[TextChunk, str]] = []
+
+    async def __aenter__(self) -> RecordingEdgeTTSProvider:
+        self.entered = True
+        return self
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+    async def stream_sentence(
+        self, sentence: TextChunk, *, voice: str
+    ) -> AsyncIterator[AudioOutput]:
+        self.requests.append((sentence, voice))
+        yield AudioOutput(
+            samples=b"\x0a\x00\x0b\x00",
+            sample_rate=24_000,
+            channels=1,
+            format="pcm_s16le",
+            voice_id=voice,
+            sequence=sentence.sequence,
+        )
+        yield AudioOutput(
+            samples=b"",
+            sample_rate=24_000,
+            channels=1,
+            format="pcm_s16le",
+            voice_id=voice,
+            sequence=sentence.sequence + 1,
+            final=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_edgetts_streams_pcm_with_voice_map_lookup() -> None:
+    manager = PluginManager()
+    provider = RecordingEdgeTTSProvider()
+    voice_map = {
+        "jane": {"edge_tts_voice": "es-ES-AlvaroNeural"},
+    }
+    edge = EdgeTTSAudioOutput(
+        PluginSettings(),
+        provider=provider,
+        voice_map=voice_map,
+        default_voice="en-US-JennyNeural",
+    )
+    recorder = RecordingAudioOutput()
+    await manager.enable_plugin(recorder)
+    await manager.enable_plugin(edge)
+
+    _ = await manager.emit(
+        "text_chunk",
+        TextChunk(text="hola", sequence=2, final=True, voice_id="jane"),
+        source="jane",
+    )
+    await manager.wait_for_idle()
+
+    assert provider.entered
+    assert provider.requests == [(TextChunk(text="hola", sequence=2, final=True, voice_id="jane"), "es-ES-AlvaroNeural")]
+    assert recorder.outputs == [
+        AudioOutput(samples=b"\x0a\x00\x0b\x00", sample_rate=24_000, channels=1, format="pcm_s16le", voice_id="es-ES-AlvaroNeural", sequence=2),
+        AudioOutput(samples=b"", sample_rate=24_000, channels=1, format="pcm_s16le", voice_id="es-ES-AlvaroNeural", sequence=3, final=True),
+    ]
+    assert [event.source for event in manager.get_events() if event.name == "audio_output"] == ["audio_output_edgetts"] * 2
+    await manager.close()
+    assert provider.closed
+
+
+@pytest.mark.asyncio
+async def test_edgetts_falls_back_to_default_voice() -> None:
+    manager = PluginManager()
+    provider = RecordingEdgeTTSProvider()
+    edge = EdgeTTSAudioOutput(
+        PluginSettings(),
+        provider=provider,
+        voice_map={},
+        default_voice="en-GB-SoniaNeural",
+    )
+    recorder = RecordingAudioOutput()
+    await manager.enable_plugin(recorder)
+    await manager.enable_plugin(edge)
+
+    _ = await manager.emit(
+        "text_chunk",
+        TextChunk(text="hello", sequence=0, final=True, voice_id="unknown"),
+        source="unknown",
+    )
+    await manager.wait_for_idle()
+
+    assert provider.requests == [(TextChunk(text="hello", sequence=0, final=True, voice_id="unknown"), "en-GB-SoniaNeural")]
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_edgetts_ignores_text_chunk_without_voice_id() -> None:
+    manager = PluginManager()
+    provider = RecordingEdgeTTSProvider()
+    edge = EdgeTTSAudioOutput(
+        PluginSettings(),
+        provider=provider,
+    )
+    await manager.enable_plugin(edge)
+
+    _ = await manager.emit(
+        "text_chunk",
+        TextChunk(text="skip me", sequence=0, final=True, voice_id=None),
+        source="test",
+    )
+    await manager.wait_for_idle()
+
+    assert provider.requests == []
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_edgetts_plugin_lifecycle_provider_open_and_close() -> None:
+    manager = PluginManager()
+    provider = RecordingEdgeTTSProvider()
+    edge = EdgeTTSAudioOutput(
+        PluginSettings(),
+        provider=provider,
+    )
+    await manager.enable_plugin(edge)
+    assert provider.entered
+
+    _ = await manager.emit(
+        "text_chunk",
+        TextChunk(text="test", sequence=0, final=True, voice_id="jane"),
+        source="jane",
+    )
+    await manager.wait_for_idle()
+
+    await manager.close()
+    assert provider.closed

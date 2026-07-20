@@ -29,6 +29,18 @@ enabled = true
 endpoint = "http://127.0.0.1:8093"
 stream = false
 
+[plugin.audio_output_camb]
+enabled = false
+endpoint = "https://client.camb.ai/apis"
+api_key = ""
+model = "mars-8.1-flash-beta"
+default_voice_id = 147320
+default_language = "en-us"
+
+[plugin.audio_output_edgetts]
+enabled = false
+default_language = "en-US-JennyNeural"
+
 [plugin.audio_output_player]
 enabled = true
 

@@ -29,6 +29,7 @@ class JsonResponseFormat(ProviderModel):
 class ClassifierRequest(ProviderModel):
     model: str | None = None
     messages: tuple[ChatMessage, ...] = Field(min_length=1)
+    agents: tuple[str, ...] = Field(default_factory=tuple)
     temperature: float = 0.0
     stream: Literal[False] = False
     response_format: JsonResponseFormat = Field(default_factory=JsonResponseFormat)
@@ -92,6 +93,13 @@ class ResponseDelta(ProviderModel):
 
 class ResponseEventType(ProviderModel):
     type: str = Field(min_length=1)
+
+
+class CambRequest(ProviderModel):
+    text: str = Field(min_length=1)
+    language: str = "en-us"
+    voice_id: int = 147320
+    speech_model: str | None = None
 
 
 class ZonosRequest(ProviderModel):

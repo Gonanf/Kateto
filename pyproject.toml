@@ -5,6 +5,7 @@ description = "Kateto MVP"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "edge-tts>=7.0.0",
     "google-auth-oauthlib==1.2.2",
     "httpx==0.28.1",
     "mcp==1.28.1",

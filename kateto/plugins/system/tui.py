@@ -500,10 +500,10 @@ class KatetoApp(App[None]):
         return _FixturePlugin(plugin.name)
 
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:
-        self._record_event(envelope)
-        self._refresh_view_after_event()
         if not self.is_mounted:
             return
+        self._record_event(envelope)
+        self._refresh_view_after_event()
         source_voice = envelope.source.split("/")[0]
         if source_voice not in self.runtime.workflow_voices:
             return
@@ -524,7 +524,10 @@ class KatetoApp(App[None]):
     def _record_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         self._events.append(envelope)
         if self.is_mounted:
-            self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
+            try:
+                self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
+            except Exception:
+                pass
         if isinstance(envelope.data, PluginErrorData):
             self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
         self._update_voice_status(envelope)

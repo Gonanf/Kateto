@@ -40,13 +40,14 @@ class ClassifierProvider(HttpProvider):
         self._model = settings.model
         self._path = path
 
-    async def classify(self, text: str) -> ClassificationData:
+    async def classify(self, text: str, *, agents: tuple[str, ...] = ()) -> ClassificationData:
         request = ClassifierRequest(
             model=self._model,
             messages=(
                 ChatMessage(role="system", content="Return the classification JSON object."),
                 ChatMessage(role="user", content=text),
             ),
+            agents=agents,
         )
         response = await self._client_or_raise().post(
             self._url(self._path),

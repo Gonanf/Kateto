@@ -12,7 +12,7 @@ class FixtureClassifier:
     def __init__(self, category: Classification) -> None:
         self._category = category
 
-    async def classify(self, text: str) -> ClassificationData:
+    async def classify(self, text: str, *, agents: tuple[str, ...] = ()) -> ClassificationData:
         return ClassificationData(text=text, category=self._category)
 
 

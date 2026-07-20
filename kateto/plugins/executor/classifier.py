@@ -14,6 +14,7 @@ from kateto.core.manager import PluginManager
 
 if TYPE_CHECKING:
     from kateto.providers import ClassifierProvider
+    from kateto.voices.base import VoiceAgent
 
 
 class ClassifierExecutor(Plugin):
@@ -47,7 +48,8 @@ class ClassifierExecutor(Plugin):
         if classifier is None:
             msg = "classifier executor must be enabled before use"
             raise RuntimeError(msg)
-        classification = await classifier.classify(data.text)
+        agents = self._collect_agent_names()
+        classification = await classifier.classify(data.text, agents=agents)
         manager = self._manager()
         _ = await manager.emit("classification", classification, source=self.name)
         match classification.category:
@@ -61,6 +63,16 @@ class ClassifierExecutor(Plugin):
                 return
             case unreachable:
                 assert_never(unreachable)
+
+    def _collect_agent_names(self) -> tuple[str, ...]:
+        manager = self.manager
+        if manager is None:
+            return ()
+        return tuple(
+            plugin.profile.display_name
+            for plugin in manager.get_plugins()
+            if isinstance(plugin, VoiceAgent) and plugin.enabled
+        )
 
     def _manager(self) -> PluginManager:
         manager = self.manager
