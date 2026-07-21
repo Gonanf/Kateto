@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import asyncio  # noqa: ANYIO_OK
+from collections.abc import AsyncIterator
 from collections import deque
 from pathlib import Path
 from typing import Any, assert_never
@@ -23,36 +24,91 @@ from kateto.core.event import (
     TextChunk,
     VoiceStatus,
     VoiceStatusData,
+    WorkflowRunData,
 )
+from kateto.core.config import VoiceSettings, bootstrap_config
 from kateto.core.hot_reload import HotReloadController, ReloadContext, ReplacementFactory
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.core.workflow import WorkflowDefinition, WorkflowDefinitionError, WorkflowPhaseStatus, WorkflowStatus
 from kateto.core.workflow_engine import WorkflowSnapshot
 from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration
+from kateto.voices.base import GenerationRequest, VoiceAgent, VoiceProfile, VoiceRole
 
 
 class TuiEventData(EventModel):
     message: str = Field(min_length=1)
 
 
-class _FixturePlugin(Plugin):
-    def __init__(self, name: str) -> None:
-        super().__init__(name, capabilities=("fixture",))
+class _FixtureVoiceProvider:
+    """Deterministic provider used by the local TUI fixture."""
+
+    def __init__(self, voice: str, role_response: str) -> None:
+        self._voice = voice
+        self._role_response = role_response
+
+    def stream(self, request: GenerationRequest) -> AsyncIterator[str]:
+        return self._stream(request)
+
+    async def _stream(self, request: GenerationRequest) -> AsyncIterator[str]:
+        prompt = next(
+            (message.content for message in reversed(request.messages) if message.role == "user"),
+            "the current project",
+        )
+        yield f"{self._voice.title()} fixture response: {self._role_response} I received '{prompt}'."
+
+
+def _fixture_voice(name: str, config_dir: Path) -> VoiceAgent:
+    profiles = {
+        "jane": (
+            VoiceRole.ORCHESTRATOR,
+            "Coordinate the project and keep the team aligned.",
+            "I will coordinate the project and keep the team aligned.",
+        ),
+        "doktor": (
+            VoiceRole.DELIVERY_ADVISOR,
+            "Turn project intent into concrete delivery work.",
+            "I will focus on delivery risks, backlog work, and concrete next steps.",
+        ),
+        "conquest": (
+            VoiceRole.AGILE_FACILITATOR,
+            "Make the team's process and next steps visible.",
+            "I will facilitate the agile process and make the next ceremony steps visible.",
+        ),
+    }
+    role, prompt, role_response = profiles[name]
+    voice_dir = config_dir / "voices" / name
+    voice_dir.mkdir(parents=True, exist_ok=True)
+    reference = voice_dir / "reference.wav"
+    if not reference.exists():
+        reference.write_bytes(b"RIFFfixtureWAVE")
+    return VoiceAgent(
+        profile=VoiceProfile(
+            voice_id=name,
+            display_name=name.title(),
+            role=role,
+            system_prompt=prompt,
+            relevance_terms=frozenset(),
+        ),
+        config_dir=config_dir,
+        provider=_FixtureVoiceProvider(name, role_response),
+        settings=VoiceSettings(stream=True),
+        response_language="en",
+    )
 
 
 class _FixtureRuntime:
     def __init__(self, config_dir: Path) -> None:
         from kateto.core.workflow_engine import WorkflowEngine
 
+        config_dir = config_dir.resolve()
+        bootstrap_config(config_dir=config_dir)
         self.manager = PluginManager()
-        self.runtime_plugins = tuple(
-            _FixturePlugin(name)
-            for name in ("voice_jane", "voice_doktor", "voice_conquest", "workflow_engine")
-        )
         self._workflow_engine = WorkflowEngine(config_dir=config_dir)
+        self._voices = tuple(_fixture_voice(name, config_dir) for name in ("jane", "doktor", "conquest"))
+        self.runtime_plugins = (self._workflow_engine, *self._voices)
         self.mcp_servers = ()
-        self.workflow_voices = ("Jane", "Doktor", "Conquest")
+        self.workflow_voices = ("jane", "doktor", "conquest")
         self.hot_reload_controller = None
         self.is_started = False
         self.plugin_configurations = ()
@@ -72,6 +128,11 @@ class _FixtureRuntime:
         for plugin in self.runtime_plugins:
             await self.manager.enable_plugin(plugin)
         await self.manager.emit("tui_event", TuiEventData(message="fixture dashboard ready"), source="fixture")
+        await self.manager.emit(
+            "workflow_run",
+            WorkflowRunData(workflow="project-initiation", voice="jane"),
+            source="fixture",
+        )
         self.is_started = True
 
     async def stop(self) -> None:
@@ -507,14 +568,17 @@ class KatetoApp(App[None]):
 
     @staticmethod
     def _fixture_replacement_factory(plugin: Plugin, _context: ReloadContext) -> Plugin:
-        return _FixturePlugin(plugin.name)
+        return Plugin(plugin.name, capabilities=plugin.capabilities)
+
+    def _record_event(self, envelope: EventEnvelope[BaseModel]) -> None:
+        self._update_voice_status(envelope)
+        self._update_audio_status(envelope)
+        self._events.append(envelope)
 
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         if not self.is_mounted:
             return
-        self._update_voice_status(envelope)
-        self._update_audio_status(envelope)
-        self._events.append(envelope)
+        self._record_event(envelope)
         try:
             self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
         except Exception:

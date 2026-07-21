@@ -28,6 +28,8 @@
 | 33 | Workflow omite una voz llamada que está deshabilitada | Alta | `core/workflow_engine.py`, `run_mode.py` | [33-disabled-called-voice.md](./bugs/33-disabled-called-voice.md) |
 | 34 | Voz no responde después de tool calls | Alta | `kateto/voices/base.py` | [34-agent-silent-after-tool-call.md](./bugs/34-agent-silent-after-tool-call.md) |
 | 35 | Voz activada dinámicamente sigue apareciendo deshabilitada | Alta | `kateto/run_mode.py` | [35-dynamic-voice-stays-disabled.md](./bugs/35-dynamic-voice-stays-disabled.md) |
+| 36 | Fixture TUI inicia sin respuestas ni workflows | Alta | `kateto/plugins/system/tui.py` | [36-fixture-tui-no-runtime.md](./bugs/36-fixture-tui-no-runtime.md) |
+| 37 | Fixture voices use identical response behavior | Media | `kateto/plugins/system/tui.py` | [37-fixture-voices-identical.md](./bugs/37-fixture-voices-identical.md) |
 | 27 | TUI se congela durante streaming de TTS y eventos de audio | Crítica | `tui.py`, `edgetts.py`, `player.py`, `whisper.py` | [27-tui-freeze-tts-streaming.md](./bugs/27-tui-freeze-tts-streaming.md) |
 | 25 | Web sandbox: presentación interactiva del sistema Kateto | Media | `web/` (nuevo) | [25-web-sandbox-presentation.md](./bugs/25-web-sandbox-presentation.md) |
 | 24 | TUI: conflictos de nombres entre voces activadas y plugins auto-detectados | Media | `kateto/plugins/system/tui.py` | [24-tui-voice-name-conflict.md](./bugs/24-tui-voice-name-conflict.md) |

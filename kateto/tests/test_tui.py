@@ -8,7 +8,7 @@ import sys
 
 import pytest
 from watchdog.events import FileCreatedEvent, FileModifiedEvent
-from textual.widgets import Button, Input, Static, Switch, TabPane, TabbedContent
+from textual.widgets import Button, Input, Static, Switch, TabPane, TabbedContent, Tree
 
 from kateto.core.hot_reload import HotReloadController, ReloadContext, _ReloadHandler
 from kateto.core.event import (
@@ -17,6 +17,7 @@ from kateto.core.event import (
     AudioOutput,
     AudioOutputStatus,
     AudioOutputStatusData,
+    GenerateData,
     PluginErrorData,
     VoiceIdleData,
     VoiceStatus,
@@ -27,7 +28,7 @@ from kateto.core.event import (
 from kateto.core.plugin import Plugin
 from kateto.core.manager import PluginManager
 from kateto.core.workflow_engine import WorkflowEngine
-from kateto.plugins.system.tui import KatetoApp, TuiEventData
+from kateto.plugins.system.tui import KatetoApp, TuiEventData, _FixtureRuntime
 from kateto.plugins.system.tui_runtime import TuiPluginConfiguration
 
 
@@ -131,6 +132,57 @@ def _module_source(*, version: str) -> str:
         "        super().__init__(name)\n"
         f"        self.version = {version!r}\n"
     )
+
+
+@pytest.mark.asyncio
+async def test_fixture_runtime_wires_responses_and_workflow_catalog(tmp_path: Path) -> None:
+    # Given: a fresh fixture configuration directory.
+    runtime = _FixtureRuntime(tmp_path)
+
+    # When: the deterministic runtime starts and receives a prompt.
+    await runtime.start()
+    try:
+        await runtime.manager.emit("generate", GenerateData(prompt="show the project status"), source="tui")
+        await runtime.manager.wait_for_idle()
+
+        # Then: real event subscribers, generated text, and workflow definitions are visible.
+        event_names = {event.name for event in runtime.manager.get_events()}
+        assert {"workflow_run", "workflow_phase_start", "generate", "text_chunk"}.issubset(event_names)
+        assert runtime.workflow_catalog.discover(voice="jane")
+        assert any(
+            isinstance(event.data, TextChunk) and event.data.text
+            for event in runtime.manager.get_events()
+        )
+        responses = [
+            event.data.text
+            for event in runtime.manager.get_events()
+            if isinstance(event.data, TextChunk)
+        ]
+        assert any("coordinate" in response.lower() for response in responses)
+        assert any("delivery" in response.lower() for response in responses)
+        assert any("agile" in response.lower() for response in responses)
+    finally:
+        await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_fixture_tui_shows_workflow_tree_and_voice_responses(tmp_path: Path) -> None:
+    # Given: the fixture TUI is connected to its deterministic runtime.
+    runtime = _FixtureRuntime(tmp_path)
+    app = KatetoApp(runtime=runtime, fixture=True, config_dir=tmp_path)
+
+    # When: the runtime finishes its startup demonstration.
+    async with app.run_test(size=(120, 36)) as pilot:
+        await pilot.pause(0.2)
+        await runtime.manager.wait_for_idle()
+        workflow_tree = app.query_one("#workflow-tree", Tree)
+        app.query_one("#workspace", TabbedContent).active = "conversation-tab"
+        await pilot.pause()
+
+        # Then: the workflow catalog and generated voice text are visible in the TUI.
+        assert any(str(node.label) == "project-initiation" for node in workflow_tree.root.children)
+        conversation = "\n".join(str(child.render()) for child in app.query_one("#conversation-messages").children)
+        assert "fixture response" in conversation
 
 
 @pytest.mark.asyncio
