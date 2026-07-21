@@ -38,6 +38,13 @@ from kateto.core.event import (
     VoiceRequestData,
     VoiceStatus,
     VoiceStatusData,
+    WorkflowCheckpointFailData,
+    WorkflowCompletedData,
+    WorkflowPhaseCompleteData,
+    WorkflowPhaseStartData,
+    WorkflowRunData,
+    WorkflowStartedData,
+    WorkflowStopData,
 )
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.providers import ChatMessage
@@ -178,6 +185,7 @@ class VoiceAgent(Plugin):
         self._tools: tuple[ChatCompletionToolParam, ...] = ()
         self._extra_tools: tuple[ChatCompletionToolParam, ...] = ()
         self._event_messages: deque[ChatMessage] = deque(maxlen=32)
+        self._event_message_limit = 2_048
 
     @property
     def role(self) -> VoiceRole:
@@ -245,6 +253,15 @@ class VoiceAgent(Plugin):
         manager.register_event("tool_call", ToolCallData)
         manager.register_event("tool_result", ToolResultData)
         manager.register_event("voice_request", VoiceRequestData)
+        manager.register_event("generate", GenerateData)
+        manager.register_event("workflow_run", WorkflowRunData)
+        manager.register_event("workflow_started", WorkflowStartedData)
+        manager.register_event("workflow_phase_start", WorkflowPhaseStartData)
+        manager.register_event("workflow_phase_complete", WorkflowPhaseCompleteData)
+        manager.register_event("workflow_checkpoint_fail", WorkflowCheckpointFailData)
+        manager.register_event("workflow_completed", WorkflowCompletedData)
+        manager.register_event("workflow_stop", WorkflowStopData)
+        manager.register_event("workflow_stopped", WorkflowStopData)
         await self._memory.ensure_soul(self.profile.system_prompt)
         self._skills = load_skills(
             config_dir=self._config_dir, names=tuple(self._settings.skills)
@@ -293,14 +310,45 @@ class VoiceAgent(Plugin):
     async def on_voice_request(self, data: VoiceRequestData) -> None:
         manager = self.manager
         if manager is not None:
-            await manager.emit(
+            envelope = await manager.emit(
                 "generate",
                 GenerateData(prompt=data.prompt),
                 source="voice_request",
                 target=self.name,
             )
+            self._remember_event(envelope)
 
     async def on_text_chunk(self, data: TextChunk) -> None:
+        return None
+
+    async def on_tool_call(self, data: ToolCallData) -> None:
+        return None
+
+    async def on_tool_result(self, data: ToolResultData) -> None:
+        return None
+
+    async def on_workflow_run(self, data: WorkflowRunData) -> None:
+        return None
+
+    async def on_workflow_started(self, data: WorkflowStartedData) -> None:
+        return None
+
+    async def on_workflow_phase_start(self, data: WorkflowPhaseStartData) -> None:
+        return None
+
+    async def on_workflow_phase_complete(self, data: WorkflowPhaseCompleteData) -> None:
+        return None
+
+    async def on_workflow_checkpoint_fail(self, data: WorkflowCheckpointFailData) -> None:
+        return None
+
+    async def on_workflow_completed(self, data: WorkflowCompletedData) -> None:
+        return None
+
+    async def on_workflow_stop(self, data: WorkflowStopData) -> None:
+        return None
+
+    async def on_workflow_stopped(self, data: WorkflowStopData) -> None:
         return None
 
     async def on_interrupt(self, data: InterruptData) -> None:
@@ -480,7 +528,7 @@ class VoiceAgent(Plugin):
             correlation_id = uuid4().hex
             manager = self.manager
             if manager is not None:
-                await manager.emit(
+                envelope = await manager.emit(
                     "tool_call",
                     ToolCallData(
                         tool_name=tc.name,
@@ -490,6 +538,7 @@ class VoiceAgent(Plugin):
                     ),
                     source=self.name,
                 )
+                self._remember_event(envelope)
             try:
                 result = await executor.execute(tc.name, tc.arguments)
                 error = None
@@ -497,7 +546,7 @@ class VoiceAgent(Plugin):
                 result = ""
                 error = str(e)
             if manager is not None:
-                await manager.emit(
+                envelope = await manager.emit(
                     "tool_result",
                     ToolResultData(
                         correlation_id=correlation_id,
@@ -508,6 +557,7 @@ class VoiceAgent(Plugin):
                     ),
                     source=self.name,
                 )
+                self._remember_event(envelope)
             messages.append(
                 {
                     "role": "tool",
@@ -542,49 +592,93 @@ class VoiceAgent(Plugin):
         for skill in self._skills:
             parts.append(skill.instructions)
         messages = [ChatMessage(role="system", content="\n\n".join(parts))]
-        history = tuple(self._event_messages)
-        if not history:
-            context = self._untrusted_context()
-            if context:
-                history = (ChatMessage(role="user", content=context),)
+        history = tuple(
+            message
+            for message in self._event_messages
+            if not (message.role == "user" and message.content == prompt)
+        )
         messages.extend(history)
-        if not any(message.role == "user" and message.content == prompt for message in history):
-            messages.append(ChatMessage(role="user", content=prompt))
+        messages.append(ChatMessage(role="user", content=prompt))
         return tuple(messages)
 
     def _remember_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         message: ChatMessage | None = None
         match envelope.data:
             case TranscriptionData(text=text):
-                message = ChatMessage(role="user", content=text)
-            case TextChunk(text=text, voice_id=voice_id) if voice_id != self.name:
-                message = ChatMessage(role="assistant", content=text)
+                message = ChatMessage(role="user", content=self._bounded_event_text(text))
+            case TextChunk(text=text):
+                message = ChatMessage(role="assistant", content=self._bounded_event_text(text))
             case VoiceRequestData(prompt=prompt):
-                message = ChatMessage(role="user", content=prompt)
+                message = ChatMessage(role="user", content=self._bounded_event_text(prompt))
+            case GenerateData(prompt=prompt) if prompt is not None:
+                message = ChatMessage(role="user", content=self._bounded_event_text(prompt))
+            case ToolCallData(tool_name=name, arguments=arguments):
+                details = json.dumps(arguments, separators=(",", ":"), sort_keys=True)
+                message = ChatMessage(
+                    role="assistant",
+                    content=self._bounded_event_text(f"tool_call {name}: {details}"),
+                )
+            case ToolResultData(tool_name=name, result=result, error=error):
+                outcome = result if error is None else f"Error: {error}"
+                message = ChatMessage(
+                    role="assistant",
+                    content=self._bounded_event_text(f"tool_result {name}: {outcome}"),
+                )
+            case WorkflowRunData(workflow=workflow, voice=voice):
+                message = ChatMessage(
+                    role="user",
+                    content=self._bounded_event_text(f"workflow_run {workflow} for {voice}"),
+                )
+            case WorkflowStartedData(workflow=workflow, voice=voice):
+                message = ChatMessage(
+                    role="user",
+                    content=self._bounded_event_text(f"workflow_started {workflow} for {voice}"),
+                )
+            case WorkflowPhaseStartData(workflow=workflow, phase_id=phase_id, instructions=instructions):
+                details = "; ".join(instructions)
+                message = ChatMessage(
+                    role="user",
+                    content=self._bounded_event_text(f"workflow_phase_start {workflow}/{phase_id}: {details}"),
+                )
+            case WorkflowPhaseCompleteData(workflow=workflow, phase_id=phase_id, deliverables=deliverables):
+                details = "; ".join(deliverables)
+                message = ChatMessage(
+                    role="user",
+                    content=self._bounded_event_text(f"workflow_phase_complete {workflow}/{phase_id}: {details}"),
+                )
+            case WorkflowCheckpointFailData(workflow=workflow, phase_id=phase_id, checkpoint=checkpoint):
+                message = ChatMessage(
+                    role="user",
+                    content=self._bounded_event_text(
+                        f"workflow_checkpoint_fail {workflow}/{phase_id}: {checkpoint}"
+                    ),
+                )
+            case WorkflowCompletedData(workflow=workflow, voice=voice):
+                message = ChatMessage(
+                    role="user",
+                    content=self._bounded_event_text(f"workflow_completed {workflow} for {voice}"),
+                )
+            case WorkflowStopData(workflow=workflow, voice=voice, reason=reason):
+                message = ChatMessage(
+                    role="user",
+                    content=self._bounded_event_text(f"workflow_stop {workflow} for {voice}: {reason}"),
+                )
             case _:
                 return
         if not self._event_messages or self._event_messages[-1] != message:
             self._event_messages.append(message)
 
-    def _untrusted_context(self) -> str:
-        context: list[str] = []
-        for event in self.batch_events:
-            match event.data:
-                case TranscriptionData(text=text):
-                    context.append(text)
-                case TextChunk(text=text, voice_id=voice_id) if voice_id != self.name:
-                    context.append(text)
-                case _:
-                    continue
-        return "\n".join(context)
+    def _bounded_event_text(self, text: str) -> str:
+        return text[: self._event_message_limit]
 
     async def _emit_chunk(self, text: str, sequence: int, *, final: bool) -> None:
         manager = self.manager
         if manager is not None:
-            await manager.emit(
+            envelope = await manager.emit(
                 "text_chunk",
                 TextChunk(
                     text=text, sequence=sequence, final=final, voice_id=self.name
                 ),
                 source=self.name,
             )
+            self._remember_event(envelope)
