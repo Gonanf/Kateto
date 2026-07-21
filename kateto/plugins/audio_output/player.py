@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import override
 
+from anyio import to_thread
 import sounddevice
 
 from kateto.core.config import PluginSettings
@@ -102,7 +103,7 @@ class AudioOutputPlayer(Plugin):
         if not data.samples:
             return
         stream = await self._stream_for(data)
-        _ = stream.write(data.samples)
+        _ = await to_thread.run_sync(stream.write, data.samples)
 
     async def on_interrupt(self, data: InterruptData) -> None:
         del data

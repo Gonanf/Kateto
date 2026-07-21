@@ -3,14 +3,14 @@ id: 27
 title: "TUI se congela durante streaming de TTS y eventos de audio"
 severity: Crítica
 status: resolved
-component: kateto/plugins/system/tui.py, kateto/plugins/audio_output/edgetts.py, kateto/providers/edgetts.py
+component: kateto/plugins/system/tui.py, kateto/plugins/audio_output/edgetts.py, kateto/plugins/audio_output/player.py, kateto/providers/edgetts.py
 resolved: 2026-07-20
 ---
 
 ## 27. TUI se congela durante streaming de TTS y eventos de audio
 
 **Severidad:** Crítica
-**Componente:** `kateto/plugins/system/tui.py`, `kateto/plugins/audio_output/edgetts.py`, `kateto/providers/edgetts.py`
+**Componente:** `kateto/plugins/system/tui.py`, `kateto/plugins/audio_output/edgetts.py`, `kateto/plugins/audio_output/player.py`, `kateto/providers/edgetts.py`
 
 ### Descripción
 
@@ -164,9 +164,14 @@ timeout_s: float = 60.0  # was 10.0
 ```
 - **Resultado:** Whisper puede procesar audio de 8+ segundos sin timeout
 
+#### 6. AudioOutputPlayer: write síncrono fuera del event loop
+
+`kateto/plugins/audio_output/player.py` ejecuta `stream.write(data.samples)` mediante `anyio.to_thread.run_sync`. Esto conserva la conversión de errores del adaptador, el orden de los buffers y permite que Textual procese eventos mientras el dispositivo reproduce un buffer completo.
+
 ### Archivos
 
 - `kateto/plugins/audio_output/edgetts.py`
+- `kateto/plugins/audio_output/player.py`
 - `kateto/plugins/system/tui.py`
 - `kateto/providers/edgetts.py`
 - `kateto/providers/whisper.py`

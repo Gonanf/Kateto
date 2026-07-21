@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+from threading import Event, Thread
+from time import sleep
 
+import anyio
 import pytest
 
 from kateto.core import Plugin, PluginManager
@@ -120,6 +123,32 @@ class RecordingOutputFactory:
     ) -> RecordingOutputStream:
         self.requests.append((device, sample_rate, channels))
         stream = RecordingOutputStream()
+        self.streams.append(stream)
+        return stream
+
+
+class BlockingOutputStream(RecordingOutputStream):
+    def __init__(self) -> None:
+        super().__init__()
+        self.write_started = Event()
+        self.write_release = Event()
+
+    def write(self, data: bytes) -> object:
+        self.write_started.set()
+        self.write_release.wait()
+        return super().write(data)
+
+
+class BlockingOutputFactory(RecordingOutputFactory):
+    def create(
+        self,
+        *,
+        device: str | None,
+        sample_rate: int,
+        channels: int,
+    ) -> BlockingOutputStream:
+        self.requests.append((device, sample_rate, channels))
+        stream = BlockingOutputStream()
         self.streams.append(stream)
         return stream
 
@@ -329,6 +358,50 @@ async def test_player_consumes_pcm_and_stops_on_final_and_interrupt() -> None:
         AudioOutputStatusData(status=AudioOutputStatus.PLAYING),
         AudioOutputStatusData(status=AudioOutputStatus.IDLE),
     ]
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_player_does_not_block_event_loop_on_device_write() -> None:
+    # Given: a player whose device write blocks until another thread releases it.
+    manager = PluginManager()
+    factory = BlockingOutputFactory()
+    player = AudioOutputPlayer(PluginSettings(device="Fixture Output"), player_factory=factory)
+    await manager.enable_plugin(player)
+
+    def release_write() -> None:
+        while not factory.streams:
+            sleep(0.001)
+        stream = next(stream for stream in factory.streams if isinstance(stream, BlockingOutputStream))
+        stream.write_started.wait()
+        sleep(0.1)
+        if probe_completed.is_set():
+            responsive_before_release.set()
+        stream.write_release.set()
+
+    probe_completed = Event()
+    responsive_before_release = Event()
+
+    async def prove_responsive() -> None:
+        await anyio.sleep(0.05)
+        probe_completed.set()
+
+    # When: playback starts while the device write is blocked.
+    release_thread = Thread(target=release_write)
+    release_thread.start()
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(player.on_audio_output, AudioOutput(
+            samples=b"\x01\x00",
+            sample_rate=24_000,
+            channels=1,
+            format="pcm_s16le",
+        ))
+        task_group.start_soon(prove_responsive)
+    release_thread.join()
+
+    # Then: the event loop ran the probe before the blocking device write was released.
+    assert responsive_before_release.is_set()
+    assert factory.streams[0].writes == [b"\x01\x00"]
     await manager.close()
 
 
