@@ -5,6 +5,7 @@ description = "Kateto MVP"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "anyio>=4.0.0",
     "edge-tts>=7.0.0",
     "gradio>=6.15.2,<7.0.0",
     "google-auth-oauthlib==1.2.2",

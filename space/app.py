@@ -1,21 +1,9 @@
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Final, Literal
-
+import anyio
 import gradio as gr
 
-ProviderName = Literal["byok", "bonsai"]
-MAX_BYOK_KEY_LENGTH: Final = 256
-
-
-class ProviderChoiceError(ValueError):
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderSelection:
-    provider: ProviderName
-    session_key: str | None
+from space.contracts import MAX_BYOK_KEY_LENGTH, ProviderChoiceError, ProviderSelection
+from space.runtime import JsonRecord, SpaceRuntimeSession, create_runtime_session
 
 
 def select_provider(raw_provider: str, raw_key: str) -> ProviderSelection:
@@ -51,6 +39,41 @@ def accept_provider(
     return _status(selection)
 
 
+def _empty_outputs() -> JsonRecord:
+    return {
+        "events": [],
+        "notifications": [],
+        "plans": [],
+        "agent_statuses": [],
+        "workflows": [],
+        "mcp": [],
+        "plugins": [],
+        "artifacts": [],
+    }
+
+
+def _snapshot_outputs(session: SpaceRuntimeSession | None) -> JsonRecord:
+    if session is None:
+        return _empty_outputs()
+    snapshot = session.snapshot()
+    return snapshot.as_outputs()
+
+
+def _submit_prompt(session: SpaceRuntimeSession | None, prompt: str) -> tuple[str, JsonRecord]:
+    if session is None:
+        return "**Runtime unavailable:** choose BYOK or Bonsai first.", _empty_outputs()
+    try:
+        snapshot = anyio.run(session.prompt, prompt)
+    except (RuntimeError, ValueError) as error:
+        return f"**Prompt error:** {error}", _snapshot_outputs(session)
+    return "**Runtime ready:** prompt processed through the event bus.", snapshot.as_outputs()
+
+
+def _cleanup_session(session: SpaceRuntimeSession | None) -> None:
+    if session is not None:
+        anyio.run(session.close)
+
+
 def create_app(
     on_provider_ready: Callable[[ProviderSelection], None] | None = None,
 ) -> gr.Blocks:
@@ -73,19 +96,51 @@ def create_app(
         )
         submit = gr.Button("Continue", variant="primary", elem_id="provider-submit")
         status = gr.Markdown("Select BYOK or Bonsai to continue.", elem_id="provider-status")
+        session_state = gr.State(value=None, delete_callback=_cleanup_session)
+        prompt = gr.Textbox(label="Prompt", placeholder="Ask the team to plan work", visible=False, elem_id="prompt")
+        prompt_submit = gr.Button("Send", visible=False, elem_id="prompt-submit")
+        outputs = gr.JSON(value=_empty_outputs(), label="Runtime state", elem_id="runtime-state")
 
         def reveal_key(choice: str | None) -> gr.Textbox:
             return gr.Textbox(visible=choice == "BYOK")
 
-        def submit_choice(choice: str | None, session_key: str) -> tuple[str, gr.Textbox]:
+        def submit_choice(
+            choice: str | None,
+            session_key: str,
+            previous_session: SpaceRuntimeSession | None,
+        ) -> tuple[str, gr.Textbox, SpaceRuntimeSession | None, gr.Textbox, gr.Button, gr.JSON]:
             try:
                 selection = select_provider(choice or "", session_key)
             except ProviderChoiceError as error:
-                return f"**Provider selection error:** {error}", gr.Textbox(visible=choice == "BYOK")
-            return accept_provider(selection.provider, selection.session_key or "", on_provider_ready), gr.Textbox(value="", visible=False)
+                return (
+                    f"**Provider selection error:** {error}",
+                    gr.Textbox(visible=choice == "BYOK"),
+                    previous_session,
+                    gr.Textbox(visible=False),
+                    gr.Button(visible=False),
+                    gr.JSON(value=_empty_outputs()),
+                )
+            _cleanup_session(previous_session)
+            selected_session = create_runtime_session(selection)
+            return (
+                accept_provider(selection.provider, selection.session_key or "", on_provider_ready),
+                gr.Textbox(value="", visible=False),
+                selected_session,
+                gr.Textbox(visible=True),
+                gr.Button(visible=True),
+                gr.JSON(value=_snapshot_outputs(selected_session)),
+            )
+
+        def submit_prompt(session: SpaceRuntimeSession | None, value: str) -> tuple[str, JsonRecord]:
+            return _submit_prompt(session, value)
 
         _ = provider.change(reveal_key, inputs=provider, outputs=key)
-        _ = submit.click(submit_choice, inputs=[provider, key], outputs=[status, key])
+        _ = submit.click(
+            submit_choice,
+            inputs=[provider, key, session_state],
+            outputs=[status, key, session_state, prompt, prompt_submit, outputs],
+        )
+        _ = prompt_submit.click(submit_prompt, inputs=[session_state, prompt], outputs=[status, outputs])
     return app
 
 
