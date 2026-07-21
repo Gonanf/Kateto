@@ -1,6 +1,7 @@
 from collections.abc import Callable
 import os
 import gradio as gr
+from pydantic import JsonValue
 
 from space.contracts import MAX_BYOK_KEY_LENGTH, ProviderChoiceError, ProviderSelection
 from space.providers import SpaceProviderError
@@ -14,7 +15,9 @@ def select_provider(raw_provider: str | None, raw_key: str) -> ProviderSelection
             if not raw_key or not raw_key.strip():
                 raise ProviderChoiceError("A BYOK key is required.")
             if raw_key != raw_key.strip():
-                raise ProviderChoiceError("The BYOK key cannot start or end with whitespace.")
+                raise ProviderChoiceError(
+                    "The BYOK key cannot start or end with whitespace."
+                )
             if len(raw_key) > MAX_BYOK_KEY_LENGTH:
                 raise ProviderChoiceError("The BYOK key exceeds the maximum length.")
             return ProviderSelection(provider="byok", session_key=raw_key)
@@ -44,14 +47,20 @@ def accept_provider(
 
 def _empty_outputs() -> JsonRecord:
     return {
+        "provider": "",
+        "model": "",
+        "mode": "",
+        "closed": False,
         "events": [],
         "notifications": [],
         "plans": [],
         "agent_statuses": [],
+        "agents": [],
         "workflows": [],
         "mcp": [],
         "plugins": [],
         "artifacts": [],
+        "evolution": [],
     }
 
 
@@ -62,7 +71,9 @@ def _snapshot_outputs(session: SpaceRuntimeSession | None) -> JsonRecord:
     return snapshot.as_outputs()
 
 
-def submit_prompt(session: SpaceRuntimeSession | None, prompt: str) -> tuple[str, JsonRecord]:
+def submit_prompt(
+    session: SpaceRuntimeSession | None, prompt: str
+) -> tuple[str, JsonRecord]:
     if session is None:
         return "**Runtime unavailable:** choose BYOK or Bonsai first.", _empty_outputs()
     previous_notification_count = len(session.snapshot().notifications)
@@ -71,8 +82,14 @@ def submit_prompt(session: SpaceRuntimeSession | None, prompt: str) -> tuple[str
     except (RuntimeError, ValueError) as error:
         return f"**Prompt error:** {error}", _snapshot_outputs(session)
     if snapshot.notifications[previous_notification_count:]:
-        return "**Runtime degraded:** provider error recorded; inspect runtime state.", snapshot.as_outputs()
-    return "**Runtime ready:** prompt processed through the event bus.", snapshot.as_outputs()
+        return (
+            "**Runtime degraded:** provider error recorded; inspect runtime state.",
+            snapshot.as_outputs(),
+        )
+    return (
+        "**Runtime ready:** prompt processed through the event bus.",
+        snapshot.as_outputs(),
+    )
 
 
 def _cleanup_session(session: SpaceRuntimeSession | None) -> None:
@@ -85,7 +102,9 @@ def create_app(
 ) -> gr.Blocks:
     with gr.Blocks(title="Kateto Space") as app:
         _ = gr.Markdown("# Kateto\nChoose a provider to enter the demo.")
-        _ = gr.Markdown("**Status:** fixture mode · live runtime not connected · provider choice required")
+        _ = gr.Markdown(
+            "**Status:** fixture mode · live runtime not connected · provider choice required"
+        )
         provider = gr.Radio(
             choices=["BYOK", "Bonsai"],
             label="Provider",
@@ -101,11 +120,73 @@ def create_app(
             elem_id="byok-key",
         )
         submit = gr.Button("Continue", variant="primary", elem_id="provider-submit")
-        status = gr.Markdown("Select BYOK or Bonsai to continue.", elem_id="provider-status")
+        status = gr.Markdown(
+            "Select BYOK or Bonsai to continue.", elem_id="provider-status"
+        )
         session_state = gr.State(value=None, delete_callback=_cleanup_session)
-        prompt = gr.Textbox(label="Prompt", placeholder="Ask the team to plan work", visible=False, elem_id="prompt")
+        prompt = gr.Textbox(
+            label="Prompt",
+            placeholder="Ask the team to plan work",
+            visible=False,
+            elem_id="prompt",
+        )
         prompt_submit = gr.Button("Send", visible=False, elem_id="prompt-submit")
-        outputs = gr.JSON(value=_empty_outputs(), label="Runtime state", elem_id="runtime-state")
+        _ = gr.Markdown("## Live orchestration evidence")
+        provider_model = gr.JSON(
+            value={}, label="Provider / model", elem_id="provider-model"
+        )
+        timeline = gr.JSON(
+            value=[], label="Event timeline · name + source", elem_id="event-timeline"
+        )
+        plans = gr.JSON(value=[], label="Plans produced", elem_id="plans")
+        agents = gr.JSON(
+            value=[], label="Agents / voices · status + actions", elem_id="agents"
+        )
+        workflows = gr.JSON(
+            value=[],
+            label="Workflow tree · phase + task + checkpoints",
+            elem_id="workflows",
+        )
+        integrations = gr.JSON(
+            value={}, label="MCP / plugin status", elem_id="integrations"
+        )
+        evolution = gr.JSON(
+            value=[], label="Evolution / work ledger", elem_id="evolution"
+        )
+        outputs = (
+            provider_model,
+            timeline,
+            plans,
+            agents,
+            workflows,
+            integrations,
+            evolution,
+        )
+
+        def output_values(
+            value: JsonRecord,
+        ) -> tuple[
+            JsonRecord,
+            list[JsonValue],
+            list[JsonValue],
+            list[JsonValue],
+            list[JsonValue],
+            JsonRecord,
+            list[JsonValue],
+        ]:
+            return (
+                {
+                    "provider": value.get("provider", ""),
+                    "model": value.get("model", ""),
+                    "mode": value.get("mode", ""),
+                },
+                _list_value(value.get("events")),
+                _list_value(value.get("plans")),
+                _list_value(value.get("agents")),
+                _list_value(value.get("workflows")),
+                {"mcp": value.get("mcp", []), "plugins": value.get("plugins", [])},
+                _list_value(value.get("evolution")),
+            )
 
         def reveal_key(choice: str | None) -> gr.Textbox:
             return gr.Textbox(visible=choice == "BYOK")
@@ -114,7 +195,7 @@ def create_app(
             choice: str | None,
             session_key: str,
             previous_session: SpaceRuntimeSession | None,
-        ) -> tuple[str, gr.Textbox, SpaceRuntimeSession | None, gr.Textbox, gr.Button, gr.JSON]:
+        ):
             try:
                 selection = select_provider(choice or "", session_key)
             except ProviderChoiceError as error:
@@ -124,7 +205,7 @@ def create_app(
                     previous_session,
                     gr.Textbox(visible=False),
                     gr.Button(visible=False),
-                    gr.JSON(value=_empty_outputs()),
+                    *output_values(_empty_outputs()),
                 )
             try:
                 selected_session = create_runtime_session(selection)
@@ -135,39 +216,46 @@ def create_app(
                     previous_session,
                     gr.Textbox(visible=False),
                     gr.Button(visible=False),
-                    gr.JSON(value=_empty_outputs()),
+                    *output_values(_empty_outputs()),
                 )
             _cleanup_session(previous_session)
             return (
-                accept_provider(selection.provider, selection.session_key or "", on_provider_ready),
+                accept_provider(
+                    selection.provider, selection.session_key or "", on_provider_ready
+                ),
                 gr.Textbox(value="", visible=False),
                 selected_session,
                 gr.Textbox(visible=True),
                 gr.Button(visible=True),
-                gr.JSON(value=_snapshot_outputs(selected_session)),
+                *output_values(_snapshot_outputs(selected_session)),
             )
 
         def submit_prompt_callback(
             session: SpaceRuntimeSession | None,
             value: str,
-        ) -> tuple[str, JsonRecord]:
-            return submit_prompt(session, value)
+        ):
+            status_value, state = submit_prompt(session, value)
+            return status_value, *output_values(state)
 
         _ = provider.change(reveal_key, inputs=provider, outputs=key)
         _ = submit.click(
             submit_choice,
             inputs=[provider, key, session_state],
-            outputs=[status, key, session_state, prompt, prompt_submit, outputs],
+            outputs=[status, key, session_state, prompt, prompt_submit, *outputs],
         )
         _ = prompt_submit.click(
             submit_prompt_callback,
             inputs=[session_state, prompt],
-            outputs=[status, outputs],
+            outputs=[status, *outputs],
         )
     return app
 
 
 app = create_app()
+
+
+def _list_value(value: JsonValue) -> list[JsonValue]:
+    return value if isinstance(value, list) else []
 
 
 if __name__ == "__main__":

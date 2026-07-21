@@ -21,6 +21,7 @@ from kateto.core.event import (
     VoiceStatus,
     VoiceStatusData,
     WorkflowCompletedData,
+    WorkflowCheckpointResult,
     WorkflowPhaseCompleteData,
     WorkflowPhaseStartData,
     WorkflowStartedData,
@@ -29,10 +30,17 @@ from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 
 from space.contracts import ProviderSelection
-from space.providers import FixtureProvider, SpaceProvider, SpaceProviderConfig, build_provider
+from space.providers import (
+    FixtureProvider,
+    SpaceProvider,
+    SpaceProviderConfig,
+    build_provider,
+)
 
 JsonRecord: TypeAlias = dict[str, JsonValue]
-RuntimeBuilder: TypeAlias = Callable[[ProviderSelection], tuple[PluginManager, tuple[Plugin, ...]]]
+RuntimeBuilder: TypeAlias = Callable[
+    [ProviderSelection], tuple[PluginManager, tuple[Plugin, ...]]
+]
 _FIXTURE_WORKFLOW: Final[str] = "space-plan"
 
 
@@ -52,6 +60,7 @@ class SpaceArtifactData(EventModel):
 @dataclass(frozen=True, slots=True)
 class RuntimeSnapshot:
     provider: str
+    model: str
     mode: str
     closed: bool
     events: tuple[JsonRecord, ...]
@@ -64,19 +73,9 @@ class RuntimeSnapshot:
     artifacts: tuple[JsonRecord, ...]
 
     def as_outputs(self) -> JsonRecord:
-        return {
-            "provider": self.provider,
-            "mode": self.mode,
-            "closed": self.closed,
-            "events": list(self.events),
-            "notifications": list(self.notifications),
-            "plans": list(self.plans),
-            "agent_statuses": list(self.agent_statuses),
-            "workflows": list(self.workflows),
-            "mcp": list(self.mcp),
-            "plugins": list(self.plugins),
-            "artifacts": list(self.artifacts),
-        }
+        from space.presentation import snapshot_outputs
+
+        return snapshot_outputs(self)
 
 
 @final
@@ -113,17 +112,31 @@ class _FixtureRuntimePlugin(Plugin):
             raise RuntimeError("Space fixture runtime is not attached")
         _ = await manager.emit(
             "voice_status",
+            VoiceStatusData(voice="jane", status=VoiceStatus.WAITING),
+            source=self.name,
+        )
+        _ = await manager.emit(
+            "voice_status",
             VoiceStatusData(voice="doktor", status=VoiceStatus.THINKING),
             source=self.name,
         )
         _ = await manager.emit(
+            "voice_status",
+            VoiceStatusData(voice="conquest", status=VoiceStatus.WAITING),
+            source=self.name,
+        )
+        _ = await manager.emit(
             "space_plan",
-            SpacePlanData(prompt=prompt, provider=self._selection.provider, voice="doktor"),
+            SpacePlanData(
+                prompt=prompt, provider=self._selection.provider, voice="doktor"
+            ),
             source=self.name,
         )
         _ = await manager.emit(
             "workflow_started",
-            WorkflowStartedData(workflow=_FIXTURE_WORKFLOW, voice="doktor", context={"prompt": prompt}),
+            WorkflowStartedData(
+                workflow=_FIXTURE_WORKFLOW, voice="doktor", context={"prompt": prompt}
+            ),
             source=self.name,
         )
         _ = await manager.emit(
@@ -153,6 +166,10 @@ class _FixtureRuntimePlugin(Plugin):
                 phase_id="plan",
                 voice="doktor",
                 deliverables=["TODO.md"],
+                checkpoint_results=[
+                    WorkflowCheckpointResult(checkpoint="plan-recorded", passed=True),
+                    WorkflowCheckpointResult(checkpoint="task-captured", passed=True),
+                ],
             ),
             source=self.name,
         )
@@ -171,9 +188,17 @@ class _FixtureRuntimePlugin(Plugin):
             VoiceStatusData(voice="doktor", status=VoiceStatus.IDLE),
             source=self.name,
         )
+        for voice in ("jane", "conquest"):
+            _ = await manager.emit(
+                "voice_status",
+                VoiceStatusData(voice=voice, status=VoiceStatus.IDLE),
+                source=self.name,
+            )
 
 
-def _fixture_builder(selection: ProviderSelection) -> tuple[PluginManager, tuple[Plugin, ...]]:
+def _fixture_builder(
+    selection: ProviderSelection,
+) -> tuple[PluginManager, tuple[Plugin, ...]]:
     manager = PluginManager(event_limit=200)
     return manager, (_FixtureRuntimePlugin(selection, FixtureProvider()),)
 
@@ -183,7 +208,9 @@ def _live_builder(
     config: SpaceProviderConfig,
 ) -> tuple[PluginManager, tuple[Plugin, ...]]:
     manager = PluginManager(event_limit=200)
-    return manager, (_FixtureRuntimePlugin(selection, build_provider(selection, config)),)
+    return manager, (
+        _FixtureRuntimePlugin(selection, build_provider(selection, config)),
+    )
 
 
 class SpaceRuntimeSession:
@@ -194,8 +221,10 @@ class SpaceRuntimeSession:
         plugins: tuple[Plugin, ...],
         *,
         mode: str,
+        model: str,
     ) -> None:
         self.provider: str = selection.provider
+        self.model: str = model
         self.mode: str = mode
         self.manager: PluginManager = manager
         self._plugins: tuple[Plugin, ...] = plugins
@@ -224,7 +253,9 @@ class SpaceRuntimeSession:
             self._prompt_lock = anyio.Lock()
         async with self._prompt_lock:
             await self._start()
-            _ = await self.manager.emit("generate", GenerateData(prompt=prompt), source="space")
+            _ = await self.manager.emit(
+                "generate", GenerateData(prompt=prompt), source="space"
+            )
             await self.manager.wait_for_idle()
             return self.snapshot()
 
@@ -263,7 +294,9 @@ class SpaceRuntimeSession:
 
     def snapshot(self) -> RuntimeSnapshot:
         secrets = (self._session_key,) if self._session_key is not None else ()
-        events = tuple(_event_record(event, secrets=secrets) for event in self.manager.get_events())
+        events = tuple(
+            _event_record(event, secrets=secrets) for event in self.manager.get_events()
+        )
         notifications = tuple(
             _payload_record(record, kind="error")
             for record in events
@@ -278,7 +311,8 @@ class SpaceRuntimeSession:
         workflows = tuple(
             _payload_record(record)
             for record in events
-            if record.get("name") in {
+            if record.get("name")
+            in {
                 "workflow_started",
                 "workflow_phase_start",
                 "workflow_phase_complete",
@@ -303,6 +337,7 @@ class SpaceRuntimeSession:
         )
         return RuntimeSnapshot(
             provider=self.provider,
+            model=self.model,
             mode=self.mode,
             closed=self._closed,
             events=events,
@@ -338,15 +373,25 @@ def create_runtime_session(
     selected_builder = _fixture_builder if builder is None else builder
     manager, plugins = selected_builder(selection)
     runtime_mode = os.getenv("KATETO_SPACE_MODE", "fixture")
+    model = "fixture/demo-model"
     if builder is None and runtime_mode == "live":
         config = SpaceProviderConfig.from_env()
         manager, plugins = _live_builder(selection, config)
+        model = (
+            config.byok_model
+            if selection.provider == "byok"
+            else config.bonsai_model or "unconfigured"
+        )
     elif runtime_mode not in {"fixture", "live"}:
         raise ValueError("KATETO_SPACE_MODE must be fixture or live")
-    return SpaceRuntimeSession(selection, manager, plugins, mode=runtime_mode)
+    return SpaceRuntimeSession(
+        selection, manager, plugins, mode=runtime_mode, model=model
+    )
 
 
-def _event_record(envelope: EventEnvelope[BaseModel], *, secrets: tuple[str, ...] = ()) -> JsonRecord:
+def _event_record(
+    envelope: EventEnvelope[BaseModel], *, secrets: tuple[str, ...] = ()
+) -> JsonRecord:
     data: JsonValue = envelope.data.model_dump(mode="json")
     record: JsonRecord = {
         "name": envelope.name,
@@ -369,7 +414,9 @@ def _redact(value: JsonValue, *, secrets: tuple[str, ...] = ()) -> JsonValue:
     return value
 
 
-def _latest_by(events: tuple[JsonRecord, ...], event_name: str, key: str) -> tuple[JsonRecord, ...]:
+def _latest_by(
+    events: tuple[JsonRecord, ...], event_name: str, key: str
+) -> tuple[JsonRecord, ...]:
     latest: dict[str, JsonRecord] = {}
     for record in events:
         if record.get("name") != event_name:
