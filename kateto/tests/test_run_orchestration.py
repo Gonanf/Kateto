@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from kateto.core.config import load_config
+from kateto.core.event import GenerateData, VoiceRequestData, WorkflowRunData
 from kateto.core.hot_reload import HotReloadController
 from kateto.core.plugin import Plugin
 from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
@@ -40,7 +41,7 @@ class RecordingCaptureFactory:
         self.started: asyncio.Event = asyncio.Event()
         self.captures: list[RecordingCapture] = []
 
-    def create(self, config: AudioInputConfig, callback: Callable) -> RecordingCapture:
+    def create(self, config: AudioInputConfig, callback: Callable[..., object]) -> RecordingCapture:
         del config, callback
         capture = RecordingCapture(self.started)
         self.captures.append(capture)
@@ -65,6 +66,33 @@ class CalendarFactory:
 
 class ReloadStartFailure(Exception):
     pass
+
+
+class DynamicVoice(Plugin):
+    def __init__(self) -> None:
+        super().__init__("doktor", capabilities=("voice",))
+        self.requests: list[VoiceRequestData] = []
+        self.generates: list[GenerateData] = []
+
+    async def initialize(self) -> None:
+        manager = self.manager
+        assert manager is not None
+        manager.register_event("voice_request", VoiceRequestData)
+        manager.register_event("generate", GenerateData)
+
+    async def on_voice_request(self, data: VoiceRequestData) -> None:
+        self.requests.append(data)
+        manager = self.manager
+        assert manager is not None
+        await manager.emit(
+            "generate",
+            GenerateData(prompt=data.prompt),
+            source="voice_request",
+            target=self.name,
+        )
+
+    async def on_generate(self, data: GenerateData) -> None:
+        self.generates.append(data)
 
 
 def _write_run_config(config_dir: Path) -> None:
@@ -249,6 +277,50 @@ async def test_run_owner_reconciles_configured_voice_subscribers_after_reload(tm
         assert "doktor" not in {
             plugin.name for plugin in assembly.manager.get_plugins() if plugin.enabled
         }
+    finally:
+        await assembly.stop()
+
+
+@pytest.mark.asyncio
+async def test_run_owner_tracks_dynamically_enabled_voice_and_delivers_workflow_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: Jane is enabled, Doktor is configured but disabled, and Jane's workflow calls Doktor.
+    _write_run_config_with_voice(tmp_path, voice_name="jane")
+    config_path = tmp_path / "config.toml"
+    with config_path.open("a", encoding="utf-8") as config_file:
+        config_file.write("\n[voice.doktor]\nenabled = false\nmcp_servers = []\n")
+    workflow = tmp_path / "voices" / "jane" / "workflows" / "brief" / "workflow.py"
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    workflow.write_text(
+        "name = 'brief'\n"
+        "voice = 'jane'\n"
+        "phases = [{'id': 'ask', 'name': 'ask', 'instructions': ['ask Doktor'], "
+        "'calls_voices': ['doktor']}]\n",
+        encoding="utf-8",
+    )
+    dynamic_voice = DynamicVoice()
+    monkeypatch.setattr("kateto.voices.factory.create_voice", lambda *args, **kwargs: dynamic_voice)
+    captures = RecordingCaptureFactory()
+    assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, CalendarFactory()))
+
+    try:
+        # When: the workflow engine starts and requests its disabled specialist.
+        await assembly.start()
+        await assembly.manager.emit(
+            "workflow_run",
+            WorkflowRunData(workflow="brief", voice="jane"),
+            source="fixture",
+        )
+        await assembly.manager.wait_for_idle()
+
+        # Then: the specialist is enabled, visible to the runtime, and receives the work.
+        assert assembly.voice_enabled("doktor")
+        assert dynamic_voice.enabled
+        assert dynamic_voice in assembly.runtime_plugins
+        assert [request.voice for request in dynamic_voice.requests] == ["doktor"]
+        assert [generate.prompt for generate in dynamic_voice.generates] == ["ask Doktor"]
     finally:
         await assembly.stop()
 

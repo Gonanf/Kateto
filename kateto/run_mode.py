@@ -78,7 +78,9 @@ class RuntimeOwner(TuiConfigurationRuntime):
 
     @property
     def runtime_plugins(self) -> tuple[Plugin, ...]:
-        return self._plugins
+        plugins = {plugin.name: plugin for plugin in self._plugins}
+        plugins.update({plugin.name: plugin for plugin in self._manager.get_plugins()})
+        return tuple(plugins.values())
 
     @property
     def workflow_voices(self) -> tuple[str, ...]:
@@ -89,6 +91,14 @@ class RuntimeOwner(TuiConfigurationRuntime):
         return self._config
 
     def voice_enabled(self, name: str) -> bool:
+        normalized = name.casefold()
+        for plugin in self._manager.get_plugins():
+            if plugin.name.casefold() == normalized:
+                return plugin.enabled
+            profile = getattr(plugin, "profile", None)
+            display_name = getattr(profile, "display_name", None)
+            if isinstance(display_name, str) and display_name.casefold() == normalized:
+                return plugin.enabled
         if self._config is None:
             return True
         voice_cfg = self._config.settings.voice.get(name)
