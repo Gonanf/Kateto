@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass
+from threading import Lock
 from typing import Final, TypeAlias, final, override
 
+import anyio
+from anyio.from_thread import BlockingPortal, start_blocking_portal
 from pydantic import BaseModel, JsonValue
 
 from kateto.core.event import (
@@ -184,6 +188,10 @@ class SpaceRuntimeSession:
         self._session_key: str | None = selection.session_key
         self._started: bool = False
         self._closed: bool = False
+        self._prompt_lock: anyio.Lock | None = None
+        self._portal_stack: ExitStack | None = None
+        self._portal: BlockingPortal | None = None
+        self._portal_lock: Lock = Lock()
 
     @property
     def has_session_credentials(self) -> bool:
@@ -195,16 +203,39 @@ class SpaceRuntimeSession:
         prompt = value.strip()
         if not prompt:
             raise ValueError("prompt must not be empty")
-        await self._start()
-        _ = await self.manager.emit("generate", GenerateData(prompt=prompt), source="space")
-        await self.manager.wait_for_idle()
-        return self.snapshot()
+        if self._prompt_lock is None:
+            self._prompt_lock = anyio.Lock()
+        async with self._prompt_lock:
+            await self._start()
+            _ = await self.manager.emit("generate", GenerateData(prompt=prompt), source="space")
+            await self.manager.wait_for_idle()
+            return self.snapshot()
+
+    def prompt_sync(self, value: str) -> RuntimeSnapshot:
+        return self._blocking_portal().call(self.prompt, value)
 
     async def close(self) -> None:
         if not self._closed:
-            await self.manager.close()
-            self._session_key = None
-            self._closed = True
+            try:
+                await self.manager.close()
+            finally:
+                self._session_key = None
+                self._closed = True
+
+    def close_sync(self) -> None:
+        with self._portal_lock:
+            portal = self._portal
+            stack = self._portal_stack
+            if portal is None or stack is None:
+                with start_blocking_portal() as temporary_portal:
+                    temporary_portal.call(self.close)
+                return
+            try:
+                portal.call(self.close)
+            finally:
+                stack.close()
+                self._portal = None
+                self._portal_stack = None
 
     def snapshot(self) -> RuntimeSnapshot:
         events = tuple(_event_record(event) for event in self.manager.get_events())
@@ -265,6 +296,14 @@ class SpaceRuntimeSession:
         for plugin in self._plugins:
             await self.manager.enable_plugin(plugin)
         self._started = True
+
+    def _blocking_portal(self) -> BlockingPortal:
+        with self._portal_lock:
+            if self._portal is None:
+                stack = ExitStack()
+                self._portal_stack = stack
+                self._portal = stack.enter_context(start_blocking_portal())
+            return self._portal
 
 
 def create_runtime_session(

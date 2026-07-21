@@ -1,12 +1,18 @@
 import pytest
 
-from space.app import MAX_BYOK_KEY_LENGTH, ProviderChoiceError, ProviderSelection, accept_provider, select_provider
+from space.app import accept_provider, select_provider
+from space.contracts import MAX_BYOK_KEY_LENGTH, ProviderChoiceError, ProviderSelection
 
 
 def test_bonsai_selection_does_not_require_a_key() -> None:
     selection = select_provider("Bonsai", "")
 
     assert selection == ProviderSelection(provider="bonsai", session_key=None)
+
+
+def test_none_provider_is_rejected_at_selection_boundary() -> None:
+    with pytest.raises(ProviderChoiceError):
+        _ = select_provider(None, "")
 
 
 def test_byok_selection_requires_a_bounded_key() -> None:

@@ -1,13 +1,12 @@
 from collections.abc import Callable
-import anyio
 import gradio as gr
 
 from space.contracts import MAX_BYOK_KEY_LENGTH, ProviderChoiceError, ProviderSelection
 from space.runtime import JsonRecord, SpaceRuntimeSession, create_runtime_session
 
 
-def select_provider(raw_provider: str, raw_key: str) -> ProviderSelection:
-    normalized_provider = raw_provider.strip().casefold()
+def select_provider(raw_provider: str | None, raw_key: str) -> ProviderSelection:
+    normalized_provider = (raw_provider or "").strip().casefold()
     match normalized_provider:
         case "byok":
             if not raw_key or not raw_key.strip():
@@ -59,19 +58,21 @@ def _snapshot_outputs(session: SpaceRuntimeSession | None) -> JsonRecord:
     return snapshot.as_outputs()
 
 
-def _submit_prompt(session: SpaceRuntimeSession | None, prompt: str) -> tuple[str, JsonRecord]:
+def submit_prompt(session: SpaceRuntimeSession | None, prompt: str) -> tuple[str, JsonRecord]:
     if session is None:
         return "**Runtime unavailable:** choose BYOK or Bonsai first.", _empty_outputs()
     try:
-        snapshot = anyio.run(session.prompt, prompt)
+        snapshot = session.prompt_sync(prompt)
     except (RuntimeError, ValueError) as error:
         return f"**Prompt error:** {error}", _snapshot_outputs(session)
+    if snapshot.notifications:
+        return "**Runtime degraded:** provider error recorded; inspect runtime state.", snapshot.as_outputs()
     return "**Runtime ready:** prompt processed through the event bus.", snapshot.as_outputs()
 
 
 def _cleanup_session(session: SpaceRuntimeSession | None) -> None:
     if session is not None:
-        anyio.run(session.close)
+        session.close_sync()
 
 
 def create_app(
@@ -131,8 +132,11 @@ def create_app(
                 gr.JSON(value=_snapshot_outputs(selected_session)),
             )
 
-        def submit_prompt(session: SpaceRuntimeSession | None, value: str) -> tuple[str, JsonRecord]:
-            return _submit_prompt(session, value)
+        def submit_prompt_callback(
+            session: SpaceRuntimeSession | None,
+            value: str,
+        ) -> tuple[str, JsonRecord]:
+            return submit_prompt(session, value)
 
         _ = provider.change(reveal_key, inputs=provider, outputs=key)
         _ = submit.click(
@@ -140,7 +144,11 @@ def create_app(
             inputs=[provider, key, session_state],
             outputs=[status, key, session_state, prompt, prompt_submit, outputs],
         )
-        _ = prompt_submit.click(submit_prompt, inputs=[session_state, prompt], outputs=[status, outputs])
+        _ = prompt_submit.click(
+            submit_prompt_callback,
+            inputs=[session_state, prompt],
+            outputs=[status, outputs],
+        )
     return app
 
 
