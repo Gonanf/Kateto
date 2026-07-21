@@ -16,6 +16,9 @@ from kateto.providers.classifier import WorkflowSelection
 
 
 class _FakeProvider:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
     async def __aenter__(self) -> _FakeProvider:
         return self
 
@@ -28,7 +31,7 @@ class _FakeProvider:
         *,
         candidates: tuple[WorkflowCandidate, ...],
     ) -> WorkflowSelection | None:
-        assert text == "start a new project"
+        self.calls.append(text)
         assert candidates[0].name == "project-initiation"
         return WorkflowSelection(name="project-initiation", voice="jane", confidence=0.9)
 
@@ -36,9 +39,13 @@ class _FakeProvider:
 class _TestableWorkflowRouter(WorkflowRouter):
     _provider: WorkflowSelector | None
 
+    def __init__(self, settings: PluginSettings) -> None:
+        super().__init__(settings)
+        self.fake_provider = _FakeProvider()
+
     @override
     async def enable(self) -> None:
-        self._provider = _FakeProvider()
+        self._provider = self.fake_provider
 
 
 class _VoicePlugin(Plugin):
@@ -131,6 +138,12 @@ async def test_workflow_router_runs_the_selected_dynamic_workflow(tmp_path: Path
             source="executor_classifier",
         )
         await manager.wait_for_idle()
+        _ = await manager.emit(
+            "classification",
+            ClassificationData(text="stakeholders are Alice and Bob", category=Classification.EXECUTE),
+            source="executor_classifier",
+        )
+        await manager.wait_for_idle()
     finally:
         await manager.close()
 
@@ -142,12 +155,23 @@ async def test_workflow_router_runs_the_selected_dynamic_workflow(tmp_path: Path
             context={"project_state": "new", "confidence": 1.0},
         ),
     ]
-    assert voice.prompts == ["Gather requirements"]
+    assert voice.prompts == ["Gather requirements", "stakeholders are Alice and Bob"]
+    assert router.fake_provider.calls == []
+    requests = [event.data for event in manager.get_events() if event.name == "voice_request"]
+    assert requests[-1] == VoiceRequestData(
+        voice="jane",
+        prompt="stakeholders are Alice and Bob",
+        workflow="project-initiation",
+        phase_id="start",
+    )
     assert [event.name for event in manager.get_events()] == [
         "classification",
         "workflow_run",
         "workflow_started",
         "workflow_phase_start",
+        "voice_request",
+        "generate",
+        "classification",
         "voice_request",
         "generate",
     ]

@@ -284,7 +284,7 @@ async def test_workflow_calls_real_voice_provider_for_automatic_request(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_interrupt_stops_active_workflow(tmp_path: Path) -> None:
+async def test_interrupt_does_not_stop_active_workflow(tmp_path: Path) -> None:
     # Given: an active workflow owned by the workflow engine.
     config_dir = tmp_path
     workflow_path = config_dir / "workflows" / "brief" / "workflow.py"
@@ -304,10 +304,10 @@ async def test_interrupt_stops_active_workflow(tmp_path: Path) -> None:
         await manager.interrupt(reason="new-speech")
         await manager.wait_for_idle()
 
-        # Then: the run is cancelled and publishes its typed stopped event.
+        # Then: interruption cancels generation only; workflow state remains active.
         snapshot = engine.snapshot(workflow="brief", voice="jane")
         assert snapshot is not None
-        assert snapshot.status.value == "stopped"
-        assert [event.name for event in manager.get_events() if event.name == "workflow_stopped"]
+        assert snapshot.status.value == "running"
+        assert not [event.name for event in manager.get_events() if event.name == "workflow_stopped"]
     finally:
         await manager.close()

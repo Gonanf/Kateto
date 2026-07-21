@@ -79,13 +79,15 @@ class WorkflowEngine(Plugin):
         manager.register_event("interrupt", InterruptData)
 
     async def on_workflow_run(self, data: WorkflowRunData) -> None:
-        definition = self._catalog.load(workflow=data.workflow, voice=data.voice)
         key = self._key(data.workflow, data.voice)
         existing = self._runs.get(key)
         match existing:
             case _WorkflowRun(status=WorkflowStatus.RUNNING | WorkflowStatus.PAUSED):
                 return
             case _:
+                if self.active_for_voice(data.voice) is not None:
+                    return
+                definition = self._catalog.load(workflow=data.workflow, voice=data.voice)
                 run = _WorkflowRun(
                     definition=definition,
                     voice=data.voice,
@@ -156,18 +158,41 @@ class WorkflowEngine(Plugin):
                 return
 
     async def on_interrupt(self, data: InterruptData) -> None:
-        for key, run in tuple(self._runs.items()):
+        return None
+
+    def active_for_voice(self, voice: str) -> WorkflowSnapshot | None:
+        normalized = voice.casefold()
+        for run in self._runs.values():
+            if run.voice.casefold() != normalized:
+                continue
             if run.status not in {WorkflowStatus.RUNNING, WorkflowStatus.PAUSED}:
                 continue
-            self._runs[key] = replace(
-                run,
-                status=WorkflowStatus.STOPPED,
-                phase_status=WorkflowPhaseStatus.CANCELLED,
+            phase = run.definition.phases[run.phase_index]
+            return WorkflowSnapshot(
+                workflow=run.definition.name,
+                voice=run.voice,
+                status=run.status,
+                phase_id=phase.id,
+                phase_status=run.phase_status,
             )
-            await self._emit(
-                "workflow_stopped",
-                WorkflowStopData(workflow=run.definition.name, voice=run.voice, reason=data.reason),
+        return None
+
+    def active_runs(self) -> tuple[WorkflowSnapshot, ...]:
+        snapshots: list[WorkflowSnapshot] = []
+        for run in self._runs.values():
+            if run.status not in {WorkflowStatus.RUNNING, WorkflowStatus.PAUSED}:
+                continue
+            phase = run.definition.phases[run.phase_index]
+            snapshots.append(
+                WorkflowSnapshot(
+                    workflow=run.definition.name,
+                    voice=run.voice,
+                    status=run.status,
+                    phase_id=phase.id,
+                    phase_status=run.phase_status,
+                )
             )
+        return tuple(snapshots)
 
     def snapshot(self, *, workflow: str, voice: str) -> WorkflowSnapshot | None:
         run = self._runs.get(self._key(workflow, voice))

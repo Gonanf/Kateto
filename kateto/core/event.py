@@ -112,6 +112,8 @@ class PluginErrorData(EventModel):
 
 class GenerateData(EventModel):
     prompt: str | None = None
+    workflow: str | None = None
+    phase_id: str | None = None
 
 
 class VoiceRequestData(EventModel):

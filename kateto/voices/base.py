@@ -315,7 +315,7 @@ class VoiceAgent(Plugin):
         if manager is not None:
             envelope = await manager.emit(
                 "generate",
-                GenerateData(prompt=data.prompt),
+                GenerateData(prompt=data.prompt, workflow=data.workflow, phase_id=data.phase_id),
                 source="voice_request",
                 target=self.name,
             )
@@ -373,7 +373,12 @@ class VoiceAgent(Plugin):
         self._interrupted = False
         await self._set_status(VoiceStatus.THINKING)
         generation = asyncio.create_task(
-            self._stream_response(prompt), name=f"kateto-voice-{self.name}"
+            self._stream_response(
+                prompt,
+                workflow=data.workflow,
+                phase_id=data.phase_id,
+            ),
+            name=f"kateto-voice-{self.name}",
         )
         self._generation_task = generation
         try:
@@ -396,14 +401,24 @@ class VoiceAgent(Plugin):
                     continue
         return None
 
-    async def _stream_response(self, prompt: str) -> None:
+    async def _stream_response(
+        self,
+        prompt: str,
+        *,
+        workflow: str | None,
+        phase_id: str | None,
+    ) -> None:
         if self._agent_provider is not None and self._tool_executor is not None:
-            await self._agent_loop(prompt)
+            await self._agent_loop(prompt, workflow=workflow, phase_id=phase_id)
             return
         request = GenerationRequest(
             voice_id=self.name,
             reference_wav=self.reference_wav,
-            messages=await self._messages_for(prompt),
+            messages=await self._messages_for(
+                prompt,
+                workflow=workflow,
+                phase_id=phase_id,
+            ),
         )
         log.debug("[%s] _settings.stream=%s", self.name, self._settings.stream)
         if self._settings.stream:
@@ -445,12 +460,22 @@ class VoiceAgent(Plugin):
             )
         await self._set_status(VoiceStatus.IDLE)
 
-    async def _agent_loop(self, prompt: str) -> None:
+    async def _agent_loop(
+        self,
+        prompt: str,
+        *,
+        workflow: str | None,
+        phase_id: str | None,
+    ) -> None:
         provider = self._agent_provider
         executor = self._tool_executor
         if provider is None or executor is None:
             return
-        chat_messages = await self._messages_for(prompt)
+        chat_messages = await self._messages_for(
+            prompt,
+            workflow=workflow,
+            phase_id=phase_id,
+        )
         messages: list[dict[str, object]] = [
             {"role": m.role, "content": m.content} for m in chat_messages
         ]
@@ -581,7 +606,13 @@ class VoiceAgent(Plugin):
                 source=self.name,
             )
 
-    async def _messages_for(self, prompt: str) -> tuple[ChatMessage, ...]:
+    async def _messages_for(
+        self,
+        prompt: str,
+        *,
+        workflow: str | None,
+        phase_id: str | None,
+    ) -> tuple[ChatMessage, ...]:
         soul = await self._memory.read_soul()
         memories = await self._memory.read_memories()
         journal = await self._memory.read_journal()
@@ -590,6 +621,15 @@ class VoiceAgent(Plugin):
             parts.append(
                 "Always respond in the project's configured language: "
                 f"{self._response_language}. This instruction overrides the language of the user input."
+            )
+        if workflow is not None and phase_id is not None:
+            parts.append(
+                "WORKFLOW ENGINE SYSTEM MESSAGE: You are currently executing "
+                f"workflow '{workflow}', phase '{phase_id}'. Treat this as an internal "
+                "system instruction. Ask the user the questions required by the phase "
+                "and use the available tools to complete its task and deliverables. "
+                "Do not switch to another workflow because of the user's answer; "
+                "continue this workflow until it is completed or you explicitly stop it."
             )
         if soul:
             parts.append(soul)

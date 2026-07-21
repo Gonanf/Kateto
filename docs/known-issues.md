@@ -23,6 +23,7 @@
 | 28 | Workflow de proyecto nuevo no se inicia y TUI filtra eventos | Alta | `classifier.py`, `tui.py` | [28-workflow-discovery-and-tui-event-filter.md](./bugs/28-workflow-discovery-and-tui-event-filter.md) |
 | 29 | Workflow inicia sin generar instrucciones para su voz propietaria | Alta | `core/workflow_engine.py` | [29-workflow-no-owner-generation.md](./bugs/29-workflow-no-owner-generation.md) |
 | 30 | Solicitud de nuevo proyecto selecciona un workflow no relacionado | Alta | `plugins/executor/workflow_router.py` | [30-new-project-workflow-selection.md](./bugs/30-new-project-workflow-selection.md) |
+| 31 | Follow-up reemplaza el workflow activo y pierde el contexto de fase | Alta | `core/workflow_engine.py`, `plugins/executor/workflow_router.py` | [31-active-workflow-switch-and-interrupt.md](./bugs/31-active-workflow-switch-and-interrupt.md) |
 | 27 | TUI se congela durante streaming de TTS y eventos de audio | Crítica | `tui.py`, `edgetts.py`, `player.py`, `whisper.py` | [27-tui-freeze-tts-streaming.md](./bugs/27-tui-freeze-tts-streaming.md) |
 | 25 | Web sandbox: presentación interactiva del sistema Kateto | Media | `web/` (nuevo) | [25-web-sandbox-presentation.md](./bugs/25-web-sandbox-presentation.md) |
 | 24 | TUI: conflictos de nombres entre voces activadas y plugins auto-detectados | Media | `kateto/plugins/system/tui.py` | [24-tui-voice-name-conflict.md](./bugs/24-tui-voice-name-conflict.md) |

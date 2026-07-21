@@ -107,6 +107,49 @@ async def test_voice_provider_request_enforces_project_language(tmp_path: Path) 
 
 
 @pytest.mark.asyncio
+async def test_workflow_request_adds_internal_engine_system_message(tmp_path: Path) -> None:
+    _reference(tmp_path)
+    provider = RecordingProvider()
+    voice = VoiceAgent(
+        profile=VoiceProfile(
+            voice_id="jane",
+            display_name="Jane",
+            role=VoiceRole.ORCHESTRATOR,
+            system_prompt="system",
+            relevance_terms=frozenset(),
+        ),
+        config_dir=tmp_path,
+        provider=provider,
+        settings=VoiceSettings(),
+    )
+    manager = PluginManager()
+    await manager.enable_plugin(voice)
+
+    try:
+        await manager.emit(
+            "voice_request",
+            VoiceRequestData(
+                voice="jane",
+                prompt="Tell me who the stakeholders are",
+                workflow="project-initiation",
+                phase_id="stakeholders",
+            ),
+            source="workflow_engine",
+            target="jane",
+        )
+        await manager.wait_for_idle()
+
+        system_message = provider.requests[0].messages[0].content
+        assert "WORKFLOW ENGINE SYSTEM MESSAGE" in system_message
+        assert "Ask the user the questions required by the phase" in system_message
+        assert "use the available tools" in system_message
+        assert "project-initiation" in system_message
+        assert "stakeholders" in system_message
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
 async def test_voice_provider_request_lists_available_workflows(tmp_path: Path) -> None:
     # Given: a Jane voice with a project-initiation workflow in its catalog.
     _reference(tmp_path)

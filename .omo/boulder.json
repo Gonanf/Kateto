@@ -1,13 +1,13 @@
 {
   "schema_version": 2,
-  "active_work_id": "kateto-mvp",
+  "active_work_id": "kateto-zerogpu-publishing",
   "works": {
-    "kateto-mvp": {
-      "work_id": "kateto-mvp",
-      "active_plan": ".omo/plans/kateto-mvp.md",
-      "plan_name": "kateto-mvp",
+    "kateto-zerogpu-publishing": {
+      "work_id": "kateto-zerogpu-publishing",
+      "active_plan": ".omo/plans/kateto-zerogpu-publishing.md",
+      "plan_name": "kateto-zerogpu-publishing",
       "session_ids": ["codex:019f6634-7da1-74c3-9ad7-e49ac8e9181e"],
-      "status": "active",
+      "status": "completed",
       "worktree_path": null
     }
   }

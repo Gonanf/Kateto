@@ -8,11 +8,12 @@ from kateto.core.event import (
     ClassificationData,
     GenerateData,
     ProjectState,
+    VoiceRequestData,
     WorkflowRunData,
 )
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
-from kateto.core.workflow_engine import WorkflowEngine
+from kateto.core.workflow_engine import WorkflowEngine, WorkflowSnapshot
 from kateto.providers import ClassifierProvider, WorkflowCandidate, WorkflowSelection
 
 class WorkflowSelector(Protocol):
@@ -59,12 +60,20 @@ class WorkflowRouter(Plugin):
         provider = self._provider
         if provider is None:
             raise RuntimeError("workflow router must be enabled before use")
+        active = self._active_workflow(data.voice)
+        if active is not None:
+            await self._continue_workflow(active, data.text)
+            return
         candidates = self._workflow_candidates()
         selection = self._new_project_selection(data, candidates)
         if selection is None and candidates:
             selection = await provider.select_workflow(data.text, candidates=candidates)
         selected = self._resolve_selection(selection, candidates)
         if selected is not None and not self._is_inapplicable_for_existing_project(selected.name, data.project_state):
+            active = self._active_workflow(selected.voice)
+            if active is not None:
+                await self._continue_workflow(active, data.text)
+                return
             context: dict[str, str | int | float | bool | None] = {
                 "project_state": data.project_state.value,
             }
@@ -82,6 +91,42 @@ class WorkflowRouter(Plugin):
             GenerateData(prompt=data.text),
             source=self.name,
             target=self._resolve_voice(data.voice),
+        )
+
+    def _active_workflow(self, voice: str | None) -> WorkflowSnapshot | None:
+        engine = self._workflow_engine()
+        if engine is None:
+            return None
+        if voice is not None:
+            active = engine.active_for_voice(voice)
+            if active is not None:
+                return active
+        active_runs = engine.active_runs()
+        if len(active_runs) == 1:
+            return active_runs[0]
+        return None
+
+    async def _continue_workflow(self, active: WorkflowSnapshot, text: str) -> None:
+        _ = await self._manager().emit(
+            "voice_request",
+            VoiceRequestData(
+                voice=active.voice,
+                prompt=text,
+                workflow=active.workflow,
+                phase_id=active.phase_id,
+            ),
+            source=self.name,
+            target=active.voice,
+        )
+
+    def _workflow_engine(self) -> WorkflowEngine | None:
+        return next(
+            (
+                plugin
+                for plugin in self._manager().get_plugins()
+                if isinstance(plugin, WorkflowEngine)
+            ),
+            None,
         )
 
     def _workflow_candidates(self) -> tuple[WorkflowCandidate, ...]:
