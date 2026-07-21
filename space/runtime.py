@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Final, TypeAlias, final, override
 
 import anyio
+from anyio import to_thread
 from anyio.from_thread import BlockingPortal, start_blocking_portal
 from pydantic import BaseModel, JsonValue
 
@@ -198,6 +199,9 @@ class SpaceRuntimeSession:
         return self._session_key is not None
 
     async def prompt(self, value: str) -> RuntimeSnapshot:
+        return await to_thread.run_sync(self.prompt_sync, value)
+
+    async def _prompt(self, value: str) -> RuntimeSnapshot:
         if self._closed:
             raise RuntimeError("Space runtime session is closed")
         prompt = value.strip()
@@ -212,9 +216,12 @@ class SpaceRuntimeSession:
             return self.snapshot()
 
     def prompt_sync(self, value: str) -> RuntimeSnapshot:
-        return self._blocking_portal().call(self.prompt, value)
+        return self._blocking_portal().call(self._prompt, value)
 
     async def close(self) -> None:
+        await to_thread.run_sync(self.close_sync)
+
+    async def _close(self) -> None:
         if not self._closed:
             try:
                 await self.manager.wait_for_idle()
@@ -226,13 +233,16 @@ class SpaceRuntimeSession:
     def close_sync(self) -> None:
         with self._portal_lock:
             portal = self._portal
+            if portal is None:
+                stack = ExitStack()
+                self._portal_stack = stack
+                portal = stack.enter_context(start_blocking_portal())
+                self._portal = portal
             stack = self._portal_stack
-            if portal is None or stack is None:
-                with start_blocking_portal() as temporary_portal:
-                    temporary_portal.call(self.close)
-                return
+            if stack is None:
+                raise RuntimeError("Space runtime portal stack is unavailable")
             try:
-                portal.call(self.close)
+                portal.call(self._close)
             finally:
                 stack.close()
                 self._portal = None

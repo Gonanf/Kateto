@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 import pytest
 
@@ -92,6 +93,38 @@ def test_repeated_gradio_callbacks_reuse_one_session_runtime() -> None:
 
     _ = session.close_sync()
     assert session.snapshot().closed
+
+
+def test_close_sync_from_a_second_event_loop_drains_runtime_tasks() -> None:
+    # Given: a session whose runtime was started from one event loop.
+    session = create_runtime_session(ProviderSelection(provider="bonsai", session_key=None))
+    started = Event()
+    release = Event()
+
+    async def run_session() -> None:
+        _ = await session.prompt("cross-loop cleanup")
+        started.set()
+        _ = await asyncio.to_thread(release.wait)
+
+    async def close_session() -> None:
+        session.close_sync()
+
+    # When: Gradio-style cleanup runs from a different event loop.
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        running = workers.submit(asyncio.run, run_session())
+        _ = started.wait(timeout=5)
+        assert started.is_set()
+        try:
+            workers.submit(asyncio.run, close_session()).result()
+        finally:
+            release.set()
+            running.result()
+
+    # Then: cleanup completes without loop affinity errors or pending plugin tasks.
+    assert session.snapshot().closed
+    assert all(not plugin.enabled for plugin in session.manager.get_plugins())
+    assert not vars(session.manager)["_dispatch_tasks"]
+    assert not session.has_session_credentials
 
 
 @pytest.mark.asyncio
