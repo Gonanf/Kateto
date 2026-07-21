@@ -15,6 +15,11 @@ class Classification(StrEnum):
     IGNORE_THIRD_PARTY = "IGNORE_THIRD_PARTY"
 
 
+class ProjectState(StrEnum):
+    NEW = "new"
+    ALREADY_UNDERWAY = "already_underway"
+
+
 class BacklogPriority(StrEnum):
     MUST = "Must"
     SHOULD = "Should"
@@ -49,6 +54,9 @@ class ClassificationData(EventModel):
     text: str = Field(min_length=1)
     category: Classification
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    voice: str | None = None
+    workflow: str | None = None
+    project_state: ProjectState = ProjectState.NEW
 
     @field_validator("category", mode="before")
     @classmethod
@@ -104,6 +112,13 @@ class PluginErrorData(EventModel):
 
 class GenerateData(EventModel):
     prompt: str | None = None
+
+
+class VoiceRequestData(EventModel):
+    voice: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    workflow: str | None = None
+    phase_id: str | None = None
 
 
 class VoiceIdleData(EventModel):

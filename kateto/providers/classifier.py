@@ -40,7 +40,13 @@ class ClassifierProvider(HttpProvider):
         self._model = settings.model
         self._path = path
 
-    async def classify(self, text: str, *, agents: tuple[str, ...] = ()) -> ClassificationData:
+    async def classify(
+        self,
+        text: str,
+        *,
+        agents: tuple[str, ...] = (),
+        workflows: tuple[str, ...] = (),
+    ) -> ClassificationData:
         request = ClassifierRequest(
             model=self._model,
             messages=(
@@ -48,6 +54,7 @@ class ClassifierProvider(HttpProvider):
                 ChatMessage(role="user", content=text),
             ),
             agents=agents,
+            workflows=workflows,
         )
         response = await self._client_or_raise().post(
             self._url(self._path),
@@ -71,4 +78,11 @@ class ClassifierProvider(HttpProvider):
                     provider="classifier",
                     reason="expected a three-way classification",
                 ) from plain_error
-        return ClassificationData(text=text, category=payload.category, confidence=payload.confidence)
+        return ClassificationData(
+            text=text,
+            category=payload.category,
+            confidence=payload.confidence,
+            voice=payload.voice,
+            workflow=payload.workflow,
+            project_state=payload.project_state,
+        )

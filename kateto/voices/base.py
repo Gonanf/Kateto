@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import deque
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
-from typing import assert_never
+from typing import Protocol, assert_never
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ from kateto.core.event import (
     ToolResultData,
     TranscriptionData,
     VoiceIdleData,
+    VoiceRequestData,
     VoiceStatus,
     VoiceStatusData,
 )
@@ -64,6 +66,10 @@ class GenerationRequest:
     voice_id: str
     reference_wav: Path
     messages: tuple[ChatMessage, ...]
+
+
+class VoiceProvider(Protocol):
+    def stream(self, request: GenerationRequest) -> AsyncIterator[str]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,7 +153,7 @@ class VoiceAgent(Plugin):
         *,
         profile: VoiceProfile,
         config_dir: Path,
-        provider: OpenAICompatibleProvider,
+        provider: VoiceProvider,
         settings: VoiceSettings | None = None,
     ) -> None:
         super().__init__(
@@ -171,6 +177,7 @@ class VoiceAgent(Plugin):
         self._tool_executor: ToolExecutor | None = None
         self._tools: tuple[ChatCompletionToolParam, ...] = ()
         self._extra_tools: tuple[ChatCompletionToolParam, ...] = ()
+        self._event_messages: deque[ChatMessage] = deque(maxlen=32)
 
     @property
     def role(self) -> VoiceRole:
@@ -187,6 +194,10 @@ class VoiceAgent(Plugin):
     @property
     def tools(self) -> tuple[ChatCompletionToolParam, ...]:
         return self._tools
+
+    @property
+    def message_history(self) -> tuple[ChatMessage, ...]:
+        return tuple(self._event_messages)
 
     def setup_agent(
         self,
@@ -233,6 +244,7 @@ class VoiceAgent(Plugin):
         manager.register_event("voice_status", VoiceStatusData)
         manager.register_event("tool_call", ToolCallData)
         manager.register_event("tool_result", ToolResultData)
+        manager.register_event("voice_request", VoiceRequestData)
         await self._memory.ensure_soul(self.profile.system_prompt)
         self._skills = load_skills(
             config_dir=self._config_dir, names=tuple(self._settings.skills)
@@ -263,6 +275,7 @@ class VoiceAgent(Plugin):
     async def _enqueue(
         self, envelope: EventEnvelope[BaseModel], handler: EventHandler
     ) -> None:
+        self._remember_event(envelope)
         match envelope.name, envelope.data:
             case "interrupt", InterruptData() as interrupt:
                 await self.on_interrupt(interrupt)
@@ -274,6 +287,16 @@ class VoiceAgent(Plugin):
 
     async def on_transcription(self, data: TranscriptionData) -> None:
         return None
+
+    async def on_voice_request(self, data: VoiceRequestData) -> None:
+        manager = self.manager
+        if manager is not None:
+            await manager.emit(
+                "generate",
+                GenerateData(prompt=data.prompt),
+                source="voice_request",
+                target=self.name,
+            )
 
     async def on_text_chunk(self, data: TextChunk) -> None:
         return None
@@ -442,14 +465,14 @@ class VoiceAgent(Plugin):
         executor: ToolExecutor,
     ) -> None:
         messages.append(
-            ChatCompletionAssistantMessageParam(
-                role="assistant",
-                content=response.text or None,
-                tool_calls=[
+            {
+                "role": "assistant",
+                "content": response.text or None,
+                "tool_calls": [
                     {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)}}
                     for tc in response.tool_calls
                 ],
-            )
+            }
         )
         for tc in response.tool_calls:
             correlation_id = uuid4().hex
@@ -484,11 +507,11 @@ class VoiceAgent(Plugin):
                     source=self.name,
                 )
             messages.append(
-                ChatCompletionToolMessageParam(
-                    role="tool",
-                    tool_call_id=tc.id,
-                    content=result if error is None else f"Error: {error}",
-                )
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result if error is None else f"Error: {error}",
+                }
             )
 
     async def _set_status(self, status: VoiceStatus) -> None:
@@ -517,11 +540,29 @@ class VoiceAgent(Plugin):
         for skill in self._skills:
             parts.append(skill.instructions)
         messages = [ChatMessage(role="system", content="\n\n".join(parts))]
-        context = self._untrusted_context()
-        if context:
-            messages.append(ChatMessage(role="user", content=context))
-        messages.append(ChatMessage(role="user", content=prompt))
+        history = tuple(self._event_messages)
+        if not history:
+            context = self._untrusted_context()
+            if context:
+                history = (ChatMessage(role="user", content=context),)
+        messages.extend(history)
+        if not any(message.role == "user" and message.content == prompt for message in history):
+            messages.append(ChatMessage(role="user", content=prompt))
         return tuple(messages)
+
+    def _remember_event(self, envelope: EventEnvelope[BaseModel]) -> None:
+        message: ChatMessage | None = None
+        match envelope.data:
+            case TranscriptionData(text=text):
+                message = ChatMessage(role="user", content=text)
+            case TextChunk(text=text, voice_id=voice_id) if voice_id != self.name:
+                message = ChatMessage(role="assistant", content=text)
+            case VoiceRequestData(prompt=prompt):
+                message = ChatMessage(role="user", content=prompt)
+            case _:
+                return
+        if not self._event_messages or self._event_messages[-1] != message:
+            self._event_messages.append(message)
 
     def _untrusted_context(self) -> str:
         context: list[str] = []

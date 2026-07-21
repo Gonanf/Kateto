@@ -6,6 +6,8 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from kateto.core.event import (
+    InterruptData,
+    VoiceRequestData,
     VoiceIdleData,
     WorkflowCheckpointFailData,
     WorkflowCheckpointResult,
@@ -73,6 +75,8 @@ class WorkflowEngine(Plugin):
         manager.register_event("workflow_stop", WorkflowStopData)
         manager.register_event("workflow_stopped", WorkflowStopData)
         manager.register_event("voice_idle", VoiceIdleData)
+        manager.register_event("voice_request", VoiceRequestData)
+        manager.register_event("interrupt", InterruptData)
 
     async def on_workflow_run(self, data: WorkflowRunData) -> None:
         definition = self._catalog.load(workflow=data.workflow, voice=data.voice)
@@ -151,6 +155,20 @@ class WorkflowEngine(Plugin):
             case _:
                 return
 
+    async def on_interrupt(self, data: InterruptData) -> None:
+        for key, run in tuple(self._runs.items()):
+            if run.status not in {WorkflowStatus.RUNNING, WorkflowStatus.PAUSED}:
+                continue
+            self._runs[key] = replace(
+                run,
+                status=WorkflowStatus.STOPPED,
+                phase_status=WorkflowPhaseStatus.CANCELLED,
+            )
+            await self._emit(
+                "workflow_stopped",
+                WorkflowStopData(workflow=run.definition.name, voice=run.voice, reason=data.reason),
+            )
+
     def snapshot(self, *, workflow: str, voice: str) -> WorkflowSnapshot | None:
         run = self._runs.get(self._key(workflow, voice))
         match run:
@@ -194,11 +212,40 @@ class WorkflowEngine(Plugin):
                 instructions=list(phase.instructions),
             ),
         )
+        for called_voice in phase.calls_voices:
+            target = self._voice_target(called_voice)
+            if target is None:
+                continue
+            await self._emit(
+                "voice_request",
+                VoiceRequestData(
+                    voice=target,
+                    prompt="\n".join(phase.instructions),
+                    workflow=run.definition.name,
+                    phase_id=phase.id,
+                ),
+                target=target,
+            )
 
-    async def _emit(self, name: str, data: BaseModel) -> None:
+    async def _emit(self, name: str, data: BaseModel, *, target: str | None = None) -> None:
         manager = self.manager
         if manager is not None:
-            await manager.emit(name, data, source=self.name)
+            await manager.emit(name, data, source=self.name, target=target)
+
+    def _voice_target(self, selected: str) -> str | None:
+        manager = self.manager
+        if manager is None:
+            return None
+        normalized = selected.casefold()
+        from kateto.voices.base import VoiceProfile
+
+        for plugin in manager.get_plugins():
+            if plugin.name.casefold() == normalized:
+                return plugin.name
+            profile = getattr(plugin, "profile", None)
+            if isinstance(profile, VoiceProfile) and profile.display_name.casefold() == normalized:
+                return plugin.name
+        return None
 
     @staticmethod
     def _key(workflow: str, voice: str) -> _WorkflowKey:

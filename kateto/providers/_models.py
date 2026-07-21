@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from kateto.core.event import Classification
+from kateto.core.event import Classification, ProjectState
 
 
 class ProviderModel(BaseModel):
@@ -30,6 +30,7 @@ class ClassifierRequest(ProviderModel):
     model: str | None = None
     messages: tuple[ChatMessage, ...] = Field(min_length=1)
     agents: tuple[str, ...] = Field(default_factory=tuple)
+    workflows: tuple[str, ...] = Field(default_factory=tuple)
     temperature: float = 0.0
     stream: Literal[False] = False
     response_format: JsonResponseFormat = Field(default_factory=JsonResponseFormat)
@@ -50,6 +51,9 @@ class ClassificationResponse(ProviderModel):
 class ClassificationPayload(ProviderModel):
     category: Classification
     confidence: float | None = Field(default=None, ge=0, le=1)
+    voice: str | None = None
+    workflow: str | None = None
+    project_state: ProjectState = ProjectState.NEW
 
 
 class ChatRequest(ProviderModel):
