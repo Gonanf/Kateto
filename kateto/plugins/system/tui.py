@@ -182,6 +182,7 @@ class KatetoApp(App[None]):
         self._voice_texts: dict[str, str] = {}
         self._voice_bubble_seq: dict[str, int] = {}
         self._pending_refresh = False
+        self._last_tree_refresh = 0.0
         self.manager.register_event("tui_event", TuiEventData)
         self.manager.add_event_observer(self._observe_event)
 
@@ -513,20 +514,20 @@ class KatetoApp(App[None]):
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         if not self.is_mounted:
             return
-        if envelope.name in self._NOISY_EVENTS:
+        if envelope.name == "audio_output":
             return
-        self._update_voice_status(envelope)
-        self._update_audio_status(envelope)
-        if envelope.name in self._NOISY_EVENTS:
-            return
-        self._events.append(envelope)
-        try:
-            self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
-        except Exception:
-            pass
-        if isinstance(envelope.data, PluginErrorData):
-            self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
-        self._refresh_view_after_event()
+        if envelope.name not in self._NOISY_EVENTS:
+            self._update_voice_status(envelope)
+            self._update_audio_status(envelope)
+            self._events.append(envelope)
+            try:
+                self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
+            except Exception:
+                pass
+            if isinstance(envelope.data, PluginErrorData):
+                self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
+            self._refresh_light()
+            self._schedule_tree_refresh()
         source_voice = envelope.source.split("/")[0]
         if source_voice not in self.runtime.workflow_voices:
             return
@@ -544,28 +545,34 @@ class KatetoApp(App[None]):
             data_preview = data_preview[:197] + "..."
         self._add_chat_message("agent", source_voice, data_preview)
 
-    def _refresh_view_after_event(self) -> None:
-        if self._pending_refresh:
-            return
-        self._pending_refresh = True
-
-        def _do_refresh() -> None:
-            self._pending_refresh = False
-            if self.is_mounted:
-                self._refresh_view()
-
-        self.call_after_refresh(_do_refresh)
-
-    def _refresh_view(self) -> None:
+    def _refresh_light(self) -> None:
         if not self.is_mounted:
             return
         self.query_one("#plugin-history", Static).update(self._history_text())
-        self._populate_plugin_list()
         self._refresh_plugin_config()
+        self.query_one("#mcp-state", Static).update(self._mcp_state())
+
+    def _schedule_tree_refresh(self) -> None:
+        now = asyncio.get_event_loop().time()
+        if now - self._last_tree_refresh < 1.0:
+            return
+        self._last_tree_refresh = now
+        if not self.is_mounted:
+            return
+        self._populate_plugin_list()
         self._populate_event_tree()
         self._populate_voice_tree()
         self._populate_workflow_tree()
-        self.query_one("#mcp-state", Static).update(self._mcp_state())
+
+    def _refresh_view(self) -> None:
+        self._refresh_light()
+        self._last_tree_refresh = asyncio.get_event_loop().time()
+        if not self.is_mounted:
+            return
+        self._populate_plugin_list()
+        self._populate_event_tree()
+        self._populate_voice_tree()
+        self._populate_workflow_tree()
 
     def _populate_plugin_list(self) -> None:
         container = self.query_one("#plugin-list", Vertical)

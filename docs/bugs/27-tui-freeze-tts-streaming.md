@@ -136,7 +136,7 @@ _CHUNK_SIZE = 65536  # ~1.4s PCM at 24000Hz s16le mono
 #### 3. TUI: Throttle de tree rebuilds a 1/segundo
 
 `kateto/plugins/system/tui.py`:
-- `_observe_event()` retorna inmediatamente para `audio_output` y `text_chunk`, antes de actualizar estados, historial o widgets
+- `_observe_event()` retorna inmediatamente para `audio_output`; `text_chunk` evita estados, historial y árboles costosos, pero continúa hacia `_handle_text_chunk()` para mantener visible la conversación
 - Split `_refresh_view` en `_refresh_light()` (text fields baratos) y `_schedule_tree_refresh()` (4 trees pesados)
 - `_refresh_light()` corre en cada evento — solo actualiza 3 Static widgets
 - `_schedule_tree_refresh()` usa timestamp throttle: max 1 rebuild/segundo

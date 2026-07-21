@@ -169,6 +169,42 @@ async def test_tui_observer_does_no_synchronous_work_for_noisy_audio_events(
 
 
 @pytest.mark.asyncio
+async def test_tui_observer_keeps_text_chunks_visible_without_heavy_refreshes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a mounted TUI with a voice that is allowed to display conversation output.
+    manager = PluginManager()
+    runtime = _TuiRuntime(manager, tmp_path)
+    runtime.workflow_voices = ("jane",)
+    app = KatetoApp(runtime=runtime)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        status_calls: list[None] = []
+        refresh_calls: list[None] = []
+        monkeypatch.setattr(app, "_update_voice_status", lambda envelope: status_calls.append(None))
+        monkeypatch.setattr(app, "_update_audio_status", lambda envelope: status_calls.append(None))
+        monkeypatch.setattr(app, "_refresh_light", lambda: refresh_calls.append(None))
+        monkeypatch.setattr(app, "_schedule_tree_refresh", lambda: refresh_calls.append(None))
+
+        # When: a streamed text chunk arrives from that voice.
+        await manager.emit(
+            "text_chunk",
+            TextChunk(text="hello", sequence=0, final=False, voice_id="jane"),
+            source="jane",
+        )
+        await pilot.pause()
+
+        # Then: the chunk is rendered, without status or expensive tree refresh work.
+        assert app._voice_texts["bubble-jane-0"] == "hello"
+        assert status_calls == []
+        assert refresh_calls == []
+
+    assert not runtime.is_started
+
+
+@pytest.mark.asyncio
 async def test_tui_tree_refresh_is_throttled_during_event_burst(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
