@@ -7,7 +7,7 @@ import re
 import shlex
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_origin
 
 if TYPE_CHECKING:
     from kateto.plugins.system.external_mcp import ExternalMcpManager
@@ -369,18 +369,25 @@ def build_event_tools(manager: PluginManager) -> tuple[ChatCompletionToolParam, 
         required: list[str] = []
         for field_name, field_info in reg.contract.model_fields.items():
             field_type = "string"
+            items: dict[str, str] | None = None
             if field_info.annotation is not None:
                 annotation_name = getattr(field_info.annotation, "__name__", str(field_info.annotation))
-                if "bool" in annotation_name:
+                if get_origin(field_info.annotation) is list:
+                    field_type = "array"
+                    items = {"type": "object"}
+                elif "bool" in annotation_name:
                     field_type = "boolean"
                 elif "int" in annotation_name or "float" in annotation_name:
                     field_type = "number"
-                elif "dict" in annotation_name or "list" in annotation_name:
+                elif "dict" in annotation_name:
                     field_type = "object"
-            properties[field_name] = {
+            property_schema: dict[str, Any] = {
                 "type": field_type,
                 "description": f"Field for {reg.name} event",
             }
+            if items is not None:
+                property_schema["items"] = items
+            properties[field_name] = property_schema
             if field_info.is_required():
                 required.append(field_name)
         tools.append(ChatCompletionToolParam(

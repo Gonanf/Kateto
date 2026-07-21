@@ -47,7 +47,7 @@ from kateto.core.event import (
     WorkflowStopData,
 )
 from kateto.core.plugin import EventHandler, Plugin
-from kateto.core.workflow import WorkflowCatalog
+from kateto.core.workflow import WorkflowCatalog, WorkflowNotFoundError
 from kateto.providers import ChatMessage
 from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolExecutor
 from kateto.voices.memory import VoiceMemory
@@ -631,6 +631,32 @@ class VoiceAgent(Plugin):
                 "Do not switch to another workflow because of the user's answer; "
                 "continue this workflow until it is completed or you explicitly stop it."
             )
+            try:
+                definition = WorkflowCatalog(config_dir=self._config_dir).load(
+                    workflow=workflow,
+                    voice=self.name,
+                )
+            except WorkflowNotFoundError:
+                definition = None
+            if definition is not None:
+                phase = next(
+                    (item for item in definition.phases if item.id.casefold() == phase_id.casefold()),
+                    None,
+                )
+                if phase is not None:
+                    tasks = "\n".join(f"- {item}" for item in phase.instructions)
+                    deliverables = ", ".join(phase.deliverables) or "none listed"
+                    checkpoints = "\n".join(f"- {item}" for item in phase.checkpoints) or "- none listed"
+                    parts.append(
+                        "Current workflow phase contract:\n"
+                        f"Tasks:\n{tasks}\n"
+                        f"Deliverables to create or update: {deliverables}\n"
+                        f"Checkpoints to verify:\n{checkpoints}\n"
+                        "After completing the tasks, dispatch the workflow_phase_complete "
+                        "event with the exact workflow, phase_id, voice, deliverables, and "
+                        "checkpoint_results. Mark every passed checkpoint with passed=true. "
+                        "Do not finish with prose alone."
+                    )
         if soul:
             parts.append(soul)
         if memories:

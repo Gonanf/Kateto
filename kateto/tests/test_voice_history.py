@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -17,6 +18,7 @@ from kateto.core.event import (
     WorkflowPhaseStartData,
 )
 from kateto.voices.base import GenerationRequest, VoiceAgent, VoiceProfile, VoiceRole
+from kateto.voices.tools import build_event_tools
 
 
 class RecordingProvider:
@@ -109,6 +111,18 @@ async def test_voice_provider_request_enforces_project_language(tmp_path: Path) 
 @pytest.mark.asyncio
 async def test_workflow_request_adds_internal_engine_system_message(tmp_path: Path) -> None:
     _reference(tmp_path)
+    workflow = tmp_path / "voices" / "jane" / "workflows" / "project-initiation" / "workflow.py"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text(
+        "name = 'project-initiation'\n"
+        "description = 'Start a project'\n"
+        "voice = 'Jane'\n"
+        "phases = [{'id': 'stakeholders', 'name': 'Stakeholders', "
+        "'instructions': ['Identify stakeholders'], "
+        "'deliverables': ['stakeholder-registry.md'], "
+        "'checkpoints': ['All stakeholders documented']}]\n",
+        encoding="utf-8",
+    )
     provider = RecordingProvider()
     voice = VoiceAgent(
         profile=VoiceProfile(
@@ -145,6 +159,38 @@ async def test_workflow_request_adds_internal_engine_system_message(tmp_path: Pa
         assert "use the available tools" in system_message
         assert "project-initiation" in system_message
         assert "stakeholders" in system_message
+        assert "stakeholder-registry.md" in system_message
+        assert "All stakeholders documented" in system_message
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_workflow_completion_tool_describes_array_fields_for_the_model(tmp_path: Path) -> None:
+    _reference(tmp_path)
+    voice = VoiceAgent(
+        profile=VoiceProfile(
+            voice_id="jane",
+            display_name="Jane",
+            role=VoiceRole.ORCHESTRATOR,
+            system_prompt="system",
+            relevance_terms=frozenset(),
+        ),
+        config_dir=tmp_path,
+        provider=RecordingProvider(),
+        settings=VoiceSettings(),
+    )
+    manager = PluginManager()
+    await manager.enable_plugin(voice)
+
+    try:
+        completion = next(
+            tool for tool in build_event_tools(manager)
+            if tool["function"]["name"] == "workflow_phase_complete"
+        )
+        schema = str(completion["function"].get("parameters"))
+        assert "'deliverables': {'type': 'array'" in schema
+        assert "'checkpoint_results': {'type': 'array'" in schema
     finally:
         await manager.close()
 
