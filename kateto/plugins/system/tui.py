@@ -22,15 +22,18 @@ from kateto.core.event import (
     GenerateData,
     PluginErrorData,
     TextChunk,
+    VoiceRequestData,
     VoiceStatus,
     VoiceStatusData,
+    WorkflowCheckpointResult,
+    WorkflowPhaseCompleteData,
     WorkflowRunData,
 )
 from kateto.core.config import VoiceSettings, bootstrap_config
 from kateto.core.hot_reload import HotReloadController, ReloadContext, ReplacementFactory
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
-from kateto.core.workflow import WorkflowDefinition, WorkflowDefinitionError, WorkflowPhaseStatus, WorkflowStatus
+from kateto.core.workflow import WorkflowCatalog, WorkflowDefinition, WorkflowDefinitionError, WorkflowPhaseStatus, WorkflowStatus
 from kateto.core.workflow_engine import WorkflowSnapshot
 from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration
 from kateto.voices.base import GenerationRequest, VoiceAgent, VoiceProfile, VoiceRole
@@ -58,6 +61,34 @@ class _FixtureVoiceProvider:
         yield f"{self._voice.title()} fixture response: {self._role_response} I received '{prompt}'."
 
 
+class _FixtureVoice(VoiceAgent):
+    async def on_voice_request(self, data: VoiceRequestData) -> None:
+        await super().on_voice_request(data)
+        if data.workflow is None or data.phase_id is None or self.manager is None:
+            return
+        definition = WorkflowCatalog(config_dir=self._config_dir).load(workflow=data.workflow, voice=self.name)
+        if definition.voice is not None and definition.voice.casefold() != self.name.casefold():
+            return
+        phase = next(
+            phase for phase in definition.phases if phase.id.casefold() == data.phase_id.casefold()
+        )
+        await self.manager.emit(
+            "workflow_phase_complete",
+            WorkflowPhaseCompleteData(
+                workflow=definition.name,
+                phase_id=phase.id,
+                voice=self.name,
+                deliverables=list(phase.deliverables),
+                checkpoint_results=[
+                    WorkflowCheckpointResult(checkpoint=checkpoint, passed=True)
+                    for checkpoint in phase.checkpoints
+                ],
+            ),
+            source=self.name,
+            target="workflow_engine",
+        )
+
+
 def _fixture_voice(name: str, config_dir: Path) -> VoiceAgent:
     profiles = {
         "jane": (
@@ -82,7 +113,7 @@ def _fixture_voice(name: str, config_dir: Path) -> VoiceAgent:
     reference = voice_dir / "reference.wav"
     if not reference.exists():
         reference.write_bytes(b"RIFFfixtureWAVE")
-    return VoiceAgent(
+    return _FixtureVoice(
         profile=VoiceProfile(
             voice_id=name,
             display_name=name.title(),
