@@ -217,6 +217,7 @@ class SpaceRuntimeSession:
     async def close(self) -> None:
         if not self._closed:
             try:
+                await self.manager.wait_for_idle()
                 await self.manager.close()
             finally:
                 self._session_key = None

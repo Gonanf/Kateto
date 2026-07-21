@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from kateto.core.event import GenerateData
 from space.app import submit_prompt
 from space.contracts import ProviderSelection
 from space.runtime import RuntimeSnapshot, create_runtime_session
@@ -90,6 +92,23 @@ def test_repeated_gradio_callbacks_reuse_one_session_runtime() -> None:
 
     _ = session.close_sync()
     assert session.snapshot().closed
+
+
+@pytest.mark.asyncio
+async def test_close_drains_pending_runtime_tasks() -> None:
+    session = create_runtime_session(ProviderSelection(provider="bonsai", session_key=None))
+    _ = await session.prompt("start cleanup")
+    _ = await session.manager.emit("generate", GenerateData(prompt="cleanup race"), source="space")
+    assert vars(session.manager)["_dispatch_tasks"]
+
+    await session.close()
+
+    assert not vars(session.manager)["_dispatch_tasks"]
+    assert not [
+        task
+        for task in asyncio.all_tasks()
+        if task.get_name() == "kateto-plugin-space_fixture_runtime" and not task.done()
+    ]
 
 
 def test_concurrent_gradio_callbacks_share_one_session_runtime() -> None:
