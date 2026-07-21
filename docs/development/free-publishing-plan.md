@@ -6,14 +6,16 @@ This plan is for the OpenAI Build Week **Work and Productivity** submission. It 
 
 ## Release shape
 
-### 1. Public judge path: CPU Space, deterministic fixture
+### 1. Public judge path: Gradio ZeroGPU Space
 
-Ship a small Gradio/Space adapter whose default action launches the bounded fixture run. It demonstrates the complete event loop, TUI/event state, workflows, plans, and the actual work artifacts produced by the voices without requiring network access, model downloads, a microphone, or a secret.
+The deployment target is the ZeroGPU Gradio hardware available in the maintainer’s Hugging Face account. Do not plan around CPU Basic. Ship a small Gradio adapter whose default action launches the bounded fixture runtime and renders its event state, plans, workflow progress, and work artifacts in the browser. The Textual TUI remains the local/operator surface; the Gradio adapter is the judge-facing presentation of the same runtime state.
 
 - Pin Python/dependency versions and build from the lockfile.
-- Use a health endpoint and a short smoke command before publishing.
-- Sleep on inactivity and keep the Space on free CPU hardware. Hugging Face documents that free CPU Spaces suspend after inactivity and wake when visited: <https://huggingface.co/docs/hub/spaces-gpus>.
-- Show a clear “fixture / live” label so judges cannot mistake deterministic output for live inference.
+- Use Gradio’s Space startup path and a short smoke command before publishing.
+- Keep the fixture path GPU-free at the application level so it works even when the shared GPU queue is busy; only decorated inference functions request ZeroGPU.
+- Decorate VAD and classifier functions with `@spaces.GPU` only after the fixture path is proven. Do not move the whole runtime into a GPU allocation.
+- Treat the Space filesystem as ephemeral. Keep plans and work artifacts in the session/runtime view, and do not promise durable user storage unless a separately verified persistent volume is available.
+- Show a clear “fixture / live” label and the current GPU/provider status so judges cannot mistake deterministic output for live inference.
 
 ### 2. Optional live path: user-owned providers
 
@@ -26,7 +28,7 @@ Live mode remains a local or explicitly configured deployment. The Space may acc
 | Voice generation | fixture response | OpenRouter with BYOK, or local/Space-hosted Bonsai where supported | Never proxy the maintainer’s key to anonymous users. BYOK must be entered into a server-side secret/config path. |
 | TTS | fixture PCM | Edge TTS without an API key, or Camb.AI with the user’s key | Treat Edge TTS as an online fallback whose availability and terms can change; Camb.AI requires an API key. |
 
-Hugging Face ZeroGPU is not an unlimited free production GPU: the current documentation says personal accounts need PRO to host a ZeroGPU Space, while free users can use existing ZeroGPU Spaces with daily quota. It is therefore a later experiment, not the baseline judge path: <https://huggingface.co/docs/hub/main/en/spaces-zerogpu>.
+Hugging Face documents that ZeroGPU is Gradio-only, dynamically allocates the GPU to decorated functions, and applies daily quotas and queue priority. The general account rules may differ from this account’s entitlement, so the release checklist must verify that the target Space can actually be created and run under the maintainer’s ZeroGPU plan: <https://huggingface.co/docs/hub/main/en/spaces-zerogpu>.
 
 OpenRouter exposes a model catalog and free variants, but model availability and limits change. Resolve models from the catalog at deployment time and pin a known-good fallback for the demo: <https://openrouter.ai/docs/guides/overview/models>. If BYOK is supported, use a narrowly scoped, expiring key with a spending limit; OpenRouter’s key documentation states that plaintext keys are shown only once: <https://openrouter.ai/docs/api/api-reference/api-keys/create-keys>.
 
@@ -60,13 +62,14 @@ The demo should show the plan and the work, not only a chat bubble:
 
 ## Execution sequence
 
-1. Freeze the fixture contract and run `uv run kateto smoke --fixture` in a clean config directory.
-2. Add the Space adapter with fixture as the only default and run it without network access.
-3. Add health, timeout, rate, payload, and secret-scan checks.
-4. Test each optional provider independently; do not couple VAD, classifier, LLM, and TTS availability into one startup requirement.
-5. Publish the public Space and repository, then test from a clean browser/session with no maintainer credentials.
-6. Record the exact Space revision, model IDs, provider terms, and smoke output in the release notes.
-7. Submit the Build Week entry with an English description, a public YouTube video under three minutes, repository URL, testing instructions, and the Codex `/feedback` session ID. The official `RULES.md` remains the source of truth for eligibility and submission requirements.
+1. Freeze the fixture contract and run it locally in a clean config directory.
+2. Build the Gradio adapter with fixture as the only default and verify it without network access.
+3. Create the target Space using the account’s ZeroGPU Gradio option and confirm a minimal `@spaces.GPU` probe works.
+4. Add health, timeout, rate, payload, session cleanup, and secret-scan checks.
+5. Test VAD, classifier, LLM, and TTS independently; do not couple their availability into Space startup.
+6. Publish the Space and repository, then test from a clean browser/session with no maintainer credentials.
+7. Record the exact Space revision, model IDs, provider terms, GPU quota behavior, and smoke output in the release notes.
+8. Submit the Build Week entry with an English description, a public YouTube video under three minutes, repository URL, testing instructions, and the Codex `/feedback` session ID. The official `RULES.md` remains the source of truth for eligibility and submission requirements.
 
 ## Rollback
 

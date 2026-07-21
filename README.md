@@ -113,7 +113,7 @@ Never commit `.env`, tokens, model weights, private reference audio, generated r
 
 ## Publishing safely for free
 
-The recommended public deployment is a fixture-first Hugging Face Space on free CPU hardware. Live providers are optional and user-owned: OpenRouter BYOK or a tested local/Ternary-Bonsai classifier, and Edge TTS or Camb.AI for speech. The maintainer key must never be shipped to browsers or shared with anonymous users. ZeroGPU is an experiment rather than the baseline because hosting and quotas depend on the current Hugging Face account tier.
+The recommended public deployment is a fixture-first Hugging Face Gradio Space using the ZeroGPU entitlement available in the maintainer’s account. CPU Basic is not assumed. Live providers are optional and user-owned: OpenRouter BYOK or a tested local/Ternary-Bonsai classifier, and Edge TTS or Camb.AI for speech. The maintainer key must never be shipped to browsers or shared with anonymous users.
 
 Read the complete [free and safe publishing plan](docs/development/free-publishing-plan.md) and [final MVP assessment](docs/development/final-assessment.md). The latter records what is implemented, what the demo must show, and what remains a deployment caveat.
 

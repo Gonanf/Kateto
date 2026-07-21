@@ -8,7 +8,7 @@
 
 Kateto is a credible, runnable MVP vertical slice for the track. Its strongest differentiator is the event-oriented team runtime: audio, classification, voices, workflows, tools, TUI state, errors, and hot reload all communicate through the PluginManager. The fixture mode makes the core behavior judgeable without private infrastructure.
 
-The release is not yet a general hosted voice service. Microphone capture, model serving, TTS, provider quotas, and hardware compatibility remain deployment concerns. The safe publication strategy is therefore fixture-first with opt-in live providers, rather than embedding the maintainer’s keys or promising an unlimited free GPU.
+The release is not yet a general hosted voice service. Microphone capture, model serving, TTS, provider quotas, and hardware compatibility remain deployment concerns. The safe publication strategy is therefore a fixture-first Gradio Space on the maintainer’s ZeroGPU entitlement with opt-in live providers, rather than embedding the maintainer’s keys or promising an unlimited free GPU.
 
 ## Evidence of work
 
