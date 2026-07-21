@@ -95,6 +95,23 @@ def test_existing_config_without_router_section_still_discovers_the_router(tmp_p
     }
 
 
+def test_new_project_requests_prefer_project_initiation() -> None:
+    router = WorkflowRouter(PluginSettings(model_endpoint="http://classifier.test", model="classifier"))
+    data = ClassificationData(
+        text="Vamos a empezar un nuevo proyecto",
+        category=Classification.EXECUTE,
+    )
+    candidates = (
+        WorkflowCandidate(name="project-initiation", voice="jane", description="Start a project"),
+        WorkflowCandidate(name="stakeholder-communication", voice="jane", description="Communicate with stakeholders"),
+    )
+
+    selection = router._new_project_selection(data, candidates)
+
+    assert selection is not None
+    assert selection.name == "project-initiation"
+
+
 @pytest.mark.asyncio
 async def test_workflow_router_runs_the_selected_dynamic_workflow(tmp_path: Path) -> None:
     _write_workflow(tmp_path)
@@ -122,7 +139,7 @@ async def test_workflow_router_runs_the_selected_dynamic_workflow(tmp_path: Path
         WorkflowRunData(
             workflow="project-initiation",
             voice="jane",
-            context={"project_state": "new", "confidence": 0.9},
+            context={"project_state": "new", "confidence": 1.0},
         ),
     ]
     assert voice.prompts == ["Gather requirements"]

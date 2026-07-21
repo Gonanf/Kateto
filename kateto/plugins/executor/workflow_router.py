@@ -60,7 +60,9 @@ class WorkflowRouter(Plugin):
         if provider is None:
             raise RuntimeError("workflow router must be enabled before use")
         candidates = self._workflow_candidates()
-        selection = await provider.select_workflow(data.text, candidates=candidates) if candidates else None
+        selection = self._new_project_selection(data, candidates)
+        if selection is None and candidates:
+            selection = await provider.select_workflow(data.text, candidates=candidates)
         selected = self._resolve_selection(selection, candidates)
         if selected is not None and not self._is_inapplicable_for_existing_project(selected.name, data.project_state):
             context: dict[str, str | int | float | bool | None] = {
@@ -127,6 +129,33 @@ class WorkflowRouter(Plugin):
             "project-initiation",
             "requirements-gathering",
         }
+
+    @staticmethod
+    def _new_project_selection(
+        data: ClassificationData,
+        candidates: tuple[WorkflowCandidate, ...],
+    ) -> WorkflowSelection | None:
+        if data.project_state is not ProjectState.NEW:
+            return None
+        normalized = data.text.casefold()
+        if not any(
+            phrase in normalized
+            for phrase in (
+                "new project",
+                "nuevo proyecto",
+                "start a project",
+                "started a project",
+                "project kickoff",
+            )
+        ):
+            return None
+        candidate = next(
+            (item for item in candidates if item.name.casefold() == "project-initiation"),
+            None,
+        )
+        if candidate is None:
+            return None
+        return WorkflowSelection(name=candidate.name, voice=candidate.voice, confidence=1.0)
 
     def _resolve_voice(self, selected: str | None) -> str | None:
         if selected is None:
