@@ -6,7 +6,8 @@ import pytest
 from typing import override
 
 from kateto.core import Plugin, PluginManager
-from kateto.core.config import PluginSettings
+from kateto.core.config import PluginSettings, load_config
+from kateto.core.discovery import DiscoveryContext
 from kateto.core.event import Classification, ClassificationData, WorkflowRunData
 from kateto.core.workflow_engine import WorkflowEngine
 from kateto.plugins.executor.workflow_router import WorkflowRouter, WorkflowSelector
@@ -56,6 +57,30 @@ def _write_workflow(config_dir: Path) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def test_existing_config_without_router_section_still_discovers_the_router(tmp_path: Path) -> None:
+    _ = (tmp_path / "config.toml").write_text(
+        "[kateto]\n"
+        "[plugin.executor_classifier]\n"
+        "enabled = true\n"
+        "model_endpoint = 'http://classifier.test'\n"
+        "model = 'classifier'\n"
+        "[cli]\n"
+        "allowlist = ['echo']\n",
+        encoding="utf-8",
+    )
+    context = DiscoveryContext(
+        config=load_config(config_dir=tmp_path),
+        shared={},
+    )
+
+    from kateto.plugins.executor import create_plugins
+
+    assert {plugin.name for plugin in create_plugins(context)} >= {
+        "executor_classifier",
+        "executor_workflow_router",
+    }
 
 
 @pytest.mark.asyncio

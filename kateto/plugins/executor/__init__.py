@@ -16,7 +16,7 @@ def create_plugins(ctx):
     classifier_settings = ctx.config.settings.plugin.get("executor_classifier")
     if classifier_settings is not None and classifier_settings.enabled:
         plugins.append(ClassifierExecutor(classifier_settings))
-    router_settings = ctx.config.settings.plugin.get("executor_workflow_router")
+    router_settings = ctx.config.settings.plugin.get("executor_workflow_router", classifier_settings)
     if router_settings is not None and router_settings.enabled:
         plugins.append(WorkflowRouter(router_settings))
     interrupt_settings = ctx.config.settings.plugin.get("executor_interrupt")
