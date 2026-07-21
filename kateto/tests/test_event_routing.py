@@ -160,6 +160,56 @@ async def test_existing_project_skips_initiation_workflow() -> None:
         await manager.close()
 
 
+@pytest.mark.asyncio
+async def test_new_project_without_classifier_workflow_starts_project_initiation(tmp_path: Path) -> None:
+    # Given: a new-project classification whose model omitted the available workflow.
+    path = tmp_path / "voices" / "jane" / "workflows" / "project-initiation" / "workflow.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "name = 'project-initiation'\n"
+        "voice = 'Jane'\n"
+        "phases = [{'id': 'start', 'name': 'start', 'instructions': ['start']}]\n",
+        encoding="utf-8",
+    )
+    manager = PluginManager()
+    classifier = FixtureClassifierExecutor(
+        ClassificationData(
+            text="I started a new project for a customer",
+            category=Classification.EXECUTE,
+            voice="jane",
+            project_state=ProjectState.NEW,
+        ),
+    )
+    await manager.enable_plugin(classifier)
+    await manager.enable_plugin(WorkflowEngine(config_dir=tmp_path))
+    await manager.enable_plugin(RecordingVoice("jane"))
+
+    try:
+        # When: the new-project transcription is classified.
+        await manager.emit(
+            "transcription",
+            TranscriptionData(text="I started a new project for a customer"),
+            source="fixture",
+        )
+        await manager.wait_for_idle()
+
+        # Then: the deterministic project-initiation workflow is dispatched to Jane.
+        workflow_events = [
+            (event.target, event.data)
+            for event in manager.get_events()
+            if event.name == "workflow_run"
+        ]
+        assert [
+            (target, data.workflow, data.voice)
+            for target, data in workflow_events
+            if isinstance(data, WorkflowRunData)
+        ] == [
+            ("workflow_engine", "project-initiation", "jane"),
+        ]
+    finally:
+        await manager.close()
+
+
 def _workflow(config_dir: Path) -> None:
     path = config_dir / "voices" / "jane" / "workflows" / "brief" / "workflow.py"
     path.parent.mkdir(parents=True)

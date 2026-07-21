@@ -47,6 +47,7 @@ from kateto.core.event import (
     WorkflowStopData,
 )
 from kateto.core.plugin import EventHandler, Plugin
+from kateto.core.workflow import WorkflowCatalog
 from kateto.providers import ChatMessage
 from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolExecutor
 from kateto.voices.memory import VoiceMemory
@@ -596,6 +597,18 @@ class VoiceAgent(Plugin):
             parts.append(memories)
         if journal:
             parts.append(journal)
+        workflows = WorkflowCatalog(config_dir=self._config_dir).discover(voice=self.name)
+        if workflows:
+            available = "\n".join(
+                f"- {workflow.name}: {workflow.description}"
+                for workflow in workflows
+            )
+            parts.append(
+                "Available workflows for this voice:\n"
+                f"{available}\n"
+                "Start an applicable workflow by dispatching the workflow_run event "
+                "with its exact workflow name and this voice."
+            )
         for skill in self._skills:
             parts.append(skill.instructions)
         messages = [ChatMessage(role="system", content="\n\n".join(parts))]

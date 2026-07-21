@@ -509,25 +509,20 @@ class KatetoApp(App[None]):
     def _fixture_replacement_factory(plugin: Plugin, _context: ReloadContext) -> Plugin:
         return _FixturePlugin(plugin.name)
 
-    _NOISY_EVENTS = frozenset({"audio_output", "text_chunk"})
-
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         if not self.is_mounted:
             return
-        if envelope.name == "audio_output":
-            return
-        if envelope.name not in self._NOISY_EVENTS:
-            self._update_voice_status(envelope)
-            self._update_audio_status(envelope)
-            self._events.append(envelope)
-            try:
-                self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
-            except Exception:
-                pass
-            if isinstance(envelope.data, PluginErrorData):
-                self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
-            self._refresh_light()
-            self._schedule_tree_refresh()
+        self._update_voice_status(envelope)
+        self._update_audio_status(envelope)
+        self._events.append(envelope)
+        try:
+            self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
+        except Exception:
+            pass
+        if isinstance(envelope.data, PluginErrorData):
+            self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
+        self._refresh_light()
+        self._schedule_tree_refresh()
         source_voice = envelope.source.split("/")[0]
         if source_voice not in self.runtime.workflow_voices:
             return

@@ -14,12 +14,14 @@ from kateto.core.hot_reload import HotReloadController, ReloadContext, _ReloadHa
 from kateto.core.event import (
     AudioInputStatus,
     AudioInputStatusData,
+    AudioOutput,
     AudioOutputStatus,
     AudioOutputStatusData,
     PluginErrorData,
     VoiceIdleData,
     VoiceStatus,
     VoiceStatusData,
+    TextChunk,
     WorkflowRunData,
 )
 from kateto.core.plugin import Plugin
@@ -245,6 +247,28 @@ async def test_tui_uses_bounded_manager_history_and_applies_audio_configuration(
         assert configured is not None
         assert configured.microphone == "configured-mic"
         assert any(str(notification).startswith("CONFIGURED audio_input_mic") for notification in app._notifications)
+
+    assert not runtime.is_started
+
+
+@pytest.mark.asyncio
+async def test_tui_event_stream_keeps_text_and_audio_output_events(tmp_path: Path) -> None:
+    # Given: a TUI connected to the runtime event observer.
+    manager = PluginManager(event_limit=4)
+    plugin = _FixturePlugin()
+    engine = WorkflowEngine(config_dir=tmp_path)
+    runtime = _RuntimeOwnerLike(manager=manager, runtime_plugins=(plugin, engine), workflow_engine=engine)
+    app = KatetoApp(runtime=runtime)
+
+    async with app.run_test() as pilot:
+        # When: text and audio output events are sent through the manager.
+        await manager.emit("text_chunk", TextChunk(text="visible text", sequence=0), source="fixture_plugin")
+        await manager.emit("audio_output", AudioOutput(samples=b"pcm", sample_rate=16_000, channels=1), source="fixture_plugin")
+        await pilot.pause()
+
+        # Then: both event types remain visible in the TUI stream.
+        assert "visible text" in app.event_text
+        assert "audio_output" in app.event_text
 
     assert not runtime.is_started
 

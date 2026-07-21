@@ -69,16 +69,20 @@ class ClassifierExecutor(Plugin):
             classification = await classifier.classify(data.text, agents=agents)
         manager = self._manager()
         _ = await manager.emit("classification", classification, source=self.name)
+        workflow = classification.workflow
+        voice = self._resolve_voice(classification.voice)
+        if workflow is None and classification.project_state is ProjectState.NEW and self._is_new_project_request(data.text):
+            workflow = self._find_workflow("project-initiation", workflows)
+            voice = voice or self._resolve_voice("jane")
         match classification.category:
             case Classification.EXECUTE:
                 if self._skip_existing_project_workflow(classification):
                     return
-                voice = self._resolve_voice(classification.voice)
-                if classification.workflow is not None and voice is not None:
+                if workflow is not None and voice is not None:
                     _ = await manager.emit(
                         "workflow_run",
                         WorkflowRunData(
-                            workflow=classification.workflow,
+                            workflow=workflow,
                             voice=voice,
                             context={"project_state": classification.project_state.value},
                         ),
@@ -138,6 +142,18 @@ class ClassifierExecutor(Plugin):
                 if plugin.name.casefold() == normalized or display_name.casefold() == normalized:
                     return plugin.name
         return None
+
+    @staticmethod
+    def _find_workflow(name: str, workflows: tuple[str, ...]) -> str | None:
+        return next((workflow for workflow in workflows if workflow.casefold() == name.casefold()), None)
+
+    @staticmethod
+    def _is_new_project_request(text: str) -> bool:
+        normalized = text.casefold()
+        return any(
+            phrase in normalized
+            for phrase in ("new project", "start a project", "started a project", "project kickoff")
+        )
 
     @staticmethod
     def _skip_existing_project_workflow(classification: ClassificationData) -> bool:

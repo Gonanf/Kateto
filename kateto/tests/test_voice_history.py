@@ -107,6 +107,48 @@ async def test_voice_provider_request_enforces_project_language(tmp_path: Path) 
 
 
 @pytest.mark.asyncio
+async def test_voice_provider_request_lists_available_workflows(tmp_path: Path) -> None:
+    # Given: a Jane voice with a project-initiation workflow in its catalog.
+    _reference(tmp_path)
+    workflow = tmp_path / "voices" / "jane" / "workflows" / "project-initiation" / "workflow.py"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text(
+        "name = 'project-initiation'\n"
+        "description = 'Start a new project'\n"
+        "voice = 'Jane'\n"
+        "phases = [{'id': 'start', 'name': 'start', 'instructions': ['start']}]\n",
+        encoding="utf-8",
+    )
+    provider = RecordingProvider()
+    voice = VoiceAgent(
+        profile=VoiceProfile(
+            voice_id="jane",
+            display_name="Jane",
+            role=VoiceRole.ORCHESTRATOR,
+            system_prompt="system",
+            relevance_terms=frozenset(),
+        ),
+        config_dir=tmp_path,
+        provider=provider,
+        settings=VoiceSettings(),
+    )
+    manager = PluginManager()
+    await manager.enable_plugin(voice)
+
+    try:
+        # When: Jane receives a request about a new project.
+        await manager.emit("generate", GenerateData(prompt="I started a new project"), source="fixture")
+        await manager.wait_for_idle()
+
+        # Then: her provider context names the workflow and its event-driven start mechanism.
+        system_message = provider.requests[0].messages[0].content
+        assert "project-initiation" in system_message
+        assert "workflow_run" in system_message
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
 async def test_voice_provider_history_retains_received_events_and_own_output_once(tmp_path: Path) -> None:
     # Given: a voice with a bounded provider and event-shaped context from the event bus.
     _reference(tmp_path)
