@@ -72,6 +72,7 @@ class ClassificationPayload(ProviderModel):
 
 
 class WorkflowSelectionPayload(ProviderModel):
+    category: Classification | None = None
     workflow: str | None = None
     voice: str | None = None
     confidence: float | None = Field(default=None, ge=0, le=1)

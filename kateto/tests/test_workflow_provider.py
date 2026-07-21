@@ -18,7 +18,7 @@ async def test_classifier_selects_a_workflow_from_dynamic_candidates() -> None:
             json={
                 "choices": [{
                     "message": {
-                        "content": '{"workflow":"project-initiation","voice":"jane","confidence":0.91}',
+                        "content": '{"category":"EXECUTE","confidence":0.82,"workflow":"project-initiation","voice":"jane","workflow_confidence":0.91}',
                     },
                 }],
             },
