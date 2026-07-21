@@ -170,14 +170,14 @@ class AudioInputPlugin(Plugin):
                     await self._set_recording(True)
                     await self._interrupt_playback()
                 if update.samples is not None:
-                    await self._emit_segment(update.samples)
                     await self._set_recording(False)
+                    await self._emit_segment(update.samples)
             self._queue_ready.clear()
             if self._callback_queue.pending:
                 self._queue_ready.set()
 
     async def _interrupt_playback(self) -> None:
-        if not self._playback_active or not self._config.interrupt_on_vad:
+        if not self._config.interrupt_on_vad:
             return
         self._playback_active = False
         await self._require_manager().interrupt(

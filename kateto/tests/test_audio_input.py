@@ -203,7 +203,7 @@ async def test_audio_inputs_emit_typed_idle_and_recording_status(
     factory = FixtureCaptureFactory()
     plugin = plugin_type(
         make_settings(device=device, silence_timeout=0.1),
-        vad=make_vad([0.9, 0.1]),
+        vad=make_vad([0.9, 0.1, 0.1]),
         capture_factory=factory,
     )
     await manager.enable_plugin(plugin)
@@ -212,6 +212,8 @@ async def test_audio_inputs_emit_typed_idle_and_recording_status(
     capture = factory.captures[0]
     capture.emit(SPEECH_FRAME)
     capture.emit(SILENCE_FRAME)
+    capture.emit(SILENCE_FRAME)
+    await asyncio.wait_for(plugin.resumed_listening.wait(), timeout=1)
     await manager.wait_for_idle()
 
     # Then: typed lifecycle events identify recording and return to idle from the same source.
@@ -294,6 +296,25 @@ async def test_vad_interrupts_active_playback_once_per_playback_window() -> None
     await manager.wait_for_idle()
 
     # Then: the manager receives one immediate interrupt rather than one per speech frame.
+    assert [item.reason for item in interrupts.interrupts] == ["voice_activity"]
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_vad_interrupts_llm_even_when_output_status_is_idle() -> None:
+    manager = PluginManager()
+    interrupts = InterruptRecorder()
+    factory = FixtureCaptureFactory()
+    microphone = MicrophoneAudioInput(
+        make_settings(), vad=make_vad([0.9, 0.1]), capture_factory=factory
+    )
+    await manager.enable_plugin(interrupts)
+    await manager.enable_plugin(microphone)
+
+    factory.captures[0].emit(SPEECH_FRAME)
+    factory.captures[0].emit(SILENCE_FRAME)
+    await asyncio.wait_for(interrupts.received.wait(), timeout=1)
+
     assert [item.reason for item in interrupts.interrupts] == ["voice_activity"]
     await manager.close()
 
