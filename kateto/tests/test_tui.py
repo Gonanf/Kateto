@@ -186,6 +186,25 @@ async def test_fixture_tui_shows_workflow_tree_and_voice_responses(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_tui_escapes_markup_in_conversation_content(tmp_path: Path) -> None:
+    # Given: a mounted TUI conversation surface.
+    manager = PluginManager()
+    engine = WorkflowEngine(config_dir=tmp_path)
+    runtime = _RuntimeOwnerLike(manager=manager, runtime_plugins=(engine,), workflow_engine=engine)
+    app = KatetoApp(runtime=runtime)
+
+    # When: a response contains markup-like model text.
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app._add_chat_message("agent", "Jane", "'All stakeholders' [phase]")
+        await pilot.pause()
+
+        # Then: the conversation renders the text without a markup exception.
+        rendered = str(app.query_one("#conversation-messages").children[-1].render())
+        assert "All stakeholders" in rendered
+
+
+@pytest.mark.asyncio
 async def test_tui_renders_live_runtime_state_and_controls(tmp_path: Path) -> None:
     # Given: a runtime owner with a manager, workflow engine, catalog, and MCP server.
     workflow_path = tmp_path / "workflows" / "daily" / "workflow.py"

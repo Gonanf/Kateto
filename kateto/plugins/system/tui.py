@@ -9,6 +9,7 @@ from typing import Any, assert_never
 
 from pydantic import BaseModel, Field, ValidationError
 from pydantic.fields import FieldInfo
+from rich.markup import escape
 from textual.app import App, ComposeResult, Screen
 from textual.containers import Grid, Horizontal, Vertical
 from textual.events import Click
@@ -186,8 +187,8 @@ class EventDetailScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="detail-box"):
-            yield Static(f"[bold]{self.event_name}[/bold] from {self.source}")
-            yield Static(self.data_json)
+            yield Static(f"[bold]{escape(self.event_name)}[/bold] from {escape(self.source)}")
+            yield Static(escape(self.data_json))
             yield Button("Close", id="close-detail", variant="primary")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -514,7 +515,7 @@ class KatetoApp(App[None]):
             placeholder.remove()
         self._hide_typing_indicator(name)
         self._voice_texts.pop(name, None)
-        msg = Static(f"[bold]{name}[/bold]  {content}", classes=f"chat-message chat-{role}")
+        msg = Static(self._chat_markup(name, content), classes=f"chat-message chat-{role}")
         messages.mount(msg)
         self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
 
@@ -529,7 +530,11 @@ class KatetoApp(App[None]):
         placeholder = messages.query("#conversation-placeholder")
         if placeholder:
             placeholder.remove()
-        msg = Static(f"[bold]{voice}[/bold]  [dim]…[/dim]", id=indicator_id, classes="chat-message chat-agent")
+        msg = Static(
+            f"[bold]{escape(voice)}[/bold]  [dim]…[/dim]",
+            id=indicator_id,
+            classes="chat-message chat-agent",
+        )
         messages.mount(msg)
         self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
 
@@ -554,13 +559,21 @@ class KatetoApp(App[None]):
         self._voice_texts[bubble_id] += chunk.text
         existing = messages.query(Static).filter(f"#{bubble_id}")
         if existing:
-            existing.first().update(f"[bold]{voice}[/bold]  {self._voice_texts[bubble_id]}")
+            existing.first().update(self._chat_markup(voice, self._voice_texts[bubble_id]))
         else:
-            msg = Static(f"[bold]{voice}[/bold]  {self._voice_texts[bubble_id]}", id=bubble_id, classes="chat-message chat-agent")
+            msg = Static(
+                self._chat_markup(voice, self._voice_texts[bubble_id]),
+                id=bubble_id,
+                classes="chat-message chat-agent",
+            )
             messages.mount(msg)
         if chunk.final:
             self._voice_bubble_seq[voice] = seq + 1
         self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
+
+    @staticmethod
+    def _chat_markup(name: str, content: str) -> str:
+        return f"[bold]{escape(name)}[/bold]  {escape(content)}"
 
     async def _emit_manual(self, message: str) -> None:
         await self.manager.emit("tui_event", TuiEventData(message=message), source="tui")
