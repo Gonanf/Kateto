@@ -1,15 +1,4 @@
----
-title: Kateto event-driven voice team
-emoji: 🧭
-colorFrom: indigo
-colorTo: purple
-sdk: gradio
-sdk_version: 6.15.2
-python_version: 3.12
-app_file: space/app.py
----
-
-# Kateto — an event-driven voice team for Work and Productivity
+# Kateto, an event-driven voice team for busy people.
 
 ![Jane](public/jane1.svg) ![Doktor](public/doktor1.svg) ![Conquest](public/conquest1.svg)
 
