@@ -103,11 +103,46 @@ class EdgeTTSAudioOutput(Plugin):
         voice_config = self._voice_map.get(voice_id_str, {})
         edge_voice: str = voice_config.get("edge_tts_voice") or self._default_voice
         await self._set_playing(True)
-        async for output in self._provider.stream_sentence(
-            data,
-            voice=edge_voice,
-        ):
-            _ = await self._manager().emit("audio_output", output, source=self.name)
+        pcm_buffer = bytearray()
+        out_sample_rate = 24_000
+        out_channels = 1
+        out_format = "pcm_s16le"
+        out_voice_id = edge_voice
+        async for output in self._provider.stream_sentence(data, voice=edge_voice):
+            out_sample_rate = output.sample_rate
+            out_channels = output.channels
+            out_format = output.format
+            out_voice_id = output.voice_id or edge_voice
+            if output.samples:
+                pcm_buffer.extend(output.samples)
+            if output.final and pcm_buffer:
+                _ = await self._manager().emit(
+                    "audio_output",
+                    AudioOutput(
+                        samples=bytes(pcm_buffer),
+                        sample_rate=out_sample_rate,
+                        channels=out_channels,
+                        format=out_format,
+                        voice_id=out_voice_id,
+                        sequence=0,
+                        final=False,
+                    ),
+                    source=self.name,
+                )
+                _ = await self._manager().emit(
+                    "audio_output",
+                    AudioOutput(
+                        samples=b"",
+                        sample_rate=out_sample_rate,
+                        channels=out_channels,
+                        format=out_format,
+                        voice_id=out_voice_id,
+                        sequence=1,
+                        final=True,
+                    ),
+                    source=self.name,
+                )
+                pcm_buffer.clear()
 
     async def _cancel_stream(self) -> None:
         for task in (self._stream_task, self._buffer_task):

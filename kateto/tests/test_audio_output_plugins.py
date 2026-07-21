@@ -396,8 +396,8 @@ async def test_edgetts_streams_pcm_with_voice_map_lookup() -> None:
     assert provider.entered
     assert provider.requests == [(TextChunk(text="hola", sequence=2, final=True, voice_id="jane"), "es-ES-AlvaroNeural")]
     assert recorder.outputs == [
-        AudioOutput(samples=b"\x0a\x00\x0b\x00", sample_rate=24_000, channels=1, format="pcm_s16le", voice_id="es-ES-AlvaroNeural", sequence=2),
-        AudioOutput(samples=b"", sample_rate=24_000, channels=1, format="pcm_s16le", voice_id="es-ES-AlvaroNeural", sequence=3, final=True),
+        AudioOutput(samples=b"\x0a\x00\x0b\x00", sample_rate=24_000, channels=1, format="pcm_s16le", voice_id="es-ES-AlvaroNeural", sequence=0),
+        AudioOutput(samples=b"", sample_rate=24_000, channels=1, format="pcm_s16le", voice_id="es-ES-AlvaroNeural", sequence=1, final=True),
     ]
     assert [event.source for event in manager.get_events() if event.name == "audio_output"] == ["audio_output_edgetts"] * 2
     await manager.close()

@@ -359,7 +359,7 @@ class KatetoApp(App[None]):
             events = list(self._events)
             if 0 <= index < len(events):
                 envelope = events[index]
-                data_json = envelope.data.model_dump_json(indent=2)
+                data_json = self._safe_event_json(envelope.data)
                 self.push_screen(EventDetailScreen(
                     event_name=envelope.name,
                     source=envelope.source,
@@ -508,14 +508,24 @@ class KatetoApp(App[None]):
     def _fixture_replacement_factory(plugin: Plugin, _context: ReloadContext) -> Plugin:
         return _FixturePlugin(plugin.name)
 
+    _NOISY_EVENTS = frozenset({"audio_output", "text_chunk"})
+
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         if not self.is_mounted:
             return
-        self._record_event(envelope)
+        self._update_voice_status(envelope)
+        self._update_audio_status(envelope)
+        if envelope.name in self._NOISY_EVENTS:
+            return
+        self._events.append(envelope)
+        try:
+            self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
+        except Exception:
+            pass
+        if isinstance(envelope.data, PluginErrorData):
+            self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
+        self._refresh_view_after_event()
         source_voice = envelope.source.split("/")[0]
-        is_streaming = isinstance(envelope.data, TextChunk | VoiceStatusData | AudioInputStatusData | AudioOutputStatusData)
-        if not is_streaming:
-            self._refresh_view_after_event()
         if source_voice not in self.runtime.workflow_voices:
             return
         if isinstance(envelope.data, VoiceStatusData):
@@ -531,18 +541,6 @@ class KatetoApp(App[None]):
         if len(data_preview) > 200:
             data_preview = data_preview[:197] + "..."
         self._add_chat_message("agent", source_voice, data_preview)
-
-    def _record_event(self, envelope: EventEnvelope[BaseModel]) -> None:
-        self._events.append(envelope)
-        if self.is_mounted:
-            try:
-                self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
-            except Exception:
-                pass
-        if isinstance(envelope.data, PluginErrorData):
-            self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
-        self._update_voice_status(envelope)
-        self._update_audio_status(envelope)
 
     def _refresh_view_after_event(self) -> None:
         if self._pending_refresh:
@@ -875,12 +873,25 @@ class KatetoApp(App[None]):
         )
 
     @staticmethod
-    def _format_event(envelope: EventEnvelope[BaseModel]) -> str:
-        data = envelope.data
+    def _safe_event_json(data: BaseModel) -> str:
         try:
             data_str = data.model_dump_json(exclude_none=True)
         except Exception:
-            data_str = str(data)
+            fields = {
+                k: f"<{type(v).__name__} {len(v)} bytes>" if isinstance(v, bytes) else v
+                for k, v in data.__dict__.items()
+            }
+            try:
+                data_str = json.dumps(fields, default=str)
+            except Exception:
+                data_str = str(data)
+        if len(data_str) > 4096:
+            data_str = data_str[:4093] + "..."
+        return data_str
+
+    @staticmethod
+    def _format_event(envelope: EventEnvelope[BaseModel]) -> str:
+        data_str = KatetoApp._safe_event_json(envelope.data)
         if len(data_str) > 60:
             data_str = data_str[:57] + "..."
         return f"{envelope.name:<22} {envelope.source:<16} {data_str}"

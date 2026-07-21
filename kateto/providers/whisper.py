@@ -26,7 +26,7 @@ class WhisperProvider(HttpProvider):
         endpoint: str | None = None,
         path: str = WHISPER_INFERENCE_PATH,
         client: httpx.AsyncClient | None = None,
-        timeout_s: float = 10.0,
+        timeout_s: float = 60.0,
     ) -> None:
         super().__init__(
             provider_name="whisper",

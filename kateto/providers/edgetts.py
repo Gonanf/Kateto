@@ -11,7 +11,7 @@ from kateto.core.event import AudioOutput, TextChunk
 
 log = logging.getLogger(__name__)
 
-_CHUNK_SIZE = 8192  # ~170ms PCM at 24000Hz s16le mono
+_CHUNK_SIZE = 65536  # ~1.4s PCM at 24000Hz s16le mono
 
 
 class EdgeTTSProvider:
