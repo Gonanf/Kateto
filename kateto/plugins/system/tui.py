@@ -44,25 +44,12 @@ class TuiEventData(EventModel):
     message: str = Field(min_length=1)
 
 
-class _FixtureResponseSequencer:
-    def __init__(self) -> None:
-        self._lock = asyncio.Lock()
-
-    async def stream(self, response: str) -> AsyncIterator[str]:
-        async with self._lock:
-            words = response.split(" ")
-            for index, word in enumerate(words):
-                yield word + (" " if index < len(words) - 1 else "")
-                await asyncio.sleep(0)
-
-
 class _FixtureVoiceProvider:
     """Deterministic provider used by the local TUI fixture."""
 
-    def __init__(self, voice: str, role_response: str, sequencer: _FixtureResponseSequencer) -> None:
+    def __init__(self, voice: str, role_response: str) -> None:
         self._voice = voice
         self._role_response = role_response
-        self._sequencer = sequencer
 
     def stream(self, request: GenerationRequest) -> AsyncIterator[str]:
         return self._stream(request)
@@ -72,9 +59,7 @@ class _FixtureVoiceProvider:
             (message.content for message in reversed(request.messages) if message.role == "user"),
             "the current project",
         )
-        response = f"{self._voice.title()} fixture response: {self._role_response} I received '{prompt}'."
-        async for token in self._sequencer.stream(response):
-            yield token
+        yield f"{self._voice.title()} fixture response: {self._role_response} I received '{prompt}'."
 
 
 class _FixtureVoice(VoiceAgent):
@@ -105,7 +90,7 @@ class _FixtureVoice(VoiceAgent):
         )
 
 
-def _fixture_voice(name: str, config_dir: Path, sequencer: _FixtureResponseSequencer) -> VoiceAgent:
+def _fixture_voice(name: str, config_dir: Path) -> VoiceAgent:
     profiles = {
         "jane": (
             VoiceRole.ORCHESTRATOR,
@@ -138,7 +123,7 @@ def _fixture_voice(name: str, config_dir: Path, sequencer: _FixtureResponseSeque
             relevance_terms=frozenset(),
         ),
         config_dir=config_dir,
-        provider=_FixtureVoiceProvider(name, role_response, sequencer),
+        provider=_FixtureVoiceProvider(name, role_response),
         settings=VoiceSettings(stream=True),
         response_language="en",
     )
@@ -152,10 +137,7 @@ class _FixtureRuntime:
         bootstrap_config(config_dir=config_dir)
         self.manager = PluginManager()
         self._workflow_engine = WorkflowEngine(config_dir=config_dir)
-        sequencer = _FixtureResponseSequencer()
-        self._voices = tuple(
-            _fixture_voice(name, config_dir, sequencer) for name in ("jane", "doktor", "conquest")
-        )
+        self._voices = tuple(_fixture_voice(name, config_dir) for name in ("jane", "doktor", "conquest"))
         self.runtime_plugins = (self._workflow_engine, *self._voices)
         self.mcp_servers = ()
         self.workflow_voices = ("jane", "doktor", "conquest")
