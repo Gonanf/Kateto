@@ -121,3 +121,7 @@ The MVP currently includes:
 - fixture implementations and focused async tests for deterministic review.
 
 For architecture and deployment details, see the [architecture docs](docs/architecture/overview.md),
+
+## 5. configuration
+
+Once you run "uv run kateto config check" you should have a config.toml in ~/.config/kateto/ you can modify that to add you'r own servers (Needed for the live mode) and disable or enable plugins.

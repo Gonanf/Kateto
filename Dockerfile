@@ -44,7 +44,7 @@ RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git whisper.cpp
         -DGGML_OPENMP=ON \
         -DWHISPER_BUILD_SERVER=ON \
         -DWHISPER_BUILD_TESTS=OFF \
-        -DWHISPER_BUILD_EXAMPLES=OFF \
+        -DWHISPER_BUILD_EXAMPLES=ON \
     && cmake --build build --config Release --target whisper-server -j"$(nproc)"
 
 FROM python:3.12-slim-bookworm AS runtime
