@@ -32,6 +32,12 @@ dev = [
     "pytest-asyncio==1.4.0",
 ]
 
+[project.optional-dependencies]
+space = [
+    "gradio==6.15.2",
+    "spaces>=0.39.0",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["kateto/tests"]
 

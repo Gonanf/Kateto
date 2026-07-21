@@ -1,3 +1,14 @@
+---
+title: Kateto event-driven voice team
+emoji: 🧭
+colorFrom: indigo
+colorTo: purple
+sdk: gradio
+sdk_version: 6.15.2
+python_version: 3.12
+app_file: space/app.py
+---
+
 # Kateto — an event-driven voice team for Work and Productivity
 
 ![Jane](public/jane1.svg) ![Doktor](public/doktor1.svg) ![Conquest](public/conquest1.svg)
@@ -116,6 +127,8 @@ Never commit `.env`, tokens, model weights, private reference audio, generated r
 The recommended public deployment is a fixture-first Hugging Face Gradio Space using the ZeroGPU entitlement available in the maintainer’s account. CPU Basic is not assumed. Live providers are optional and user-owned: OpenRouter BYOK or a tested local/Ternary-Bonsai classifier, and Edge TTS or Camb.AI for speech. The maintainer key must never be shipped to browsers or shared with anonymous users.
 
 Read the complete [free and safe publishing plan](docs/development/free-publishing-plan.md) and [final MVP assessment](docs/development/final-assessment.md). The latter records what is implemented, what the demo must show, and what remains a deployment caveat.
+
+For the exact Hugging Face Space packaging, secret setup, judge flow, limits, and local verification command, see [ZeroGPU Space deployment](docs/development/space-zero-gpu.md).
 
 ## Build Week and Codex
 

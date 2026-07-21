@@ -750,7 +750,7 @@ wheels = [
 
 [[package]]
 name = "gradio"
-version = "6.20.0"
+version = "6.15.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -782,9 +782,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f8/96/3618f8a189180ab3d4e5f8b258fd92e419eda9f49b6ab4dd50c6782cda33/gradio-6.20.0.tar.gz", hash = "sha256:8672866e9225a1f8297325a6742bb525a3a0ddc8aa4d75d99beb10a27ea2915f", size = 44844340, upload-time = "2026-07-07T18:53:57.402Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/27/6d/a8b16b2bd3547c9d9da9656242d350481ffbedc97e3d8fc4eb939448be55/gradio-6.15.2.tar.gz", hash = "sha256:67433b1889dc8526658196277ca9e34109f73aa65656635c0dc6afb542571f55", size = 36432997, upload-time = "2026-05-28T19:25:52.409Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d7/f4/7dc4540836e326391a9d1ba20193d795d5a4582839b60f5c10397f5120bb/gradio-6.20.0-py3-none-any.whl", hash = "sha256:91d2ec29c37917d55b18dba87aa15bb15c4796d84dce9a9ef4ec7d87453a7fee", size = 30964820, upload-time = "2026-07-07T18:53:52.403Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/43/2f9827ea758ef70fcc23e2c468dd5ef208352b1a56d4446d680df2e4fc1a/gradio-6.15.2-py3-none-any.whl", hash = "sha256:3492eee59cbe4afd21e8f458fc229f0d92c17bdaacaefaf9580dd63a6406c82d", size = 20094003, upload-time = "2026-05-28T19:25:48.489Z" },
 ]
 
 [[package]]
@@ -1063,6 +1063,12 @@ dependencies = [
     { name = "watchdog" },
 ]
 
+[package.optional-dependencies]
+space = [
+    { name = "gradio" },
+    { name = "spaces" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -1075,6 +1081,7 @@ requires-dist = [
     { name = "edge-tts", specifier = ">=7.0.0" },
     { name = "google-auth-oauthlib", specifier = "==1.2.2" },
     { name = "gradio", specifier = ">=6.15.2,<7.0.0" },
+    { name = "gradio", marker = "extra == 'space'", specifier = "==6.15.2" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "mcp", specifier = "==1.28.1" },
     { name = "numpy", specifier = ">=2.5.1" },
@@ -1084,10 +1091,12 @@ requires-dist = [
     { name = "silero-vad", specifier = "<6.2" },
     { name = "sounddevice", specifier = "==0.5.5" },
     { name = "spaces", specifier = ">=0.39.0" },
+    { name = "spaces", marker = "extra == 'space'", specifier = ">=0.39.0" },
     { name = "textual", specifier = "==8.2.8" },
     { name = "torch", specifier = ">=2.13.0" },
     { name = "watchdog", specifier = "==6.0.0" },
 ]
+provides-extras = ["space"]
 
 [package.metadata.requires-dev]
 dev = [
