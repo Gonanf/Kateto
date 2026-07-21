@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, final
 
 from kateto.core.config import LoadedConfig
-from kateto.core.event import VoiceEnableData
+from kateto.core.event import VoiceEnableData, VoiceEnabledData
 from kateto.core.discovery import (
     DiscoveryContext,
     LiveAssemblyConfigurationError,
@@ -48,6 +48,7 @@ class _VoiceManagerPlugin(Plugin):
     async def initialize(self) -> None:
         if self.manager is not None:
             self.manager.register_event("voice_enable", VoiceEnableData)
+            self.manager.register_event("voice_enabled", VoiceEnabledData)
 
     async def on_voice_enable(self, data: VoiceEnableData) -> None:
         await self._owner.on_voice_enable(data)
@@ -213,21 +214,40 @@ class RuntimeOwner(TuiConfigurationRuntime):
         if config is None:
             msg = "runtime config not available for voice enable"
             raise RuntimeError(msg)
-        voice_settings = config.settings.voice.get(voice_name)
+        configured_name = next(
+            (name for name in config.settings.voice if name.casefold() == voice_name.casefold()),
+            None,
+        )
+        voice_settings = config.settings.voice.get(configured_name) if configured_name else None
         if voice_settings is None:
             msg = f"voice not configured: {voice_name}"
             raise ValueError(msg)
         for plugin in self._manager.get_plugins():
-            if plugin.name == voice_name:
+            if plugin.name.casefold() == voice_name.casefold():
                 if plugin.enabled:
+                    await self._manager.emit(
+                        "voice_enabled",
+                        VoiceEnabledData(voice_name=plugin.name),
+                        source="voice_manager",
+                    )
                     return
                 await self._manager.enable_plugin(plugin)
+                await self._manager.emit(
+                    "voice_enabled",
+                    VoiceEnabledData(voice_name=plugin.name),
+                    source="voice_manager",
+                )
                 return
         from kateto.voices.factory import create_voice
 
         ctx = DiscoveryContext(config=config, shared={})
-        voice = create_voice(ctx, voice_settings, voice_name=voice_name)
+        voice = create_voice(ctx, voice_settings, voice_name=configured_name or voice_name)
         await self._manager.enable_plugin(voice)
+        await self._manager.emit(
+            "voice_enabled",
+            VoiceEnabledData(voice_name=voice.name),
+            source="voice_manager",
+        )
 
 
 def build_runtime_owner(

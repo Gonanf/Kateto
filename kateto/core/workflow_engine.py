@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from kateto.core.event import (
     InterruptData,
     VoiceRequestData,
+    VoiceEnableData,
+    VoiceEnabledData,
     VoiceIdleData,
     WorkflowCheckpointFailData,
     WorkflowCheckpointResult,
@@ -57,6 +59,7 @@ class WorkflowEngine(Plugin):
         super().__init__("workflow_engine", capabilities=("workflow",))
         self._catalog = WorkflowCatalog(config_dir=config_dir)
         self._runs: dict[_WorkflowKey, _WorkflowRun] = {}
+        self._pending_voice_requests: dict[str, list[VoiceRequestData]] = {}
 
     @property
     def catalog(self) -> WorkflowCatalog:
@@ -76,6 +79,7 @@ class WorkflowEngine(Plugin):
         manager.register_event("workflow_stopped", WorkflowStopData)
         manager.register_event("voice_idle", VoiceIdleData)
         manager.register_event("voice_request", VoiceRequestData)
+        manager.register_event("voice_enabled", VoiceEnabledData)
         manager.register_event("interrupt", InterruptData)
 
     async def on_workflow_run(self, data: WorkflowRunData) -> None:
@@ -160,6 +164,18 @@ class WorkflowEngine(Plugin):
     async def on_interrupt(self, data: InterruptData) -> None:
         return None
 
+    async def on_voice_enabled(self, data: VoiceEnabledData) -> None:
+        target = self._voice_target(data.voice_name)
+        if target is None:
+            return
+        requests = self._pending_voice_requests.pop(data.voice_name.casefold(), ())
+        for request in requests:
+            await self._emit(
+                "voice_request",
+                request.model_copy(update={"voice": target}),
+                target=target,
+            )
+
     def active_for_voice(self, voice: str) -> WorkflowSnapshot | None:
         normalized = voice.casefold()
         for run in self._runs.values():
@@ -241,19 +257,25 @@ class WorkflowEngine(Plugin):
         delivered: set[str] = set()
         for called_voice in requested_voices:
             target = self._voice_target(called_voice)
-            if target is None or target.casefold() in delivered:
+            request = VoiceRequestData(
+                voice=target or called_voice,
+                prompt="\n".join(phase.instructions),
+                workflow=run.definition.name,
+                phase_id=phase.id,
+            )
+            if target is not None and target.casefold() in delivered:
+                continue
+            if target is None:
+                if called_voice.casefold() == run.voice.casefold():
+                    continue
+                self._pending_voice_requests.setdefault(called_voice.casefold(), []).append(request)
+                await self._emit(
+                    "voice_enable",
+                    VoiceEnableData(voice_name=called_voice),
+                )
                 continue
             delivered.add(target.casefold())
-            await self._emit(
-                "voice_request",
-                VoiceRequestData(
-                    voice=target,
-                    prompt="\n".join(phase.instructions),
-                    workflow=run.definition.name,
-                    phase_id=phase.id,
-                ),
-                target=target,
-            )
+            await self._emit("voice_request", request, target=target)
 
     async def _emit(self, name: str, data: BaseModel, *, target: str | None = None) -> None:
         manager = self.manager
@@ -269,10 +291,10 @@ class WorkflowEngine(Plugin):
 
         for plugin in manager.get_plugins():
             if plugin.name.casefold() == normalized:
-                return plugin.name
+                return plugin.name if plugin.enabled else None
             profile = getattr(plugin, "profile", None)
             if isinstance(profile, VoiceProfile) and profile.display_name.casefold() == normalized:
-                return plugin.name
+                return plugin.name if plugin.enabled else None
         return None
 
     @staticmethod

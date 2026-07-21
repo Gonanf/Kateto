@@ -132,6 +132,10 @@ class VoiceEnableData(EventModel):
     enable: bool = True
 
 
+class VoiceEnabledData(EventModel):
+    voice_name: str = Field(min_length=1)
+
+
 class VoiceStatus(StrEnum):
     IDLE = "idle"
     WAITING = "waiting"

@@ -14,6 +14,8 @@ from kateto.core.event import (
     ProjectState,
     TranscriptionData,
     VoiceRequestData,
+    VoiceEnableData,
+    VoiceEnabledData,
     WorkflowRunData,
 )
 from kateto.plugins.executor import ClassifierExecutor
@@ -72,6 +74,29 @@ class RecordingVoice(Plugin):
 
     async def on_generate(self, data: GenerateData) -> None:
         self.generates.append(data)
+
+
+class VoiceEnabler(Plugin):
+    def __init__(self, voice: RecordingVoice) -> None:
+        super().__init__("voice_manager")
+        self.voice = voice
+
+    async def initialize(self) -> None:
+        manager = self.manager
+        assert manager is not None
+        manager.register_event("voice_enable", VoiceEnableData)
+        manager.register_event("voice_enabled", VoiceEnabledData)
+
+    async def on_voice_enable(self, data: VoiceEnableData) -> None:
+        manager = self.manager
+        assert manager is not None
+        if data.voice_name.casefold() == self.voice.name.casefold():
+            await manager.enable_plugin(self.voice)
+            await manager.emit(
+                "voice_enabled",
+                VoiceEnabledData(voice_name=self.voice.name),
+                source=self.name,
+            )
 
 
 class RecordingProvider:
@@ -243,6 +268,35 @@ async def test_workflow_calls_voices_through_typed_request_and_generate(tmp_path
         ]
         assert [event.target for event in manager.get_events() if event.name == "generate"] == ["doktor"]
         assert [generate.prompt for generate in doktor.generates] == ["ask"]
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_workflow_enables_disabled_called_voice_before_request(tmp_path: Path) -> None:
+    _workflow(tmp_path)
+    manager = PluginManager()
+    engine = WorkflowEngine(config_dir=tmp_path)
+    doktor = RecordingVoice("doktor")
+    enabler = VoiceEnabler(doktor)
+    await manager.enable_plugin(engine)
+    await manager.enable_plugin(enabler)
+
+    try:
+        await manager.emit("workflow_run", WorkflowRunData(workflow="brief", voice="jane"), source="fixture")
+        await manager.wait_for_idle()
+
+        assert doktor.enabled
+        assert [request.voice for request in doktor.requests] == ["doktor"]
+        assert [event.name for event in manager.get_events()] == [
+            "workflow_run",
+            "workflow_started",
+            "workflow_phase_start",
+            "voice_enable",
+            "voice_enabled",
+            "voice_request",
+            "generate",
+        ]
     finally:
         await manager.close()
 
