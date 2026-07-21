@@ -34,7 +34,7 @@ from kateto.core.config import VoiceSettings, bootstrap_config
 from kateto.core.hot_reload import HotReloadController, ReloadContext, ReplacementFactory
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
-from kateto.core.workflow import WorkflowCatalog, WorkflowDefinition, WorkflowDefinitionError, WorkflowNotFoundError, WorkflowPhaseStatus, WorkflowStatus
+from kateto.core.workflow import WorkflowCatalog, WorkflowDefinition, WorkflowDefinitionError, WorkflowPhaseStatus, WorkflowStatus
 from kateto.core.workflow_engine import WorkflowSnapshot
 from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration
 from kateto.voices.base import GenerationRequest, VoiceAgent, VoiceProfile, VoiceRole
@@ -82,10 +82,7 @@ class _FixtureVoice(VoiceAgent):
         await super().on_voice_request(data)
         if data.workflow is None or data.phase_id is None or self.manager is None:
             return
-        try:
-            definition = WorkflowCatalog(config_dir=self._config_dir).load(workflow=data.workflow, voice=self.name)
-        except WorkflowNotFoundError:
-            return
+        definition = WorkflowCatalog(config_dir=self._config_dir).load(workflow=data.workflow, voice=self.name)
         if definition.voice is not None and definition.voice.casefold() != self.name.casefold():
             return
         phase = next(
