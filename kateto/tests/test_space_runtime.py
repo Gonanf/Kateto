@@ -179,6 +179,15 @@ def test_provider_key_is_absent_from_snapshot_outputs() -> None:
     session.close_sync()
 
 
+def test_provider_key_is_redacted_when_user_prompt_contains_it() -> None:
+    session = create_runtime_session(ProviderSelection(provider="byok", session_key="sk-secret"))
+
+    _, outputs = submit_prompt(session, "do not expose sk-secret")
+
+    assert "sk-secret" not in str(outputs)
+    session.close_sync()
+
+
 def test_gradio_callback_reports_degraded_status_for_provider_notification() -> None:
     # Given: a session whose fixture provider emits an error notification.
     session = create_runtime_session(ProviderSelection(provider="bonsai", session_key=None))

@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Final, TypeAlias, final, override
 
 import anyio
+import os
 from anyio import to_thread
 from anyio.from_thread import BlockingPortal, start_blocking_portal
 from pydantic import BaseModel, JsonValue
@@ -28,6 +29,7 @@ from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 
 from space.contracts import ProviderSelection
+from space.providers import FixtureProvider, SpaceProvider, SpaceProviderConfig, build_provider
 
 JsonRecord: TypeAlias = dict[str, JsonValue]
 RuntimeBuilder: TypeAlias = Callable[[ProviderSelection], tuple[PluginManager, tuple[Plugin, ...]]]
@@ -80,10 +82,12 @@ class RuntimeSnapshot:
 @final
 class _FixtureRuntimePlugin(Plugin):
     _selection: ProviderSelection
+    _provider: SpaceProvider
 
-    def __init__(self, selection: ProviderSelection) -> None:
+    def __init__(self, selection: ProviderSelection, provider: SpaceProvider) -> None:
         super().__init__("space_fixture_runtime")
         self._selection = selection
+        self._provider = provider
 
     @override
     async def initialize(self) -> None:
@@ -103,8 +107,7 @@ class _FixtureRuntimePlugin(Plugin):
         prompt = data.prompt
         if prompt is None:
             return
-        if prompt == "provider-error":
-            raise RuntimeError(f"{self._selection.provider} provider is unavailable")
+        completion = await self._provider.complete(prompt)
         manager = self.manager
         if manager is None:
             raise RuntimeError("Space fixture runtime is not attached")
@@ -160,7 +163,7 @@ class _FixtureRuntimePlugin(Plugin):
         )
         _ = await manager.emit(
             "text_chunk",
-            TextChunk(text=f"Plan ready for: {prompt}", sequence=0, final=True, voice_id="doktor"),
+            TextChunk(text=completion, sequence=0, final=True, voice_id="doktor"),
             source=self.name,
         )
         _ = await manager.emit(
@@ -172,7 +175,15 @@ class _FixtureRuntimePlugin(Plugin):
 
 def _fixture_builder(selection: ProviderSelection) -> tuple[PluginManager, tuple[Plugin, ...]]:
     manager = PluginManager(event_limit=200)
-    return manager, (_FixtureRuntimePlugin(selection),)
+    return manager, (_FixtureRuntimePlugin(selection, FixtureProvider()),)
+
+
+def _live_builder(
+    selection: ProviderSelection,
+    config: SpaceProviderConfig,
+) -> tuple[PluginManager, tuple[Plugin, ...]]:
+    manager = PluginManager(event_limit=200)
+    return manager, (_FixtureRuntimePlugin(selection, build_provider(selection, config)),)
 
 
 class SpaceRuntimeSession:
@@ -181,9 +192,11 @@ class SpaceRuntimeSession:
         selection: ProviderSelection,
         manager: PluginManager,
         plugins: tuple[Plugin, ...],
+        *,
+        mode: str,
     ) -> None:
         self.provider: str = selection.provider
-        self.mode: str = "fixture"
+        self.mode: str = mode
         self.manager: PluginManager = manager
         self._plugins: tuple[Plugin, ...] = plugins
         self._session_key: str | None = selection.session_key
@@ -249,7 +262,8 @@ class SpaceRuntimeSession:
                 self._portal_stack = None
 
     def snapshot(self) -> RuntimeSnapshot:
-        events = tuple(_event_record(event) for event in self.manager.get_events())
+        secrets = (self._session_key,) if self._session_key is not None else ()
+        events = tuple(_event_record(event, secrets=secrets) for event in self.manager.get_events())
         notifications = tuple(
             _payload_record(record, kind="error")
             for record in events
@@ -323,25 +337,35 @@ def create_runtime_session(
 ) -> SpaceRuntimeSession:
     selected_builder = _fixture_builder if builder is None else builder
     manager, plugins = selected_builder(selection)
-    return SpaceRuntimeSession(selection, manager, plugins)
+    runtime_mode = os.getenv("KATETO_SPACE_MODE", "fixture")
+    if builder is None and runtime_mode == "live":
+        config = SpaceProviderConfig.from_env()
+        manager, plugins = _live_builder(selection, config)
+    elif runtime_mode not in {"fixture", "live"}:
+        raise ValueError("KATETO_SPACE_MODE must be fixture or live")
+    return SpaceRuntimeSession(selection, manager, plugins, mode=runtime_mode)
 
 
-def _event_record(envelope: EventEnvelope[BaseModel]) -> JsonRecord:
+def _event_record(envelope: EventEnvelope[BaseModel], *, secrets: tuple[str, ...] = ()) -> JsonRecord:
     data: JsonValue = envelope.data.model_dump(mode="json")
     record: JsonRecord = {
         "name": envelope.name,
         "source": envelope.source,
         "timestamp": envelope.timestamp.isoformat(),
-        "data": _redact(data),
+        "data": _redact(data, secrets=secrets),
     }
     return record
 
 
-def _redact(value: JsonValue) -> JsonValue:
+def _redact(value: JsonValue, *, secrets: tuple[str, ...] = ()) -> JsonValue:
     if isinstance(value, dict):
-        return {key: _redact(item) for key, item in value.items()}
+        return {key: _redact(item, secrets=secrets) for key, item in value.items()}
     if isinstance(value, list):
-        return [_redact(item) for item in value]
+        return [_redact(item, secrets=secrets) for item in value]
+    if isinstance(value, str):
+        for secret in secrets:
+            if secret:
+                value = value.replace(secret, "<redacted>")
     return value
 
 

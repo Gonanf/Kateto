@@ -1057,6 +1057,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "silero-vad" },
     { name = "sounddevice" },
+    { name = "spaces" },
     { name = "textual" },
     { name = "torch" },
     { name = "watchdog" },
@@ -1082,6 +1083,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "silero-vad", specifier = "<6.2" },
     { name = "sounddevice", specifier = "==0.5.5" },
+    { name = "spaces", specifier = ">=0.39.0" },
     { name = "textual", specifier = "==8.2.8" },
     { name = "torch", specifier = ">=2.13.0" },
     { name = "watchdog", specifier = "==6.0.0" },
@@ -2459,6 +2461,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/88/a1/d19dd9889cd4bce2e233c4fac007cd8daaf5b9fe6e6a5d432cf17be0b807/sounddevice-0.5.5-py3-none-win32.whl", hash = "sha256:1234cc9b4c9df97b6cbe748146ae0ec64dd7d6e44739e8e42eaa5b595313a103", size = 317765, upload-time = "2026-01-23T18:36:39.047Z" },
     { url = "https://files.pythonhosted.org/packages/c3/0e/002ed7c4c1c2ab69031f78989d3b789fee3a7fba9e586eb2b81688bf4961/sounddevice-0.5.5-py3-none-win_amd64.whl", hash = "sha256:cfc6b2c49fb7f555591c78cb8ecf48d6a637fd5b6e1db5fec6ed9365d64b3519", size = 365324, upload-time = "2026-01-23T18:36:40.496Z" },
     { url = "https://files.pythonhosted.org/packages/4e/39/a61d4b83a7746b70d23d9173be688c0c6bfc7173772344b7442c2c155497/sounddevice-0.5.5-py3-none-win_arm64.whl", hash = "sha256:3861901ddd8230d2e0e8ae62ac320cdd4c688d81df89da036dcb812f757bb3e6", size = 317115, upload-time = "2026-01-23T18:36:42.235Z" },
+]
+
+[[package]]
+name = "spaces"
+version = "0.51.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "gradio" },
+    { name = "httpx" },
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/06/dfc7c007d14fa267dea6536aab7d551105185c2fe1ffa1794e096e828896/spaces-0.51.1.tar.gz", hash = "sha256:cfb4249fb7df111792e13ceeba755164bee979f6ddf896e0f9995cb4c2d0322a", size = 88633, upload-time = "2026-07-21T11:52:41.828Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/23/97/942432289883220d760b9c776c5cf503c554da96a9d420ef77b76f3efcaf/spaces-0.51.1-py3-none-any.whl", hash = "sha256:23c4dff37bd4be72f8cb5695591aea0ddee7fe9207f973a6667f8b0ddf8341b7", size = 111637, upload-time = "2026-07-21T11:52:40.192Z" },
 ]
 
 [[package]]

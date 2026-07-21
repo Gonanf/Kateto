@@ -1,7 +1,9 @@
 from collections.abc import Callable
+import os
 import gradio as gr
 
 from space.contracts import MAX_BYOK_KEY_LENGTH, ProviderChoiceError, ProviderSelection
+from space.providers import SpaceProviderError
 from space.runtime import JsonRecord, SpaceRuntimeSession, create_runtime_session
 
 
@@ -24,7 +26,9 @@ def select_provider(raw_provider: str | None, raw_key: str) -> ProviderSelection
 
 def _status(selection: ProviderSelection) -> str:
     provider_label = "BYOK" if selection.provider == "byok" else "Bonsai"
-    return f"**Fixture mode · live runtime not connected · provider: {provider_label} · ready**\n\nThis adapter does not start a runtime or prompt."
+    mode = os.getenv("KATETO_SPACE_MODE", "fixture")
+    status = "configured live model" if mode == "live" else "fixture fallback"
+    return f"**{status} · provider: {provider_label} · ready**"
 
 
 def accept_provider(
@@ -122,8 +126,18 @@ def create_app(
                     gr.Button(visible=False),
                     gr.JSON(value=_empty_outputs()),
                 )
+            try:
+                selected_session = create_runtime_session(selection)
+            except SpaceProviderError as error:
+                return (
+                    f"**Provider error:** {error}",
+                    gr.Textbox(visible=choice == "BYOK"),
+                    previous_session,
+                    gr.Textbox(visible=False),
+                    gr.Button(visible=False),
+                    gr.JSON(value=_empty_outputs()),
+                )
             _cleanup_session(previous_session)
-            selected_session = create_runtime_session(selection)
             return (
                 accept_provider(selection.provider, selection.session_key or "", on_provider_ready),
                 gr.Textbox(value="", visible=False),
