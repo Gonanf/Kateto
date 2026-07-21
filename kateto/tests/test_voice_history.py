@@ -73,6 +73,40 @@ async def test_voice_provider_request_includes_bounded_event_history_once(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_voice_provider_request_enforces_project_language(tmp_path: Path) -> None:
+    # Given: a voice configured for the project's Spanish response language.
+    _reference(tmp_path)
+    provider = RecordingProvider()
+    voice = VoiceAgent(
+        profile=VoiceProfile(
+            voice_id="jane",
+            display_name="Jane",
+            role=VoiceRole.ORCHESTRATOR,
+            system_prompt="system",
+            relevance_terms=frozenset(),
+        ),
+        config_dir=tmp_path,
+        provider=provider,
+        settings=VoiceSettings(),
+        response_language="es",
+    )
+    manager = PluginManager()
+    await manager.enable_plugin(voice)
+
+    try:
+        # When: the user asks in another language.
+        await manager.emit("generate", GenerateData(prompt="Please summarize this"), source="fixture")
+        await manager.wait_for_idle()
+
+        # Then: every provider path receives the project-language instruction.
+        system_message = provider.requests[0].messages[0].content
+        assert "project's configured language: es" in system_message
+        assert "overrides the language of the user input" in system_message
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
 async def test_voice_provider_history_retains_received_events_and_own_output_once(tmp_path: Path) -> None:
     # Given: a voice with a bounded provider and event-shaped context from the event bus.
     _reference(tmp_path)

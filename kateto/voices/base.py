@@ -162,6 +162,7 @@ class VoiceAgent(Plugin):
         config_dir: Path,
         provider: VoiceProvider,
         settings: VoiceSettings | None = None,
+        response_language: str | None = None,
     ) -> None:
         super().__init__(
             profile.voice_id,
@@ -173,6 +174,7 @@ class VoiceAgent(Plugin):
         self._config_dir = config_dir.resolve()
         self._provider = provider
         self._settings = VoiceSettings() if settings is None else settings
+        self._response_language = response_language.strip() if response_language else None
         self._memory = VoiceMemory.for_voice(
             config_dir=self._config_dir, voice=profile.voice_id
         )
@@ -583,6 +585,11 @@ class VoiceAgent(Plugin):
         memories = await self._memory.read_memories()
         journal = await self._memory.read_journal()
         parts = [self.profile.system_prompt]
+        if self._response_language:
+            parts.append(
+                "Always respond in the project's configured language: "
+                f"{self._response_language}. This instruction overrides the language of the user input."
+            )
         if soul:
             parts.append(soul)
         if memories:

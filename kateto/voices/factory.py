@@ -49,7 +49,13 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
         endpoint=voice_settings.endpoint,
         api_key=voice_settings.api_key or "sk-no-key-required",
     )
-    voice = VoiceAgent(profile=profile, config_dir=ctx.config.paths.config_dir, provider=provider, settings=settings)
+    voice = VoiceAgent(
+        profile=profile,
+        config_dir=ctx.config.paths.config_dir,
+        provider=provider,
+        settings=settings,
+        response_language=ctx.config.settings.kateto.language,
+    )
 
     if voice_settings.model:
         from kateto.providers.agent import OpenAIAgentProvider
