@@ -23,4 +23,4 @@ def test_packaged_defaults_assemble_classifier_fan_out(tmp_path: Path) -> None:
 
     # Then: the classifier and its P0 voice fan-out targets are present.
     plugin_names = {plugin.name for plugin in plugins}
-    assert {"executor_classifier", "jane", "doktor", "conquest"} <= plugin_names
+    assert {"executor_classifier", "executor_workflow_router", "jane", "doktor", "conquest"} <= plugin_names

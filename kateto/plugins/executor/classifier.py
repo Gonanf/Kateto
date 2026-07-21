@@ -69,6 +69,8 @@ class ClassifierExecutor(Plugin):
             classification = await classifier.classify(data.text, agents=agents)
         manager = self._manager()
         _ = await manager.emit("classification", classification, source=self.name)
+        if self._workflow_router_enabled():
+            return
         workflow = classification.workflow
         voice = self._resolve_voice(classification.voice)
         if workflow is None and classification.project_state is ProjectState.NEW and self._is_new_project_request(data.text):
@@ -168,3 +170,10 @@ class ClassifierExecutor(Plugin):
             msg = "classifier executor must be enabled before use"
             raise RuntimeError(msg)
         return manager
+
+    def _workflow_router_enabled(self) -> bool:
+        manager = self.manager
+        return manager is not None and any(
+            plugin.enabled and plugin.name == "executor_workflow_router"
+            for plugin in manager.get_plugins()
+        )

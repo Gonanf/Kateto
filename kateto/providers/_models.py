@@ -36,6 +36,21 @@ class ClassifierRequest(ProviderModel):
     response_format: JsonResponseFormat = Field(default_factory=JsonResponseFormat)
 
 
+class WorkflowCandidate(ProviderModel):
+    name: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+    description: str = ""
+
+
+class WorkflowSelectionRequest(ProviderModel):
+    model: str | None = None
+    messages: tuple[ChatMessage, ...] = Field(min_length=1)
+    workflows: tuple[WorkflowCandidate, ...] = Field(min_length=1)
+    temperature: float = 0.0
+    stream: Literal[False] = False
+    response_format: JsonResponseFormat = Field(default_factory=JsonResponseFormat)
+
+
 class ClassificationMessage(ProviderModel):
     content: str = Field(min_length=1)
 
@@ -54,6 +69,13 @@ class ClassificationPayload(ProviderModel):
     voice: str | None = None
     workflow: str | None = None
     project_state: ProjectState = ProjectState.NEW
+
+
+class WorkflowSelectionPayload(ProviderModel):
+    workflow: str | None = None
+    voice: str | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    workflow_confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class ChatRequest(ProviderModel):

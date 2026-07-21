@@ -19,6 +19,11 @@ enabled = true
 model_endpoint = "http://127.0.0.1:8091"
 model = "classifier"
 
+[plugin.executor_workflow_router]
+enabled = true
+model_endpoint = "http://127.0.0.1:8091"
+model = "classifier"
+
 [plugin.voice_llm]
 enabled = true
 endpoint = "http://127.0.0.1:8092/v1"
