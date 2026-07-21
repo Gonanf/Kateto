@@ -279,6 +279,8 @@ class VoiceAgent(Plugin):
         match envelope.name, envelope.data:
             case "interrupt", InterruptData() as interrupt:
                 await self.on_interrupt(interrupt)
+            case "voice_request", VoiceRequestData() as request:
+                await self.on_voice_request(request)
             case "transcription", TranscriptionData():
                 await self._set_status(VoiceStatus.WAITING)
                 await super()._enqueue(envelope, handler)
