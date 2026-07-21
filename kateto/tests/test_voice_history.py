@@ -14,8 +14,17 @@ from kateto.core.event import (
     ToolCallData,
     ToolResultData,
     TranscriptionData,
+    VoiceIdleData,
     VoiceRequestData,
+    VoiceStatus,
+    VoiceStatusData,
     WorkflowPhaseStartData,
+)
+from kateto.providers.agent import (
+    AgentResponse,
+    OpenAIAgentProvider,
+    StreamToken,
+    ToolCall,
 )
 from kateto.voices.base import GenerationRequest, VoiceAgent, VoiceProfile, VoiceRole
 from kateto.voices.tools import build_event_tools
@@ -31,6 +40,64 @@ class RecordingProvider:
 
     async def _tokens(self) -> AsyncIterator[str]:
         yield "reply"
+
+
+class ToolCallingProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def chat_with_tools_stream(
+        self,
+        *,
+        messages: list[dict[str, object]],
+        tools: tuple[object, ...],
+    ) -> AsyncIterator[StreamToken | AgentResponse]:
+        self.calls += 1
+        if self.calls == 1:
+            yield AgentResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="call-1",
+                        name="remember",
+                        arguments={"value": "done"},
+                    ),
+                ),
+            )
+            return
+        yield AgentResponse(text="The tool completed, so I can answer now.")
+
+    async def chat_with_tools(self, *, messages: list[dict[str, object]], tools: tuple[object, ...]) -> AgentResponse:
+        raise AssertionError("the streaming agent path should be used")
+
+
+class RecordingToolExecutor:
+    async def execute(self, name: str, arguments: dict[str, object]) -> str:
+        assert name == "remember"
+        return "remembered"
+
+
+class FailingAfterToolProvider(ToolCallingProvider):
+    async def chat_with_tools_stream(
+        self,
+        *,
+        messages: list[dict[str, object]],
+        tools: tuple[object, ...],
+    ) -> AsyncIterator[StreamToken | AgentResponse]:
+        self.calls += 1
+        if self.calls == 1:
+            yield AgentResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="call-1",
+                        name="remember",
+                        arguments={"value": "done"},
+                    ),
+                ),
+            )
+            return
+        raise RuntimeError("upstream disconnected after tool call")
 
 
 def _reference(config_dir: Path) -> None:
@@ -70,6 +137,89 @@ async def test_voice_provider_request_includes_bounded_event_history_once(tmp_pa
         contents = [message.content for message in provider.requests[0].messages]
         assert contents.count("remember this context") == 1
         assert len(voice.message_history) <= 32
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_agent_emits_final_response_after_streamed_tool_call(tmp_path: Path) -> None:
+    # Given: an agent provider that returns the post-tool answer as an AgentResponse.
+    _reference(tmp_path)
+    voice = VoiceAgent(
+        profile=VoiceProfile(
+            voice_id="jane",
+            display_name="Jane",
+            role=VoiceRole.ORCHESTRATOR,
+            system_prompt="system",
+            relevance_terms=frozenset(),
+        ),
+        config_dir=tmp_path,
+        provider=RecordingProvider(),
+        settings=VoiceSettings(),
+    )
+    agent_provider = ToolCallingProvider()
+    voice.setup_agent(
+        agent_provider=cast(OpenAIAgentProvider, cast(object, agent_provider)),
+        tool_executor=RecordingToolExecutor(),
+    )
+    manager = PluginManager()
+    await manager.enable_plugin(voice)
+
+    try:
+        # When: the model calls a tool and then returns its final assistant response.
+        await manager.emit("generate", GenerateData(prompt="use the tool"), source="fixture")
+        await manager.wait_for_idle()
+
+        # Then: the final response is delivered to the event bus instead of being dropped.
+        chunks = [
+            event.data.text
+            for event in manager.get_events()
+            if event.name == "text_chunk" and isinstance(event.data, TextChunk)
+        ]
+        assert chunks == ["The tool completed, so I can answer now."]
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_agent_returns_to_idle_when_provider_fails_after_tool_call(tmp_path: Path) -> None:
+    # Given: an agent provider that fails while requesting the post-tool answer.
+    _reference(tmp_path)
+    voice = VoiceAgent(
+        profile=VoiceProfile(
+            voice_id="jane",
+            display_name="Jane",
+            role=VoiceRole.ORCHESTRATOR,
+            system_prompt="system",
+            relevance_terms=frozenset(),
+        ),
+        config_dir=tmp_path,
+        provider=RecordingProvider(),
+        settings=VoiceSettings(),
+    )
+    voice.setup_agent(
+        agent_provider=cast(OpenAIAgentProvider, cast(object, FailingAfterToolProvider())),
+        tool_executor=RecordingToolExecutor(),
+    )
+    manager = PluginManager()
+    await manager.enable_plugin(voice)
+
+    try:
+        # When: the provider fails after the tool result has been appended.
+        await manager.emit("generate", GenerateData(prompt="use the tool"), source="fixture")
+        await manager.wait_for_idle()
+
+        # Then: the bus reports the failure but the voice is not left thinking forever.
+        statuses = [
+            event.data.status
+            for event in manager.get_events()
+            if event.name == "voice_status" and isinstance(event.data, VoiceStatusData)
+        ]
+        assert statuses[-1] is VoiceStatus.IDLE
+        assert any(
+            event.name == "voice_idle" and isinstance(event.data, VoiceIdleData)
+            for event in manager.get_events()
+        )
     finally:
         await manager.close()
 
