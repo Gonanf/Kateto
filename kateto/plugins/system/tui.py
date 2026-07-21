@@ -513,6 +513,8 @@ class KatetoApp(App[None]):
     def _observe_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         if not self.is_mounted:
             return
+        if envelope.name in self._NOISY_EVENTS:
+            return
         self._update_voice_status(envelope)
         self._update_audio_status(envelope)
         if envelope.name in self._NOISY_EVENTS:

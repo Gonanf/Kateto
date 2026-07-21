@@ -1,16 +1,42 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest
 
 from kateto.core import Plugin, PluginManager
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, TextChunk
+from kateto.core.workflow_engine import WorkflowEngine
 from kateto.plugins.audio_output.camb import CambAudioOutput
 from kateto.plugins.audio_output.edgetts import EdgeTTSAudioOutput
 from kateto.plugins.audio_output.player import AudioOutputPlayer
 from kateto.plugins.audio_output.zonos import ZonosAudioOutput
+from kateto.plugins.system.tui import KatetoApp, TuiEventData
+
+
+class _TuiRuntime:
+    def __init__(self, manager: PluginManager, config_dir: Path) -> None:
+        self.manager = manager
+        self.runtime_plugins: tuple[Plugin, ...] = ()
+        self.workflow_engine = WorkflowEngine(config_dir=config_dir)
+        self.workflow_catalog = self.workflow_engine.catalog
+        self.mcp_servers = ()
+        self.workflow_voices: tuple[str, ...] = ()
+        self.hot_reload_controller = None
+        self.is_started = False
+        self.plugin_configurations = ()
+
+    def voice_enabled(self, name: str) -> bool:
+        del name
+        return True
+
+    async def start(self) -> None:
+        self.is_started = True
+
+    async def stop(self) -> None:
+        self.is_started = False
 
 
 class RecordingAudioOutput(Plugin):
@@ -96,6 +122,84 @@ class RecordingOutputFactory:
         stream = RecordingOutputStream()
         self.streams.append(stream)
         return stream
+
+
+@pytest.mark.asyncio
+async def test_tui_observer_does_no_synchronous_work_for_noisy_audio_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a mounted TUI observing a high-frequency audio event source.
+    manager = PluginManager()
+    runtime = _TuiRuntime(manager, tmp_path)
+    app = KatetoApp(runtime=runtime)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        refresh_calls: list[None] = []
+        status_calls: list[None] = []
+        monkeypatch.setattr(app, "_refresh_light", lambda: refresh_calls.append(None))
+        monkeypatch.setattr(
+            app,
+            "_update_audio_status",
+            lambda envelope: status_calls.append(None),
+        )
+
+        # When: a burst of raw PCM events is delivered through the real manager observer path.
+        for sequence in range(100):
+            await manager.emit(
+                "audio_output",
+                AudioOutput(
+                    samples=b"\x00\x00" * 256,
+                    sample_rate=24_000,
+                    channels=1,
+                    format="pcm_s16le",
+                    sequence=sequence,
+                ),
+                source="audio_output_edgetts",
+            )
+        await pilot.pause()
+
+        # Then: noisy events never enter the synchronous TUI path or event list.
+        assert refresh_calls == []
+        assert status_calls == []
+        assert len(app._events) == 0
+
+    assert not runtime.is_started
+
+
+@pytest.mark.asyncio
+async def test_tui_tree_refresh_is_throttled_during_event_burst(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a mounted TUI with instrumented tree rebuild methods.
+    manager = PluginManager()
+    runtime = _TuiRuntime(manager, tmp_path)
+    app = KatetoApp(runtime=runtime)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree_refreshes: list[None] = []
+        app._last_tree_refresh = 0.0
+        monkeypatch.setattr(app, "_populate_plugin_list", lambda: tree_refreshes.append(None))
+        monkeypatch.setattr(app, "_populate_event_tree", lambda: tree_refreshes.append(None))
+        monkeypatch.setattr(app, "_populate_voice_tree", lambda: tree_refreshes.append(None))
+        monkeypatch.setattr(app, "_populate_workflow_tree", lambda: tree_refreshes.append(None))
+
+        # When: non-noisy events arrive back-to-back in one streaming burst.
+        for sequence in range(100):
+            await manager.emit(
+                "tui_event",
+                TuiEventData(message=f"event-{sequence}"),
+                source="fixture",
+            )
+        await pilot.pause()
+
+        # Then: one throttle-window refresh runs, not one tree rebuild per event.
+        assert len(tree_refreshes) == 4
+
+    assert not runtime.is_started
 
 
 @pytest.mark.asyncio
