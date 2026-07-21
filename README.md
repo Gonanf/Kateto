@@ -2,7 +2,7 @@
 
 ![Jane](public/jane1.svg) ![Doktor](public/doktor1.svg) ![Conquest](public/conquest1.svg)
 
-## 1. What is Kateto, why was it built, and which category does it target?
+## 1. What is Kateto, why was it built
 
 Kateto is an event-driven voice team for project work. Instead of putting the
 application logic in a fixed conversation pipeline, every component publishes
@@ -30,7 +30,7 @@ large collection of integrations.
 
 - Python 3.12 or newer
 - [uv](https://docs.astral.sh/uv/)
-- Optional for live mode: configured model endpoints, Whisper/classifier
+- Configured model endpoints, Whisper/classifier and TTS
   services, an approved voice reference WAV, a microphone, and an audio output
   device
 
@@ -77,14 +77,13 @@ uv run pytest kateto/tests/test_workflow.py -q
 
 ### Live mode
 
-Live mode reads the resolved user configuration and connects to the configured
-providers. Keep credentials in ignored environment/secrets files, never in
-`config.toml` or source control. Reference audio must be a local `.wav` inside
-the owning voice directory.
+```bash
+uv run kateto tui
+```
 
-The live graph can use HTTP model services for transcription, classification,
-and voice generation, plus the configured audio input/output plugins. If those
-services or devices are unavailable, use `--fixture` for a reproducible run.
+Live mode reads the resolved user configuration and connects to the configured
+providers.
+The Zonos provider (zonos.cpp server) requires a reference.wav file in the voices folder to use as a voice clone.
 
 ## 3. How I used Codex
 
@@ -121,30 +120,4 @@ The MVP currently includes:
   voice/workflow trees, MCP state, JSON event composition, and runtime status;
 - fixture implementations and focused async tests for deterministic review.
 
-The project is an MVP, not yet a hosted, unlimited voice service. The complete
-test suite still contains repository-drift failures from removed legacy QA
-modules, and the old smoke command needs its deleted QA path repaired. These
-are tracked in [known issues](docs/known-issues.md). The safe public deployment
-strategy is fixture-first Hugging Face ZeroGPU with optional, explicitly
-configured live providers; it must not ship a maintainer API key.
-
-## 5. Planned features
-
-- Repair the remaining release validation paths and provide one clean,
-  judge-facing smoke command.
-- Publish the browser demo on Hugging Face Spaces using the available
-  ZeroGPU entitlement, with a clear choice between BYOK and Bonsai at startup.
-- Make the live provider adapters more resilient with bounded retries,
-  timeouts, quotas, and clearer degraded-runtime diagnostics.
-- Expand project artifacts and workflow evolution so agents can safely update
-  plans, TODOs, backlog, skills, and voice SOUL/JOURNAL files over time.
-- Add more production connectors, including calendar/meeting integrations and
-  richer MCP permissions.
-- Improve audio device selection, streaming quality, multilingual support, and
-  accessibility of the TUI and hosted presentation.
-- Increase end-to-end coverage across microphone input, classifier routing,
-  workflow delegation, tool calls, TTS interruption, and artifact generation.
-
 For architecture and deployment details, see the [architecture docs](docs/architecture/overview.md),
-the [free publishing plan](docs/development/free-publishing-plan.md), and the
-[final MVP assessment](docs/development/final-assessment.md).

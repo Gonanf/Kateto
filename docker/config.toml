@@ -1,0 +1,81 @@
+[kateto]
+name = "Kateto Docker"
+language = "en"
+debug = false
+hot_reload = false
+
+[plugin.audio_input_mic]
+enabled = false
+sample_rate = 16000
+silence_timeout = 1.5
+vad_model = "silero"
+
+[plugin.audio_processor_whisper]
+enabled = true
+endpoint = "http://127.0.0.1:8090"
+
+[plugin.executor_classifier]
+enabled = true
+model_endpoint = "http://127.0.0.1:8091"
+model = "classifier"
+
+[plugin.executor_workflow_router]
+enabled = true
+model_endpoint = "http://127.0.0.1:8091"
+model = "classifier"
+
+[plugin.voice_llm]
+enabled = true
+endpoint = "http://127.0.0.1:8092/v1"
+model = "voice"
+stream = true
+
+[plugin.audio_output_zonos]
+enabled = false
+
+[plugin.audio_output_edgetts]
+enabled = true
+default_language = "en-US-JennyNeural"
+stream = false
+
+[plugin.audio_output_player]
+enabled = false
+
+[voice.jane]
+enabled = true
+skills = ["orchestrator"]
+mcp_servers = ["system"]
+stream = true
+
+[voice.doktor]
+enabled = true
+skills = ["backlog", "risk-analysis", "planning-poker"]
+mcp_servers = ["system"]
+stream = true
+
+[voice.conquest]
+enabled = true
+skills = ["backlog"]
+mcp_servers = ["system"]
+stream = true
+
+[mcp_servers.system]
+command = "kateto"
+
+[cli]
+allowlist = ["git", "ls", "pwd", "cat", "echo", "date"]
+
+[plugin.executor_interrupt]
+enabled = true
+
+[plugin.executor_todo_list]
+enabled = true
+
+[plugin.connector_cli]
+enabled = true
+
+[plugin.backlog]
+enabled = true
+
+[plugin.voice_soul_manager]
+enabled = true
