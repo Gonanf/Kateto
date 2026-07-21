@@ -61,11 +61,12 @@ def _snapshot_outputs(session: SpaceRuntimeSession | None) -> JsonRecord:
 def submit_prompt(session: SpaceRuntimeSession | None, prompt: str) -> tuple[str, JsonRecord]:
     if session is None:
         return "**Runtime unavailable:** choose BYOK or Bonsai first.", _empty_outputs()
+    previous_notification_count = len(session.snapshot().notifications)
     try:
         snapshot = session.prompt_sync(prompt)
     except (RuntimeError, ValueError) as error:
         return f"**Prompt error:** {error}", _snapshot_outputs(session)
-    if snapshot.notifications:
+    if snapshot.notifications[previous_notification_count:]:
         return "**Runtime degraded:** provider error recorded; inspect runtime state.", snapshot.as_outputs()
     return "**Runtime ready:** prompt processed through the event bus.", snapshot.as_outputs()
 

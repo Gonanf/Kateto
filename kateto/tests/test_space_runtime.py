@@ -140,3 +140,19 @@ def test_gradio_callback_reports_degraded_status_for_provider_notification() -> 
     assert outputs["notifications"]
 
     _ = session.close_sync()
+
+
+def test_gradio_callback_clears_degraded_status_after_provider_recovery() -> None:
+    # Given: a session whose previous prompt recorded a provider error.
+    session = create_runtime_session(ProviderSelection(provider="bonsai", session_key=None))
+    _, _ = submit_prompt(session, "provider-error")
+
+    # When: the next prompt succeeds and creates a plan.
+    status, _ = submit_prompt(session, "recovery plan")
+
+    # Then: the current prompt is reported ready despite the historical notification.
+    assert "Runtime ready" in status
+    assert "Runtime degraded" not in status
+    assert any(plan["prompt"] == "recovery plan" for plan in session.snapshot().plans)
+
+    _ = session.close_sync()
