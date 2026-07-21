@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import override
 
 from anyio import to_thread
+from pydantic import BaseModel
 import sounddevice
 
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData
-from kateto.core.plugin import Plugin
+from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, EventEnvelope, InterruptData
+from kateto.core.plugin import EventHandler, Plugin
 from kateto.core.manager import PluginManager
 
 from .base import AudioOutputDeviceError, AudioOutputFormatError, PCM_S16LE
@@ -21,22 +22,18 @@ class SoundDeviceOutputStream:
         self._stream = stream
         self._device = device
 
-    @override
     def start(self) -> None:
         try:
             self._stream.start()
         except (sounddevice.PortAudioError, ValueError) as error:
             raise AudioOutputDeviceError(device=self._device, reason=str(error)) from error
 
-    @override
     def stop(self) -> None:
         self._stream.stop()
 
-    @override
     def close(self) -> None:
         self._stream.close()
 
-    @override
     def write(self, data: bytes) -> object:
         try:
             return self._stream.write(data)
@@ -45,7 +42,6 @@ class SoundDeviceOutputStream:
 
 
 class SoundDeviceOutputFactory:
-    @override
     def create(
         self,
         *,
@@ -77,8 +73,8 @@ class AudioOutputPlayer(Plugin):
         self._factory: SoundDeviceOutputFactory = SoundDeviceOutputFactory() if player_factory is None else player_factory
         self._stream: SoundDeviceOutputStream | None = None
         self._stream_format: tuple[int, int] | None = None
-        self._playing = False
-        self._status_emitted = False
+        self._playing: bool = False
+        self._status_emitted: bool = False
 
     @override
     async def initialize(self) -> None:
@@ -104,6 +100,13 @@ class AudioOutputPlayer(Plugin):
             return
         stream = await self._stream_for(data)
         _ = await to_thread.run_sync(stream.write, data.samples)
+
+    @override
+    async def _enqueue(self, envelope: EventEnvelope[BaseModel], handler: EventHandler) -> None:
+        if self.enabled and envelope.name == "interrupt":
+            await handler(envelope.data)
+            return
+        await super()._enqueue(envelope, handler)
 
     async def on_interrupt(self, data: InterruptData) -> None:
         del data
@@ -142,7 +145,7 @@ class AudioOutputPlayer(Plugin):
             return
         self._playing = playing
         self._status_emitted = True
-        await self._manager().emit(
+        _ = await self._manager().emit(
             "audio_output_status",
             AudioOutputStatusData(
                 status=AudioOutputStatus.PLAYING if playing else AudioOutputStatus.IDLE,

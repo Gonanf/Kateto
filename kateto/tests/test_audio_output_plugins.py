@@ -407,6 +407,58 @@ async def test_player_does_not_block_event_loop_on_device_write() -> None:
     await manager.close()
 
 
+@pytest.mark.asyncio
+async def test_player_interrupt_stops_blocking_write_before_release() -> None:
+    manager = PluginManager()
+    factory = BlockingOutputFactory()
+    player = AudioOutputPlayer(PluginSettings(device="Fixture Output"), player_factory=factory)
+    await manager.enable_plugin(player)
+
+    _ = await manager.emit(
+        "audio_output",
+        AudioOutput(samples=b"\x01\x00", sample_rate=24_000, channels=1, format="pcm_s16le"),
+        source="audio_output_zonos",
+    )
+    while not factory.streams:
+        await anyio.sleep(0)
+    stream = factory.streams[0]
+    while not stream.write_started.is_set():
+        await anyio.sleep(0)
+    try:
+        _ = await manager.interrupt(source="audio_input_mic/mic")
+
+        for _ in range(100):
+            if stream.stopped and stream.closed:
+                break
+            await anyio.sleep(0.01)
+
+        assert stream.stopped and stream.closed
+        assert [event.data for event in manager.get_events() if event.name == "audio_output_status"][-1] == AudioOutputStatusData(
+            status=AudioOutputStatus.IDLE,
+        )
+
+        stream.write_release.set()
+        await manager.wait_for_idle()
+        _ = await manager.emit(
+            "audio_output",
+            AudioOutput(samples=b"\x03\x00", sample_rate=24_000, channels=1, format="pcm_s16le"),
+            source="audio_output_zonos",
+        )
+        while len(factory.streams) < 2:
+            await anyio.sleep(0)
+        next_stream = factory.streams[1]
+        while not next_stream.write_started.is_set():
+            await anyio.sleep(0)
+        next_stream.write_release.set()
+        await manager.wait_for_idle()
+
+        assert len(factory.streams) == 2
+        assert factory.streams[1].writes == [b"\x03\x00"]
+    finally:
+        stream.write_release.set()
+        await manager.close()
+
+
 class RecordingCambProvider:
     def __init__(self) -> None:
         self.entered: bool = False
