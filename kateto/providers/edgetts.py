@@ -94,8 +94,27 @@ class EdgeTTSProvider:
                 )
                 seq += 1
         finally:
-            await feed_task
-            await proc.wait()
+            current_task = asyncio.current_task()
+            cancellation_requested = False
+            if current_task is not None:
+                cancellation_requested = current_task.cancelling() > 0
+            if cancellation_requested and not feed_task.done():
+                feed_task.cancel()
+            try:
+                await feed_task
+            except asyncio.CancelledError:
+                if not cancellation_requested:
+                    raise
+            if proc.returncode is None:
+                proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=1)
+                except TimeoutError:
+                    proc.kill()
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=1)
+                    except TimeoutError:
+                        pass
 
         log.debug(
             "[edgetts] TTS for voice=%s text=%r: %d PCM bytes across %d chunks",

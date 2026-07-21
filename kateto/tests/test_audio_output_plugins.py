@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 from threading import Event, Thread
@@ -16,6 +17,7 @@ from kateto.plugins.audio_output.camb import CambAudioOutput
 from kateto.plugins.audio_output.edgetts import EdgeTTSAudioOutput
 from kateto.plugins.audio_output.player import AudioOutputPlayer
 from kateto.plugins.audio_output.zonos import ZonosAudioOutput
+from kateto.providers.edgetts import EdgeTTSProvider
 from kateto.plugins.system.tui import KatetoApp, TuiEventData
 
 
@@ -683,3 +685,135 @@ async def test_edgetts_plugin_lifecycle_provider_open_and_close() -> None:
 
     await manager.close()
     assert provider.closed
+
+
+@pytest.mark.asyncio
+async def test_edgetts_interrupt_terminates_provider_boundary_and_allows_next_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a real EdgeTTS provider whose feeder and ffmpeg process are blocked.
+    class BlockingStdin:
+        def write(self, data: bytes) -> None:
+            del data
+
+        async def drain(self) -> None:
+            await asyncio.Event().wait()
+
+        def close(self) -> None:
+            return None
+
+    class BlockingStdout:
+        async def read(self, size: int) -> bytes:
+            del size
+            await asyncio.Event().wait()
+            return b""
+
+    class ReadyStdin:
+        def write(self, data: bytes) -> None:
+            del data
+
+        async def drain(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    class ReadyStdout:
+        def __init__(self) -> None:
+            self.reads = 0
+
+        async def read(self, size: int) -> bytes:
+            del size
+            self.reads += 1
+            return b"pcm" if self.reads == 1 else b""
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.stdin = BlockingStdin()
+            self.stdout = BlockingStdout()
+            self.returncode: int | None = None
+            self.terminated = False
+            self.waited = False
+
+        def terminate(self) -> None:
+            self.terminated = True
+            self.returncode = -15
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+        async def wait(self) -> int:
+            self.waited = True
+            return -15 if self.terminated else -9
+
+    class ReadyProcess(FakeProcess):
+        def __init__(self) -> None:
+            self.stdin = ReadyStdin()
+            self.stdout = ReadyStdout()
+            self.returncode = 0
+            self.terminated = False
+            self.waited = True
+
+    class FakeCommunicate:
+        calls = 0
+
+        def __init__(self, *, text: str, voice: str) -> None:
+            del text, voice
+            FakeCommunicate.calls += 1
+
+        async def stream(self) -> AsyncIterator[dict[str, bytes | str]]:
+            yield {"type": "audio", "data": b"mp3"}
+            if FakeCommunicate.calls == 1:
+                await asyncio.Event().wait()
+
+    process = FakeProcess()
+    processes = [process]
+    started = asyncio.Event()
+
+    async def create_process(*args: str, **kwargs: object) -> FakeProcess:
+        del args, kwargs
+        started.set()
+        selected = processes[-1]
+        if len(processes) == 1:
+            processes.append(ReadyProcess())
+        return selected
+
+    import edge_tts
+
+    monkeypatch.setattr(edge_tts, "Communicate", FakeCommunicate)
+    monkeypatch.setattr(
+        "kateto.providers.edgetts.asyncio.create_subprocess_exec", create_process,
+    )
+    manager = PluginManager()
+    edge = EdgeTTSAudioOutput(PluginSettings(), provider=EdgeTTSProvider(PluginSettings()))
+    await manager.enable_plugin(edge)
+
+    try:
+        # When: manager.interrupt() arrives while the provider boundary is active.
+        await manager.emit(
+            "text_chunk",
+            TextChunk(text="blocked", sequence=0, final=True, voice_id="jane"),
+            source="jane",
+        )
+        await started.wait()
+        await manager.interrupt(target="audio_output_edgetts", reason="new-speech")
+        await manager.wait_for_idle(timeout=1)
+
+        # Then: feeder/process cleanup completes and the next request can run.
+        assert process.terminated
+        assert process.waited
+        await manager.emit(
+            "text_chunk",
+            TextChunk(text="next", sequence=1, final=True, voice_id="jane"),
+            source="jane",
+        )
+        await manager.wait_for_idle(timeout=1)
+        assert len(processes) == 2
+        statuses = [
+            event.data.status
+            for event in manager.get_events()
+            if event.name == "audio_output_status" and isinstance(event.data, AudioOutputStatusData)
+        ]
+        assert statuses[-1] == AudioOutputStatus.IDLE
+    finally:
+        await manager.close()

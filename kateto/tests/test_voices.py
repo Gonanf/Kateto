@@ -63,6 +63,28 @@ class PauseThenResumeProvider:
                 raise AssertionError(f"unexpected provider call {unexpected}")
 
 
+class CleanupAwareProvider:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.cleaned = asyncio.Event()
+        self.calls = 0
+
+    def stream(self, request: GenerationRequest) -> AsyncIterator[str]:
+        del request
+        return self._stream_tokens()
+
+    async def _stream_tokens(self) -> AsyncIterator[str]:
+        self.calls += 1
+        if self.calls == 1:
+            self.started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                self.cleaned.set()
+            return
+        yield "resumed"
+
+
 def _write_reference(config_dir: Path, voice: str, name: str = "reference.wav") -> Path:
     reference = config_dir / "voices" / voice / name
     reference.parent.mkdir(parents=True, exist_ok=True)
@@ -116,6 +138,7 @@ async def test_voice_streams_provider_tokens_then_emits_idle(tmp_path: Path) -> 
         assert [event.data.voice for event in manager.get_events() if event.name == "voice_idle" and isinstance(event.data, VoiceIdleData)] == ["jane"]
     finally:
         await manager.close()
+
 
 
 @pytest.mark.asyncio
@@ -231,6 +254,31 @@ async def test_interrupt_cancels_hung_generation_and_next_generate_resumes(tmp_p
         idles = [event.data.voice for event in manager.get_events() if event.name == "voice_idle" and isinstance(event.data, VoiceIdleData)]
         assert chunks == ["first", "resumed"]
         assert idles == ["jane"]
+        assert provider.calls == 2
+        assert jane.enabled
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_interrupt_awaits_provider_cleanup_before_next_generation(tmp_path: Path) -> None:
+    # Given: an OpenAI-compatible stream blocked at its provider boundary.
+    provider = CleanupAwareProvider()
+    _write_reference(tmp_path, "jane")
+    manager = PluginManager()
+    jane = Jane(config_dir=tmp_path, provider=provider)
+    await manager.enable_plugin(jane)
+
+    try:
+        # When: the active generation is interrupted.
+        await manager.emit("generate", GenerateData(prompt="coordinate a release"), source="fixture")
+        await provider.started.wait()
+        await manager.interrupt(target="jane", reason="new-speech")
+
+        # Then: cancellation has reached the provider before interrupt returns.
+        assert provider.cleaned.is_set()
+        await manager.emit("generate", GenerateData(prompt="coordinate the next release"), source="fixture")
+        await manager.wait_for_idle()
         assert provider.calls == 2
         assert jane.enabled
     finally:

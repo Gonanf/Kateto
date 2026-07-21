@@ -283,6 +283,10 @@ class VoiceAgent(Plugin):
         if task is not None and not task.done():
             self._interrupted = True
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         await self._set_status(VoiceStatus.IDLE)
 
     async def on_generate(self, data: GenerateData) -> None:

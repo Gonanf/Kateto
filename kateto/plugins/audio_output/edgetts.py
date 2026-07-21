@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK
-from collections.abc import AsyncIterator
+from collections.abc import Mapping
 from typing import override
 
-from collections.abc import Mapping
+from pydantic import BaseModel
 
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData, TextChunk
-from kateto.core.plugin import Plugin
+from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, EventEnvelope, InterruptData, TextChunk
+from kateto.core.plugin import EventHandler, Plugin
 from kateto.core.manager import PluginManager
 from kateto.providers import EdgeTTSProvider
 
@@ -48,6 +48,16 @@ class EdgeTTSAudioOutput(Plugin):
             _ = await self._provider.__aenter__()
             self._provider_active = True
         await self._set_playing(False)
+
+    @override
+    async def _enqueue(
+        self, envelope: EventEnvelope[BaseModel], handler: EventHandler
+    ) -> None:
+        match envelope.name, envelope.data:
+            case "interrupt", InterruptData() as interrupt:
+                await self.on_interrupt(interrupt)
+            case _:
+                await super()._enqueue(envelope, handler)
 
     @override
     async def disable(self) -> None:
