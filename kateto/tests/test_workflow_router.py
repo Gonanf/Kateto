@@ -8,7 +8,7 @@ from typing import override
 from kateto.core import Plugin, PluginManager
 from kateto.core.config import PluginSettings, load_config
 from kateto.core.discovery import DiscoveryContext
-from kateto.core.event import Classification, ClassificationData, WorkflowRunData
+from kateto.core.event import Classification, ClassificationData, GenerateData, VoiceRequestData, WorkflowRunData
 from kateto.core.workflow_engine import WorkflowEngine
 from kateto.plugins.executor.workflow_router import WorkflowRouter, WorkflowSelector
 from kateto.providers._models import WorkflowCandidate
@@ -44,6 +44,18 @@ class _TestableWorkflowRouter(WorkflowRouter):
 class _VoicePlugin(Plugin):
     def __init__(self) -> None:
         super().__init__("jane", capabilities=("voice",))
+        self.prompts: list[str] = []
+
+    async def on_voice_request(self, data: VoiceRequestData) -> None:
+        self.prompts.append(data.prompt)
+        manager = self.manager
+        assert manager is not None
+        _ = await manager.emit(
+            "generate",
+            GenerateData(prompt=data.prompt),
+            source=self.name,
+            target=self.name,
+        )
 
 
 def _write_workflow(config_dir: Path) -> None:
@@ -92,7 +104,8 @@ async def test_workflow_router_runs_the_selected_dynamic_workflow(tmp_path: Path
         PluginSettings(model_endpoint="http://classifier.test", model="classifier"),
     )
     await manager.enable_plugin(engine)
-    await manager.enable_plugin(_VoicePlugin())
+    voice = _VoicePlugin()
+    await manager.enable_plugin(voice)
     await manager.enable_plugin(router)
     try:
         _ = await manager.emit(
@@ -111,4 +124,13 @@ async def test_workflow_router_runs_the_selected_dynamic_workflow(tmp_path: Path
             voice="jane",
             context={"project_state": "new", "confidence": 0.9},
         ),
+    ]
+    assert voice.prompts == ["Gather requirements"]
+    assert [event.name for event in manager.get_events()] == [
+        "classification",
+        "workflow_run",
+        "workflow_started",
+        "workflow_phase_start",
+        "voice_request",
+        "generate",
     ]

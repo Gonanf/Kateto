@@ -212,10 +212,13 @@ class WorkflowEngine(Plugin):
                 instructions=list(phase.instructions),
             ),
         )
-        for called_voice in phase.calls_voices:
+        requested_voices = (run.voice, *phase.calls_voices)
+        delivered: set[str] = set()
+        for called_voice in requested_voices:
             target = self._voice_target(called_voice)
-            if target is None:
+            if target is None or target.casefold() in delivered:
                 continue
+            delivered.add(target.casefold())
             await self._emit(
                 "voice_request",
                 VoiceRequestData(
