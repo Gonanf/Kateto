@@ -9,7 +9,6 @@ import sounddevice
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, EventEnvelope, InterruptData
 from kateto.core.plugin import EventHandler, Plugin
-from kateto.core.manager import PluginManager
 
 from .base import AudioOutputDeviceError, AudioOutputFormatError, PCM_S16LE
 
@@ -78,8 +77,8 @@ class AudioOutputPlayer(Plugin):
 
     @override
     async def initialize(self) -> None:
-        self._manager().register_event("audio_output", AudioOutput)
-        self._manager().register_event("audio_output_status", AudioOutputStatusData)
+        self.required_manager.register_event("audio_output", AudioOutput)
+        self.required_manager.register_event("audio_output_status", AudioOutputStatusData)
 
     @override
     async def enable(self) -> None:
@@ -145,20 +144,13 @@ class AudioOutputPlayer(Plugin):
             return
         self._playing = playing
         self._status_emitted = True
-        _ = await self._manager().emit(
+        _ = await self.required_manager.emit(
             "audio_output_status",
             AudioOutputStatusData(
                 status=AudioOutputStatus.PLAYING if playing else AudioOutputStatus.IDLE,
             ),
             source=self.name,
         )
-
-    def _manager(self) -> PluginManager:
-        manager = self.manager
-        if manager is None:
-            msg = "audio_output_player must be enabled before use"
-            raise RuntimeError(msg)
-        return manager
 
 
 def _configured_device(settings: PluginSettings) -> str | None:

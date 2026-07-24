@@ -13,7 +13,6 @@ from kateto.core.discovery import (
     LiveAssemblyConfigurationError,
     discover_plugins,
 )
-from kateto.core.hot_reload import HotReloadController
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.core.workflow import WorkflowCatalog
@@ -35,7 +34,6 @@ class RuntimeDependencies:
 class RuntimeComponents:
     plugins: tuple[Plugin, ...]
     mcp_servers: tuple[McpEventServer, ...]
-    hot_reload_controller: HotReloadController | None
     workflow_voices: tuple[str, ...]
     external_mcp: ExternalMcpManager | None = None
 
@@ -109,10 +107,6 @@ class RuntimeOwner(TuiConfigurationRuntime):
         return self._components.mcp_servers
 
     @property
-    def hot_reload_controller(self) -> HotReloadController | None:
-        return self._components.hot_reload_controller
-
-    @property
     def external_mcp(self) -> ExternalMcpManager | None:
         return self._components.external_mcp
 
@@ -162,10 +156,6 @@ class RuntimeOwner(TuiConfigurationRuntime):
                 await self._sync_external_tools()
             for server in self.mcp_servers:
                 server.refresh_tools()
-            controller = self.hot_reload_controller
-            if controller is not None:
-                controller.loop = asyncio.get_running_loop()
-                await controller.start()
         except BaseException:  # noqa: BROAD_EXCEPT_OK
             await self.stop()
             raise
@@ -198,14 +188,9 @@ class RuntimeOwner(TuiConfigurationRuntime):
                     await external_mcp.stop_all()
             finally:
                 try:
-                    controller = self.hot_reload_controller
-                    if controller is not None:
-                        await controller.close()
+                    await self._close_mcp_servers()
                 finally:
-                    try:
-                        await self._close_mcp_servers()
-                    finally:
-                        await self._manager.close()
+                    await self._manager.close()
         finally:
             self._started = False
 
@@ -294,18 +279,6 @@ def build_runtime_owner(
         *_configured_calendar(config, resolved_dependencies),
     )
     mcp_servers = _authorized_mcp_servers(manager, config)
-    controller = (
-        HotReloadController(
-            manager=manager,
-            watched_root=config.paths.config_dir,
-            source_roots=(
-                Path(__file__).resolve().parent / "plugins",
-                Path(__file__).resolve().parent / "voices",
-            ),
-        )
-        if config.settings.kateto.hot_reload
-        else None
-    )
     return RuntimeOwner(
         manager=manager,
         plugins=runtime_plugins,
@@ -313,7 +286,6 @@ def build_runtime_owner(
         components=RuntimeComponents(
             plugins=(),
             mcp_servers=mcp_servers,
-            hot_reload_controller=controller,
             workflow_voices=tuple(config.settings.voice.keys()),
             external_mcp=external_mcp if external_mcp._clients else None,
         ),

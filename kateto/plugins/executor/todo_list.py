@@ -6,9 +6,7 @@ from pathlib import Path
 from typing import Final, assert_never
 
 from kateto.core.event import Classification, ClassificationData, TodoItemData
-from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
-from kateto.core.manager import PluginManager
 from kateto.core.storage import VoiceFileStore
 
 
@@ -44,7 +42,7 @@ class TodoListExecutor(Plugin):
         self._store = VoiceFileStore.for_voice(config_dir=config_dir, voice=store_voice)
 
     async def initialize(self) -> None:
-        manager = self._manager()
+        manager = self.required_manager
         manager.register_event("classification", ClassificationData)
         manager.register_event("todo_updated", TodoItemData)
         manager.register_event("todo_completed", TodoItemData)
@@ -97,18 +95,11 @@ class TodoListExecutor(Plugin):
         await self._store.write_text("TODO.md", "\n".join(lines) + "\n")
 
     async def _emit(self, event_name: str, task: str, *, completed: bool) -> None:
-        await self._manager().emit(
+        await self.required_manager.emit(
             event_name,
             TodoItemData(voice=self._store.voice, task=task, completed=completed),
             source=self.name,
         )
-
-    def _manager(self) -> PluginManager:
-        manager = self.manager
-        if manager is None:
-            msg = "TODO executor must be enabled before use"
-            raise RuntimeError(msg)
-        return manager
 
 
 def _parse_action(text: str) -> TodoAction | None:

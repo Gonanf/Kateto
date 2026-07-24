@@ -31,7 +31,6 @@ from kateto.core.event import (
     WorkflowRunData,
 )
 from kateto.core.config import VoiceSettings, bootstrap_config
-from kateto.core.hot_reload import HotReloadController, ReloadContext, ReplacementFactory
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.core.workflow import WorkflowCatalog, WorkflowDefinition, WorkflowDefinitionError, WorkflowPhaseStatus, WorkflowStatus
@@ -141,7 +140,6 @@ class _FixtureRuntime:
         self.runtime_plugins = (self._workflow_engine, *self._voices)
         self.mcp_servers = ()
         self.workflow_voices = ("jane", "doktor", "conquest")
-        self.hot_reload_controller = None
         self.is_started = False
         self.plugin_configurations = ()
 
@@ -259,20 +257,17 @@ class KatetoApp(App[None]):
         runtime: Any,
         fixture: bool = False,
         config_dir: Path | None = None,
-        replacement_factory: ReplacementFactory | None = None,
     ) -> None:
         super().__init__()
         self.runtime = runtime
         self.manager = runtime.manager
         self.fixture = fixture
         self.config_dir = (Path.cwd() if config_dir is None else config_dir).resolve()
-        self.replacement_factory = replacement_factory or (self._fixture_replacement_factory if fixture else None)
         self._events: deque[EventEnvelope[BaseModel]] = deque(maxlen=1000)
         self._voice_status: dict[str, str] = {voice: "idle" for voice in runtime.workflow_voices}
         self._audio_status: dict[str, str] = {}
         self._selected_plugin: str | None = None
         self._selected_event: str | None = None
-        self._controller: HotReloadController | None = None
         self._stop_runtime_started = False
         self._voice_texts: dict[str, str] = {}
         self._voice_bubble_seq: dict[str, int] = {}
@@ -353,14 +348,6 @@ class KatetoApp(App[None]):
 
     async def _start_runtime(self) -> None:
         await self.runtime.start()
-        if self.fixture and self.runtime.hot_reload_controller is None and self.replacement_factory is not None:
-            self._controller = HotReloadController(
-                manager=self.manager,
-                watched_root=self.config_dir,
-                loop=asyncio.get_running_loop(),
-                replacement_factory=self.replacement_factory,
-            )
-            await self._controller.start()
         self._refresh_view()
 
     async def on_unmount(self) -> None:
@@ -371,9 +358,6 @@ class KatetoApp(App[None]):
         if self._stop_runtime_started:
             return
         self._stop_runtime_started = True
-        if self._controller is not None:
-            await self._controller.close()
-            self._controller = None
         await self.runtime.stop()
 
     async def action_quit(self) -> None:
@@ -614,10 +598,6 @@ class KatetoApp(App[None]):
         )
         self.notify(f"CONFIGURED {name}: microphone={microphone or 'default'}, speaker={speaker or 'default'}")
         self._refresh_view()
-
-    @staticmethod
-    def _fixture_replacement_factory(plugin: Plugin, _context: ReloadContext) -> Plugin:
-        return Plugin(plugin.name, capabilities=plugin.capabilities)
 
     def _record_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         self._update_voice_status(envelope)

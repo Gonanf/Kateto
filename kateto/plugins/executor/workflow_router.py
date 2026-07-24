@@ -11,7 +11,6 @@ from kateto.core.event import (
     VoiceRequestData,
     WorkflowRunData,
 )
-from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.core.workflow_engine import WorkflowEngine, WorkflowSnapshot
 from kateto.providers import ClassifierProvider, WorkflowCandidate, WorkflowSelection
@@ -37,7 +36,7 @@ class WorkflowRouter(Plugin):
 
     @override
     async def initialize(self) -> None:
-        manager = self._manager()
+        manager = self.required_manager
         manager.register_event("classification", ClassificationData)
         manager.register_event("workflow_run", WorkflowRunData)
         manager.register_event("generate", GenerateData)
@@ -79,14 +78,14 @@ class WorkflowRouter(Plugin):
             }
             if selection is not None:
                 context["confidence"] = selection.confidence
-            _ = await self._manager().emit(
+            _ = await self.required_manager.emit(
                 "workflow_run",
                 WorkflowRunData(workflow=selected.name, voice=selected.voice, context=context),
                 source=self.name,
                 target="workflow_engine",
             )
             return
-        _ = await self._manager().emit(
+        _ = await self.required_manager.emit(
             "generate",
             GenerateData(prompt=data.text),
             source=self.name,
@@ -107,7 +106,7 @@ class WorkflowRouter(Plugin):
         return None
 
     async def _continue_workflow(self, active: WorkflowSnapshot, text: str) -> None:
-        _ = await self._manager().emit(
+        _ = await self.required_manager.emit(
             "voice_request",
             VoiceRequestData(
                 voice=active.voice,
@@ -123,14 +122,14 @@ class WorkflowRouter(Plugin):
         return next(
             (
                 plugin
-                for plugin in self._manager().get_plugins()
+                for plugin in self.required_manager.get_plugins()
                 if isinstance(plugin, WorkflowEngine)
             ),
             None,
         )
 
     def _workflow_candidates(self) -> tuple[WorkflowCandidate, ...]:
-        manager = self._manager()
+        manager = self.required_manager
         engine = next(
             (plugin for plugin in manager.get_plugins() if isinstance(plugin, WorkflowEngine)),
             None,
@@ -209,7 +208,7 @@ class WorkflowRouter(Plugin):
         return next(
             (
                 plugin.name
-                for plugin in self._manager().get_plugins()
+                for plugin in self.required_manager.get_plugins()
                 if plugin.enabled
                 and "voice" in plugin.capabilities
                 and plugin.name.casefold() == normalized
@@ -217,8 +216,3 @@ class WorkflowRouter(Plugin):
             None,
         )
 
-    def _manager(self) -> PluginManager:
-        manager = self.manager
-        if manager is None:
-            raise RuntimeError("workflow router must be attached to a manager")
-        return manager

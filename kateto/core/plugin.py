@@ -54,6 +54,14 @@ class Plugin:
     def current_envelope(self) -> EventEnvelope[BaseModel] | None:
         return self._current_envelope
 
+    @property
+    def required_manager(self) -> PluginManager:
+        manager = self.manager
+        if manager is None:
+            msg = f"{self.name} must be enabled before use"
+            raise RuntimeError(msg)
+        return manager
+
     async def initialize(self) -> None:
         return None
 

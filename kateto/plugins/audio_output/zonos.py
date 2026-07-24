@@ -5,9 +5,8 @@ from collections.abc import AsyncIterator
 from typing import override
 
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData, TextChunk
+from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData
 from kateto.core.plugin import Plugin
-from kateto.core.manager import PluginManager
 from kateto.providers import ZonosProvider
 
 
@@ -28,7 +27,7 @@ class ZonosAudioOutput(Plugin):
 
     @override
     async def initialize(self) -> None:
-        manager = self._manager()
+        manager = self.required_manager
         manager.register_event("text_chunk", TextChunk)
         manager.register_event("audio_output", AudioOutput)
         manager.register_event("audio_output_status", AudioOutputStatusData)
@@ -74,7 +73,7 @@ class ZonosAudioOutput(Plugin):
             return
         await self._set_playing(True)
         async for output in self._provider.stream_sentence(data, voice_id=voice_id):
-            _ = await self._manager().emit("audio_output", output, source=self.name)
+            _ = await self.required_manager.emit("audio_output", output, source=self.name)
 
     async def _cancel_stream(self) -> None:
         task = self._stream_task
@@ -91,17 +90,10 @@ class ZonosAudioOutput(Plugin):
             return
         self._playing = playing
         self._status_emitted = True
-        await self._manager().emit(
+        await self.required_manager.emit(
             "audio_output_status",
             AudioOutputStatusData(
                 status=AudioOutputStatus.PLAYING if playing else AudioOutputStatus.IDLE,
             ),
             source=self.name,
         )
-
-    def _manager(self) -> PluginManager:
-        manager = self.manager
-        if manager is None:
-            msg = "audio_output_zonos must be enabled before use"
-            raise RuntimeError(msg)
-        return manager

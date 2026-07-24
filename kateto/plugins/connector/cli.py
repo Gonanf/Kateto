@@ -13,11 +13,9 @@ from typing import Final
 
 from pydantic import BaseModel, Field
 
-from kateto.core.config import ConfigError, CliSettings, validate_cli_command
 from kateto.core.event import BacklogAddData, BacklogItem, BacklogPriority, BacklogStatus, EventEnvelope, EventModel, InterruptData, TodoItemData
-from kateto.core.manager import PluginManager
+from kateto.core.config import ConfigError, CliSettings, validate_cli_command
 from kateto.core.plugin import EventHandler, Plugin
-from kateto.core.manager import PluginManager
 
 
 _SHELL_CONTROL_CHARACTERS: Final[frozenset[str]] = frozenset(";&|<>`$!\r\n\x00")
@@ -110,7 +108,7 @@ class CliConnector(Plugin):
         self._synced_todo_ids: set[str] = set()
 
     async def initialize(self) -> None:
-        manager = self._manager()
+        manager = self.required_manager
         manager.register_event("cli_execute", CliCommandData)
         manager.register_event("cli_reply", CliReplyData)
         manager.register_event("todo_completed", TodoItemData)
@@ -180,19 +178,13 @@ class CliConnector(Plugin):
             return
         self._synced_todo_ids.add(item.id)
         try:
-            await self._manager().emit("backlog_add", BacklogAddData(item=item), source=self.name)
+            await self.required_manager.emit("backlog_add", BacklogAddData(item=item), source=self.name)
         except asyncio.CancelledError:
             self._synced_todo_ids.discard(item.id)
             raise
 
     async def _emit_reply(self, reply: CliReplyData, *, reply_to: str | None) -> None:
-        await self._manager().emit("cli_reply", reply, source=self.name, target=reply_to)
-
-    def _manager(self) -> PluginManager:
-        manager = self.manager
-        if manager is None:
-            raise RuntimeError("CLI connector must be enabled before use")
-        return manager
+        await self.required_manager.emit("cli_reply", reply, source=self.name, target=reply_to)
 
 
 def normalize_argv(command: str, *, settings: CliSettings, working_directory: Path) -> tuple[str, ...]:

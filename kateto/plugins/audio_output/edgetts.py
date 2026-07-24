@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, EventEnvelope, InterruptData, TextChunk
 from kateto.core.plugin import EventHandler, Plugin
-from kateto.core.manager import PluginManager
 from kateto.providers import EdgeTTSProvider
 
 
@@ -37,7 +36,7 @@ class EdgeTTSAudioOutput(Plugin):
 
     @override
     async def initialize(self) -> None:
-        manager = self._manager()
+        manager = self.required_manager
         manager.register_event("text_chunk", TextChunk)
         manager.register_event("audio_output", AudioOutput)
         manager.register_event("audio_output_status", AudioOutputStatusData)
@@ -126,7 +125,7 @@ class EdgeTTSAudioOutput(Plugin):
             if output.samples:
                 pcm_buffer.extend(output.samples)
             if output.final and pcm_buffer:
-                _ = await self._manager().emit(
+                _ = await self.required_manager.emit(
                     "audio_output",
                     AudioOutput(
                         samples=bytes(pcm_buffer),
@@ -139,7 +138,7 @@ class EdgeTTSAudioOutput(Plugin):
                     ),
                     source=self.name,
                 )
-                _ = await self._manager().emit(
+                _ = await self.required_manager.emit(
                     "audio_output",
                     AudioOutput(
                         samples=b"",
@@ -171,7 +170,7 @@ class EdgeTTSAudioOutput(Plugin):
             return
         self._playing = playing
         self._status_emitted = True
-        await self._manager().emit(
+        await self.required_manager.emit(
             "audio_output_status",
             AudioOutputStatusData(
                 status=AudioOutputStatus.PLAYING if playing else AudioOutputStatus.IDLE,
@@ -179,9 +178,3 @@ class EdgeTTSAudioOutput(Plugin):
             source=self.name,
         )
 
-    def _manager(self) -> PluginManager:
-        manager = self.manager
-        if manager is None:
-            msg = "audio_output_edgetts must be enabled before use"
-            raise RuntimeError(msg)
-        return manager

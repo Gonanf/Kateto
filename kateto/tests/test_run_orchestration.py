@@ -8,7 +8,6 @@ import pytest
 
 from kateto.core.config import load_config
 from kateto.core.event import GenerateData, VoiceRequestData, WorkflowRunData
-from kateto.core.hot_reload import HotReloadController
 from kateto.core.plugin import Plugin
 from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
 from kateto.plugins.audio_input.base import AudioInputConfig
@@ -64,10 +63,6 @@ class CalendarFactory:
         return connector
 
 
-class ReloadStartFailure(Exception):
-    pass
-
-
 class DynamicVoice(Plugin):
     def __init__(self) -> None:
         super().__init__("doktor", capabilities=("voice",))
@@ -99,7 +94,6 @@ def _write_run_config(config_dir: Path) -> None:
     _ = (config_dir / "config.toml").write_text(
         """
 [kateto]
-hot_reload = true
 
 [plugin.audio_input_mic]
 enabled = true
@@ -226,7 +220,7 @@ async def test_run_owner_composes_starts_and_stops_configured_components(tmp_pat
         await assembly.start()
         tools = {tool.name for tool in await assembly.mcp_servers[0].fastmcp.list_tools()}
 
-        # Then: the live graph owns calendar, CLI, backlog, workflow, authorized MCP, and hot reload.
+        # Then: the live graph owns calendar, CLI, backlog, workflow, authorized MCP.
         assert isinstance(assembly, RuntimeOwner)
         assert {
             "connector_calendar",
@@ -238,7 +232,6 @@ async def test_run_owner_composes_starts_and_stops_configured_components(tmp_pat
         } <= {plugin.name for plugin in assembly.manager.get_plugins()}
         assert len(assembly.mcp_servers) == 1
         assert "backlog_add" in tools
-        assert assembly.hot_reload_controller is not None
         assert assembly.is_started
     finally:
         await assembly.stop()
@@ -247,38 +240,6 @@ async def test_run_owner_composes_starts_and_stops_configured_components(tmp_pat
     assert not calendars.connector.enabled
     assert all(capture.closed for capture in captures.captures)
     assert not assembly.is_started
-
-
-@pytest.mark.asyncio
-async def test_run_owner_reconciles_configured_voice_subscribers_after_reload(tmp_path: Path) -> None:
-    # Given: a running owner whose initial configuration enables only Doktor.
-    _write_run_config_with_voice(tmp_path, voice_name="doktor")
-    captures = RecordingCaptureFactory()
-    calendars = CalendarFactory()
-    assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, calendars))
-
-    try:
-        await assembly.start()
-        controller = assembly.hot_reload_controller
-        assert controller is not None
-
-        # When: the configured voice definition is changed from Doktor to Jane.
-        _write_run_config_with_voice(tmp_path, voice_name="jane")
-        await controller.handle_change(tmp_path / "config.toml")
-
-        # Then: the existing manager now routes generate only to the discovered Jane instance.
-        generate_registration = next(
-            registration
-            for registration in assembly.manager.get_event_registrations()
-            if registration.name == "generate"
-        )
-        assert "jane" in generate_registration.receivers
-        assert "doktor" not in generate_registration.receivers
-        assert "doktor" not in {
-            plugin.name for plugin in assembly.manager.get_plugins() if plugin.enabled
-        }
-    finally:
-        await assembly.stop()
 
 
 @pytest.mark.asyncio

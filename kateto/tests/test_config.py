@@ -17,7 +17,6 @@ from kateto.core.config import (
 _MINIMAL_CONFIG = """\
 [kateto]
 debug = false
-hot_reload = false
 
 [cli]
 allowlist = ["ls"]
@@ -125,7 +124,7 @@ def test_load_config_rejects_malformed_toml(tmp_path: Path) -> None:
 def test_load_config_rejects_unknown_setting_with_its_path(tmp_path: Path) -> None:
     # Given: an otherwise canonical config with a misspelled setting.
     config_dir = tmp_path / "kateto"
-    _write_config(config_dir, _MINIMAL_CONFIG.replace("hot_reload = false", "hot_reload = false\nunknown = true"))
+    _write_config(config_dir, _MINIMAL_CONFIG.replace("debug = false", "debug = false\nunknown = true"))
 
     # When: schema validation runs.
     with pytest.raises(ConfigError, match=r"kateto\.unknown"):

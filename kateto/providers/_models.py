@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from kateto.core.event import Classification, ProjectState
+from kateto.core.event import Classification, EventModel, ProjectState
 
 
-class ProviderModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
+class ProviderModel(EventModel):
+    ...
 
 class ChatMessage(ProviderModel):
     role: Literal["assistant", "developer", "system", "user"]

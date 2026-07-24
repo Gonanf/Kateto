@@ -11,7 +11,9 @@ from typing import Final, Self
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
+
+from kateto.core.event import EventModel
 
 from kateto.core.exceptions import ConfigError
 
@@ -34,9 +36,8 @@ class ConfigPaths:
     secrets_dir: Path
 
 
-class _ConfigModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
+class _ConfigModel(EventModel):
+    ...
 
 class KatetoSettings(_ConfigModel):
     debug: bool = False

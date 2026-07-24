@@ -35,7 +35,7 @@ def _f32_to_s16(buf: bytearray) -> bytes:
 
 
 def _wav_to_pcm(wav: bytes) -> tuple[bytes, int]:
-    with Wave_read(io := __import__("io").BytesIO(wav)) as w:
+    with Wave_read(__import__("io").BytesIO(wav)) as w:
         framerate = w.getframerate()
         data = w.readframes(w.getnframes())
     return data, framerate

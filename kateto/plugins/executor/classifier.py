@@ -12,7 +12,7 @@ from kateto.core.event import (
     WorkflowRunData,
 )
 from kateto.core.plugin import Plugin
-from kateto.core.manager import PluginManager
+
 from kateto.core.workflow_engine import WorkflowEngine
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ class ClassifierExecutor(Plugin):
 
     @override
     async def initialize(self) -> None:
-        manager = self._manager()
+        manager = self.required_manager
         manager.register_event("transcription", TranscriptionData)
         manager.register_event("classification", ClassificationData)
         manager.register_event("generate", GenerateData)
@@ -67,7 +67,7 @@ class ClassifierExecutor(Plugin):
             classification = await classifier.classify(data.text, agents=agents, workflows=workflows)
         else:
             classification = await classifier.classify(data.text, agents=agents)
-        manager = self._manager()
+        manager = self.required_manager
         _ = await manager.emit("classification", classification, source=self.name)
         if self._workflow_router_enabled():
             return
@@ -163,13 +163,6 @@ class ClassifierExecutor(Plugin):
             return False
         workflow = classification.workflow
         return workflow is not None and workflow.casefold() in {"project-initiation", "requirements-gathering"}
-
-    def _manager(self) -> PluginManager:
-        manager = self.manager
-        if manager is None:
-            msg = "classifier executor must be enabled before use"
-            raise RuntimeError(msg)
-        return manager
 
     def _workflow_router_enabled(self) -> bool:
         manager = self.manager
