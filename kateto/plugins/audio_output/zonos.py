@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from typing import override
 
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData
+from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData, TextChunk
 from kateto.core.plugin import Plugin
 from kateto.providers import ZonosProvider
 from kateto.voices.base import AudioPipeline, get_pipeline

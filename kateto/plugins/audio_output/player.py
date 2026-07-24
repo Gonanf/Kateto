@@ -134,7 +134,7 @@ class AudioOutputPlayer(Plugin):
                     except asyncio.QueueEmpty:
                         continue
                     if pcm is None:
-                        done Voices.append(voice_id)
+                        done_voices.append(voice_id)
                         continue
                     if pcm:
                         pcm_buffers.append(pcm)

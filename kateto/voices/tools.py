@@ -620,3 +620,37 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
         },
     ),
 )
+
+
+class KatetoToolset:
+    def __init__(self, executor: VoiceToolExecutor) -> None:
+        self._executor = executor
+        self._toolset = self._build_toolset()
+
+    def _build_toolset(self) -> Any:
+        from pydantic_ai import FunctionToolset
+        ts = FunctionToolset()
+        for tool_def in BUILTIN_TOOLS:
+            name = tool_def["function"]["name"]
+            description = tool_def["function"]["description"]
+            parameters = tool_def["function"]["parameters"]
+            ts.add_function(
+                self._make_tool_func(name),
+                name=name,
+                description=description,
+            )
+        return ts
+
+    def _make_tool_func(self, tool_name: str) -> Any:
+        executor = self._executor
+
+        async def _tool(**kwargs: Any) -> str:
+            return await executor.execute(tool_name, kwargs)
+
+        _tool.__name__ = tool_name
+        _tool.__qualname__ = f"KatetoToolset.{tool_name}"
+        return _tool
+
+    @property
+    def toolset(self) -> Any:
+        return self._toolset

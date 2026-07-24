@@ -21,8 +21,8 @@ from kateto.live import build_event_runtime
 from kateto.plugins.system.external_mcp import ExternalMcpManager
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
 from kateto.plugins.system.voice_manager import VoiceManager
+from kateto.plugins.system.http_server import HttpServer
 from kateto.plugins.connector.calendar import CalendarFailure, build_google_calendar_connector
-from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,10 +37,11 @@ class RuntimeComponents:
     mcp_servers: tuple[McpEventServer, ...]
     workflow_voices: tuple[str, ...]
     external_mcp: ExternalMcpManager | None = None
+    http_server: HttpServer | None = None
 
 
 @final
-class RuntimeOwner(TuiConfigurationRuntime):
+class RuntimeOwner:
     def __init__(
         self,
         *,
@@ -48,14 +49,12 @@ class RuntimeOwner(TuiConfigurationRuntime):
         plugins: tuple[Plugin, ...],
         components: RuntimeComponents,
         config: LoadedConfig | None = None,
-        plugin_configurations: tuple[TuiPluginConfiguration, ...] = (),
     ) -> None:
         self._manager = manager
         self._plugins = plugins
         self._components = components
         self._config = config
         self._started = False
-        self._plugin_configurations = {item.plugin: item for item in plugin_configurations}
 
     @property
     def manager(self) -> PluginManager:
@@ -98,6 +97,10 @@ class RuntimeOwner(TuiConfigurationRuntime):
         return self._components.external_mcp
 
     @property
+    def http_server(self) -> HttpServer | None:
+        return self._components.http_server
+
+    @property
     def workflow_engine(self) -> WorkflowEngine:
         return next(
             plugin
@@ -112,20 +115,6 @@ class RuntimeOwner(TuiConfigurationRuntime):
     @property
     def is_started(self) -> bool:
         return self._started
-
-    @property
-    def plugin_configurations(self) -> tuple[TuiPluginConfiguration, ...]:
-        return tuple(self._plugin_configurations.values())
-
-    def plugin_configuration(self, name: str) -> TuiPluginConfiguration | None:
-        return self._plugin_configurations.get(name)
-
-    async def configure_plugin(self, name: str, configuration: TuiPluginConfiguration) -> None:
-        if configuration.plugin != name:
-            raise ValueError("plugin configuration name must match its key")
-        if name not in self._plugin_configurations:
-            raise ValueError(f"plugin configuration is not editable: {name}")
-        self._plugin_configurations[name] = configuration
 
     async def start(self) -> None:
         if self._started:
@@ -146,6 +135,9 @@ class RuntimeOwner(TuiConfigurationRuntime):
                 await self._sync_external_tools()
             for server in self.mcp_servers:
                 server.refresh_tools()
+            http_server = self.http_server
+            if http_server is not None:
+                await http_server.start()
         except BaseException:  # noqa: BROAD_EXCEPT_OK
             await self.stop()
             raise
@@ -166,21 +158,24 @@ class RuntimeOwner(TuiConfigurationRuntime):
                 continue
             tools = await external_mcp.get_tools_for(server_names)
             if tools:
-                # ponytail: direct attribute access — Python trusts us
-                plugin._extra_tools = (*plugin._extra_tools, *tools)
-                plugin._tools = (*plugin._tools, *tools)
+                plugin.add_extra_tools(tools)
 
     async def stop(self) -> None:
         try:
             try:
-                external_mcp = self.external_mcp
-                if external_mcp is not None:
-                    await external_mcp.stop_all()
+                http_server = self.http_server
+                if http_server is not None:
+                    await http_server.stop()
             finally:
                 try:
-                    await self._close_mcp_servers()
+                    external_mcp = self.external_mcp
+                    if external_mcp is not None:
+                        await external_mcp.stop_all()
                 finally:
-                    await self._manager.close()
+                    try:
+                        await self._close_mcp_servers()
+                    finally:
+                        await self._manager.close()
         finally:
             self._started = False
 
@@ -225,7 +220,7 @@ class RuntimeOwner(TuiConfigurationRuntime):
                 return
         from kateto.voices.factory import create_voice
 
-        ctx = DiscoveryContext(config=config, shared={})
+        ctx = DiscoveryContext(config=config, shared={}, external_mcp=self._components.external_mcp)
         voice = create_voice(ctx, voice_settings, voice_name=configured_name or voice_name)
         await self._manager.enable_plugin(voice)
         await self._manager.emit(
@@ -257,11 +252,11 @@ def build_runtime_owner(
     shared = resolved_dependencies.shared
     if shared is None:
         shared = {}
-    shared["external_mcp_manager"] = external_mcp
 
     manager, discovered = build_event_runtime(
         config,
         shared=shared,
+        external_mcp=external_mcp,
     )
     runtime_plugins = (
         *discovered,
@@ -269,6 +264,8 @@ def build_runtime_owner(
         *_configured_calendar(config, resolved_dependencies),
     )
     mcp_servers = _authorized_mcp_servers(manager, config)
+    http_settings = config.settings.plugin.get("http_server")
+    http_server = HttpServer(manager) if http_settings is not None and http_settings.enabled else None
     return RuntimeOwner(
         manager=manager,
         plugins=runtime_plugins,
@@ -278,19 +275,9 @@ def build_runtime_owner(
             mcp_servers=mcp_servers,
             workflow_voices=tuple(config.settings.voice.keys()),
             external_mcp=external_mcp if external_mcp._clients else None,
+            http_server=http_server,
         ),
-        plugin_configurations=_tui_plugin_configurations(config),
     )
-
-
-def _tui_plugin_configurations(config: LoadedConfig) -> tuple[TuiPluginConfiguration, ...]:
-    configurations: list[TuiPluginConfiguration] = []
-    for name, setting in config.settings.plugin.items():
-        if name.startswith("audio_input_"):
-            configurations.append(TuiPluginConfiguration(plugin=name, microphone=setting.device))
-        elif name == "audio_output_player":
-            configurations.append(TuiPluginConfiguration(plugin=name, speaker=setting.device))
-    return tuple(configurations)
 
 
 async def run_event_runtime(

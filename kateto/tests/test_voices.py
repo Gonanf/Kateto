@@ -19,10 +19,8 @@ from kateto.core.event import (
 )
 from kateto.providers import ChatMessage as ProviderChatMessage
 from kateto.qa.voice_fixture import run_fixture
-from kateto.voices.base import GenerationRequest, ReferenceClipError, VoiceRole
-from kateto.voices.conquest import Conquest
-from kateto.voices.doktor import Doktor
-from kateto.voices.jane import Jane
+from kateto.voices.base import GenerationRequest, ReferenceClipError, VoiceAgent, VoiceRole
+from kateto.voices.factory import _PROFILES
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import SkillLoadError, load_skills
 
@@ -98,7 +96,7 @@ async def test_voice_batches_context_until_generate_trigger(tmp_path: Path) -> N
     provider = RecordingProvider(("reply",))
     _write_reference(tmp_path, "jane")
     manager = PluginManager()
-    jane = Jane(config_dir=tmp_path, provider=provider)
+    jane = VoiceAgent(profile=_PROFILES["jane"], config_dir=tmp_path, provider=provider)
     await manager.enable_plugin(jane)
 
     try:
@@ -118,7 +116,7 @@ async def test_voice_streams_provider_tokens_then_emits_idle(tmp_path: Path) -> 
     provider = RecordingProvider(("first", " second"))
     _write_reference(tmp_path, "jane")
     manager = PluginManager()
-    jane = Jane(config_dir=tmp_path, provider=provider)
+    jane = VoiceAgent(profile=_PROFILES["jane"], config_dir=tmp_path, provider=provider)
     await manager.enable_plugin(jane)
 
     try:
@@ -147,7 +145,7 @@ async def test_voice_emits_typed_lifecycle_statuses_around_generation(tmp_path: 
     provider = RecordingProvider(("first", " second"))
     _write_reference(tmp_path, "jane")
     manager = PluginManager()
-    jane = Jane(config_dir=tmp_path, provider=provider)
+    jane = VoiceAgent(profile=_PROFILES["jane"], config_dir=tmp_path, provider=provider)
     await manager.enable_plugin(jane)
 
     try:
@@ -180,7 +178,7 @@ async def test_voice_interrupt_and_disable_return_to_idle_status(tmp_path: Path)
     provider = PauseThenResumeProvider()
     _write_reference(tmp_path, "jane")
     manager = PluginManager()
-    jane = Jane(config_dir=tmp_path, provider=provider)
+    jane = VoiceAgent(profile=_PROFILES["jane"], config_dir=tmp_path, provider=provider)
     await manager.enable_plugin(jane)
 
     try:
@@ -209,7 +207,7 @@ async def test_voice_disable_cancels_active_generation_to_idle(tmp_path: Path) -
     provider = PauseThenResumeProvider()
     _write_reference(tmp_path, "jane")
     manager = PluginManager()
-    jane = Jane(config_dir=tmp_path, provider=provider)
+    jane = VoiceAgent(profile=_PROFILES["jane"], config_dir=tmp_path, provider=provider)
     await manager.enable_plugin(jane)
 
     try:
@@ -235,7 +233,7 @@ async def test_interrupt_cancels_hung_generation_and_next_generate_resumes(tmp_p
     provider = PauseThenResumeProvider()
     _write_reference(tmp_path, "jane")
     manager = PluginManager()
-    jane = Jane(config_dir=tmp_path, provider=provider)
+    jane = VoiceAgent(profile=_PROFILES["jane"], config_dir=tmp_path, provider=provider)
     await manager.enable_plugin(jane)
 
     try:
@@ -266,7 +264,7 @@ async def test_interrupt_awaits_provider_cleanup_before_next_generation(tmp_path
     provider = CleanupAwareProvider()
     _write_reference(tmp_path, "jane")
     manager = PluginManager()
-    jane = Jane(config_dir=tmp_path, provider=provider)
+    jane = VoiceAgent(profile=_PROFILES["jane"], config_dir=tmp_path, provider=provider)
     await manager.enable_plugin(jane)
 
     try:
@@ -348,7 +346,8 @@ async def test_voice_injects_declared_skills_when_enabled(tmp_path: Path) -> Non
     skill_path.write_text("Use the backlog schema.", encoding="utf-8")
     _write_reference(tmp_path, "jane")
     manager = PluginManager()
-    jane = Jane(
+    jane = VoiceAgent(
+        profile=_PROFILES["jane"],
         config_dir=tmp_path,
         provider=RecordingProvider(("reply",)),
         settings=VoiceSettings(skills=["backlog"]),
@@ -368,7 +367,8 @@ def test_reference_clip_must_be_wav_inside_its_own_voice_directory(tmp_path: Pat
     # Given: Jane is configured with a clip within her resolved voice directory.
     provider = RecordingProvider(("reply",))
     configured = _write_reference(tmp_path, "jane", "voice.wav")
-    jane = Jane(
+    jane = VoiceAgent(
+        profile=_PROFILES["jane"],
         config_dir=tmp_path,
         provider=provider,
         settings=VoiceSettings(reference_audio="voices/jane/voice.wav"),
@@ -382,7 +382,8 @@ def test_reference_clip_must_be_wav_inside_its_own_voice_directory(tmp_path: Pat
     with pytest.raises(ReferenceClipError):
         _ = jane.reference_wav
     _write_reference(tmp_path, "doktor")
-    cross_voice = Jane(
+    cross_voice = VoiceAgent(
+        profile=_PROFILES["jane"],
         config_dir=tmp_path,
         provider=provider,
         settings=VoiceSettings(reference_audio="voices/doktor/reference.wav"),
@@ -397,9 +398,9 @@ def test_manual_voice_classes_have_distinct_machine_roles(tmp_path: Path) -> Non
 
     # When: their role identities are inspected.
     roles = (
-        Jane(config_dir=tmp_path, provider=provider).role,
-        Doktor(config_dir=tmp_path, provider=provider).role,
-        Conquest(config_dir=tmp_path, provider=provider).role,
+        VoiceAgent(profile=_PROFILES["jane"], config_dir=tmp_path, provider=provider).role,
+        VoiceAgent(profile=_PROFILES["doktor"], config_dir=tmp_path, provider=provider).role,
+        VoiceAgent(profile=_PROFILES["conquest"], config_dir=tmp_path, provider=provider).role,
     )
 
     # Then: role routing remains distinct without asserting mutable prompt prose.
@@ -441,7 +442,7 @@ async def test_provider_output_is_untrusted_and_malformed_stream_isolated(tmp_pa
     provider = RecordingProvider(("",))
     _write_reference(tmp_path, "jane")
     manager = PluginManager()
-    jane = Jane(config_dir=tmp_path, provider=provider)
+    jane = VoiceAgent(profile=_PROFILES["jane"], config_dir=tmp_path, provider=provider)
     await manager.enable_plugin(jane)
 
     try:

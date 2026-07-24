@@ -10,6 +10,7 @@ from kateto.core.config import PluginSettings
 from kateto.core.event import AudioData, Classification, GenerateData, TextChunk, TodoItemData
 from kateto.plugins.audio_processor import WhisperAudioProcessor
 from kateto.plugins.executor import ClassifierExecutor, InterruptExecutor, TodoListExecutor
+from kateto.plugins.system.voice_manager import VoiceManager
 from kateto.tests.conversation_support import (
     BlockingAudioOutput,
     BlockingFixtureProvider,
@@ -61,6 +62,7 @@ async def _enable_pipeline(
     await manager.enable_plugin(_TestableWhisperProcessor(transcriber))
     await manager.enable_plugin(_TestableClassifierExecutor(classifier))
     await manager.enable_plugin(TodoListExecutor(config_dir=config_dir, voice="doktor"))
+    await manager.enable_plugin(VoiceManager())
     await enable_voices(manager, config_dir=config_dir, provider=provider)
 
 
@@ -94,14 +96,16 @@ async def test_audio_to_execute_emits_ordered_transcript_classification_and_one_
             (event.source, event.target, event.data.prompt)
             for event in generate_events
             if isinstance(event.data, GenerateData)
-        ] == [("executor_classifier", None, "plan tomorrow standup")]
+        ] == [("executor_classifier", "voice_manager", "plan tomorrow standup")]
         assert transcriber.received[0].format == "pcm_s16le"
         assert classifier.received == ["plan tomorrow standup"]
-        assert [event.data.voice_id for event in events if event.name == "text_chunk" and isinstance(event.data, TextChunk)] == [
-            "jane",
-            "doktor",
-            "conquest",
+        text_chunk_voices = [
+            event.data.voice_id
+            for event in events
+            if event.name == "text_chunk" and isinstance(event.data, TextChunk) and event.data.text
         ]
+        assert len(text_chunk_voices) == 1
+        assert text_chunk_voices[0] in ("jane", "doktor", "conquest")
     finally:
         await manager.close()
 
@@ -189,11 +193,11 @@ async def test_interrupt_cancels_active_llm_and_tts_then_the_next_audio_segment_
         await manager.wait_for_idle()
 
         # Then: cancellation is observable and a fresh utterance reaches a resumed stream.
-        # All three voices now respond without is_relevant filtering.
+        # VoiceManager routes to one voice per turn (not broadcast).
         names = [event.name for event in manager.get_events()]
         assert names.count("conversation_interrupted") == 1
         assert names.count("conversation_resumed") == 1
-        assert provider.calls == 6
-        assert [event.data.text for event in manager.get_events() if event.name == "text_chunk" and isinstance(event.data, TextChunk)][-1] == "resumed"
+        assert provider.calls == 2
+        assert [event.data.text for event in manager.get_events() if event.name == "text_chunk" and isinstance(event.data, TextChunk) and event.data.text][-1] == "resumed"
     finally:
         await manager.close()

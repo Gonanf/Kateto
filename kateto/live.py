@@ -25,8 +25,9 @@ def build_event_runtime(
     config: LoadedConfig,
     *,
     shared: dict[str, Any] | None = None,
+    external_mcp: Any | None = None,
 ) -> tuple[PluginManager, tuple[Plugin, ...]]:
     registry = discover_plugins(
-        DiscoveryContext(config=config, shared=shared or {}),
+        DiscoveryContext(config=config, shared=shared or {}, external_mcp=external_mcp),
     )
     return PluginManager(), tuple(registry.plugins)

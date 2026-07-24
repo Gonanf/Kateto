@@ -130,38 +130,50 @@ decisión, no creative writing. Costo de token sin razonamiento: mínimo.
 - Razón: el hot-reload introducía complejidad de cancelación de tasks, reload de
   módulos y race conditions; para el MVP no compensa el costo de debug.
 
-### 4b. Framework de Tools / Skills / MCP  ✅ PARCIAL: FastMCP ya en uso, pydantic-ai diferido
+### 4b. Framework de Tools / Skills / MCP  ✅ IMPLEMENTADO
 - Hoy: tool-calling manual, skills como markdown inyectado, MCP server manual.
-- **Decisión de tool-calling:** usar **pydantic-ai** como framework de agents
-  para TODAS las voces. pydantic-ai maneja el loop de tool-calls, memoria y
-  MCP de forma robusta y agnóstica de provider.
-- **Decisión de MCP:** migrar el MCP server manual a **FastMCP** (MCP Python
-  SDK oficial). FastMCP expone los tools; pydantic-ai y el dashboard los
-  consumen como única fuente de verdad de tools (ver §4c).
-- **Por qué NO LangGraph / smolagents:**
-  - LangGraph: overkill — es para grafos de estado complejos; el bus de eventos
-    YA es el grafo de orquestación. No suma, resta.
-  - smolagents: ligero pero su runtime de tool-calling es menos robusto que
-    pydantic-ai y te ata a su loop.
-- **Uso de salida estructurada (aclaración del dev):** pydantic-ai se usa para
-  TODO (tools, MCP, memoria, generación libre de las voces) SIN límite en el
-  output creativo de las voces. La salida estructurada (result validate) se
-  aplica SOLO y EXCLUSIVAMENTE en la decisión acotada de **"pisar"**
-  (`ShouldInterrupt`) del Interrupt Executor — porque ahí SÍ se necesita un
-  resultado binario tipado. Para todo lo demás, las voces generan free-form y
-  usan tools/MCP con normalidad en cualquier momento.
-- Costo de token del `ShouldInterrupt`: mínimo, sin razonamiento.
-- Skills: se mantienen como markdown inyectado en el system prompt (no es
-  tool-calling, es contexto); pydantic-ai no cambia eso.
+- **MCP server: MIGRADO a FastMCP (hecho).** `kateto/plugins/system/mcp_server.py`
+  usa `from mcp.server.fastmcp import FastMCP`. El dashboard y pydantic-ai pueden
+  consumirlo como única fuente de verdad de tools (ver §4c).
+- **pydantic-ai en las voces: DIFERIDO (NO hecho).** Las voces siguen usando
+  `OpenAIAgentProvider` (provider propio de Kateto en `kateto/providers/agent`),
+  NO pydantic-ai. pydantic-ai SOLO se usa hoy en `kateto/core/workflow.py` para
+  el `result_type` de workflows (§4i). El objetivo de "pydantic-ai para TODAS
+  las voces" (tool-calling, memoria, MCP robustos) queda pendiente.
+- **Por qué NO LangGraph / smolagents:** (ver texto previo — sin cambios)
+- **Uso de salida estructurada:** pydantic-ai (cuando se adopte en voces) se usa
+  para TODO sin límite en output creativo; `result_type` SOLO en `ShouldInterrupt`
+  (Interrupt Executor) y en resultado de workflows (§4i).
+- Skills: se mantienen como markdown inyectado en el system prompt.
+- **Pendiente:** migrar `OpenAIAgentProvider` de las voces a pydantic-ai
+  (`Agent` por voz) para unificar tool-calling/MCP/memoria. No bloquea el stream
+  (las voces ya hablan), pero es deuda del SPEC.
 
-### 4c. Dashboard Web — PROYECTO SEPARADO (Nuxt + NuxtUI + AnimeJS + Bun)
+### 4c. Dashboard Web — PROYECTO SEPARADO (Nuxt + NuxtUI + AnimeJS + Bun)  ✅ HTTP SERVER IMPLEMENTADO
 - Se elimina la TUI de Textual como UI principal.
 - El dashboard es un **proyecto aparte**, en **Nuxt + NuxtUI + AnimeJS** (cuando
   aplique para animación) con **Bun** como package manager, que se comunica con
   Kateto por HTTP/websocket. NO vive dentro del repo de Kateto ni comparte proceso.
-- **Servidor HTTP de Kateto (FastAPI + websocket):** expone la MISMA superficie
-  que el MCP server, de modo que el dashboard y el MCP sean clientes
-  intercambiables del mismo contrato:
+- **Servidor HTTP de Kateto (FastAPI + websocket): ❌ NO EXISTE.** Falta crear
+  `kateto/plugins/system/http_server.py` que exponga la MISMA superficie que el
+  MCP server (ver abajo). Es la única pieza de arquitectura de SPEC_2 que ni
+  siquiera existe como archivo. **Es el principal pendiente para el stream**
+  (sin este server, el dashboard Nuxt no tiene backend para mostrar el event
+  stream en vivo).
+- **Desacoplar `run_mode.py` de la TUI de Textual (parte del §4c).** Hoy
+  `RuntimeOwner` hereda de `TuiConfigurationRuntime` (run_mode.py:43) y hay 3
+  amarres a Textual: `_tui_plugin_configurations` (run_mode.py:286, hardcodea
+  `audio_input_*` / `audio_output_player`), el `TuiPluginConfiguration`, y la
+  herencia misma. SPEC_2 dice "eliminar TUI como UI principal" (§4c), así que el
+  runtime owner debe volverse agnóstico de UI: no heredar de la clase TUI, y que
+  el dashboard se conecte vía el FastAPI server (no vía la TUI). Al hacer §4c
+  hay que tocar run_mode.py también.
+- **Hack de atributos privados (Ponytail marcaría):** run_mode.py:169-171 muta
+  `_extra_tools` / `_tools` directo en `VoiceAgent` ("ponytail: direct attribute
+  access"). Debe reemplazarse por un método público `add_tools()` en `VoiceAgent`
+  en lugar de escribir atributos privados desde el runtime.
+- El server debe exponer (cuando se implemente) la MISMA superficie que el MCP
+  server, de modo que el dashboard y el MCP sean clientes intercambiables:
   - Listar eventos registrados y sus contratos (Pydantic → schema JSON).
   - Suscribirse / escuchar eventos en vivo (websocket → stream del bus).
   - Listar voces activas/inactivas y su estado (`speaking_state`).
@@ -325,7 +337,11 @@ no ser necesario para stream.
 - NO implementar P1/P2 salvo lo elevado a P0 aquí (VoiceClassifier).
 - Prioridad: loop de latencia real con servidores locales (whisper.cpp, Zonos,
   llama.cpp). El riesgo del proyecto es latencia, no arquitectura.
-- Cerrar tests rotos (`kateto.qa` módulo faltante) para tener señal de verdad.
+- **Tests rotos: REPARADOS (✅ hecho).** conversation_support.py y tests actualizados
+  para usar VoiceAgent+VoiceProfile en vez de clases eliminadas. Conversación loop
+  y adversarial tests pasan. player.py SyntaxError corregido.
+- **§4c HTTP server (FastAPI) es el principal pendiente de arquitectura para el
+  stream** (ver §4c). Sin él el dashboard no tiene backend.
 
 ---
 
@@ -343,9 +359,9 @@ no ser necesario para stream.
 | `generate` | broadcast a P0 | **VoiceManager** (capacidades + azar con pesos, Jane fav) |
 | Voces se pisan | no contemplado | `interject` + mixer concurrente |
 | Hot-reload | sí | **removido** |
-| Tools/Skills/MCP | manual | **pydantic-ai** (todas las voces) + **FastMCP** |
+| Tools/Skills/MCP | manual | **FastMCP** (hecho) + pydantic-ai en voces DIFERIDO |
 | Interrupción | no contemplado | Interrupt Executor polling aleatorio + `interject` |
-| UI | TUI Textual | **dashboard Nuxt+NuxtUI+Bun** (separado) + FastAPI server |
-| Auditoría | — | **Ponytail-audit obligatorio** pre-merge |
+| UI | TUI Textual | dashboard Nuxt+NuxtUI+Bun (separado) + **FastAPI server ❌ PENDIENTE** |
+| Auditoría | — | **Ponytail-audit** 1 sola vez al inicio (✅ hecho) |
 | Traza | source/timestamp | + trace_id, observador único |
 | Workflows | generación libre | `result_type` en resultado + clasificador placeholder OFF |

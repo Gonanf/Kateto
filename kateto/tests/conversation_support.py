@@ -6,10 +6,7 @@ from pathlib import Path
 
 from kateto.core import Plugin, PluginManager
 from kateto.core.event import AudioData, Classification, ClassificationData, InterruptData, TextChunk, TranscriptionData
-from kateto.voices.base import GenerationRequest
-from kateto.voices.conquest import Conquest
-from kateto.voices.doktor import Doktor
-from kateto.voices.jane import Jane
+from kateto.voices.base import GenerationRequest, VoiceAgent
 
 
 class FixtureTranscriber:
@@ -129,12 +126,12 @@ async def enable_voices(
     *,
     config_dir: Path,
     provider: object,
-) -> tuple[Jane, Doktor, Conquest]:
-    voices = (
-        Jane(config_dir=config_dir, provider=provider),
-        Doktor(config_dir=config_dir, provider=provider),
-        Conquest(config_dir=config_dir, provider=provider),
+) -> tuple[VoiceAgent, VoiceAgent, VoiceAgent]:
+    from kateto.voices.factory import _PROFILES
+    voices = tuple(
+        VoiceAgent(profile=_PROFILES[name], config_dir=config_dir, provider=provider)
+        for name in ("jane", "doktor", "conquest")
     )
     for voice in voices:
         await manager.enable_plugin(voice)
-    return voices
+    return voices  # type: ignore[return-value]

@@ -24,6 +24,7 @@ class LiveAssemblyConfigurationError(Exception):
 class DiscoveryContext:
     config: LoadedConfig
     shared: dict[str, Any]
+    external_mcp: Any | None = None
 
     def plugin_settings(self, name: str) -> PluginSettings:
         return required_plugin_settings(self.config, name)

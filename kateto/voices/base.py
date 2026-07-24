@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
-from typing import Protocol, assert_never
+from typing import Any, Protocol, assert_never
 
 log = logging.getLogger(__name__)
 
@@ -176,6 +176,8 @@ class OpenAICompatibleProvider:
 
 
 class VoiceAgent(Plugin):
+    immediate_events = frozenset({"interrupt", "speak"})
+
     def __init__(
         self,
         *,
@@ -205,6 +207,7 @@ class VoiceAgent(Plugin):
         self._status: VoiceStatus | None = None
         self._agent_provider: OpenAIAgentProvider | None = None
         self._tool_executor: ToolExecutor | None = None
+        self._pydantic_agent: Any | None = None
         self._tools: tuple[ChatCompletionToolParam, ...] = ()
         self._extra_tools: tuple[ChatCompletionToolParam, ...] = ()
         self._event_messages: deque[ChatMessage] = deque(maxlen=32)
@@ -242,6 +245,13 @@ class VoiceAgent(Plugin):
         self._tool_executor = tool_executor
         self._extra_tools = extra_tools
         self._tools = (*BUILTIN_TOOLS, *extra_tools)
+
+    def add_extra_tools(self, tools: tuple[ChatCompletionToolParam, ...]) -> None:
+        self._extra_tools = (*self._extra_tools, *tools)
+        self._tools = (*self._tools, *tools)
+
+    def set_pydantic_agent(self, agent: Any) -> None:
+        self._pydantic_agent = agent
 
     @property
     def reference_wav(self) -> Path:
@@ -524,6 +534,9 @@ class VoiceAgent(Plugin):
         workflow: str | None,
         phase_id: str | None,
     ) -> None:
+        if self._pydantic_agent is not None:
+            await self._pydantic_agent_loop(prompt, workflow=workflow, phase_id=phase_id)
+            return
         provider = self._agent_provider
         executor = self._tool_executor
         if provider is None or executor is None:
@@ -605,6 +618,54 @@ class VoiceAgent(Plugin):
                 await manager.emit(
                     "voice_idle", VoiceIdleData(voice=self.name), source=self.name
                 )
+            await self._set_status(VoiceStatus.IDLE)
+            _remove_pipeline(self.name)
+
+    async def _pydantic_agent_loop(
+        self,
+        prompt: str,
+        *,
+        workflow: str | None,
+        phase_id: str | None,
+    ) -> None:
+        agent = self._pydantic_agent
+        if agent is None:
+            return
+        pipeline = self._get_or_create_pipeline()
+        messages = await self._messages_for(prompt, workflow=workflow, phase_id=phase_id)
+        history = [{"role": m.role, "content": m.content} for m in messages[:-1]]
+        user_prompt = messages[-1].content if messages else prompt
+        try:
+            if self._settings.stream:
+                sequence = 0
+                async with agent.run_stream(user_prompt, message_history=history or None) as result:
+                    async for msg in result.stream():
+                        if self._interrupted:
+                            break
+                        if isinstance(msg, str) and msg:
+                            if self._status is not VoiceStatus.TALKING:
+                                await self._set_status(VoiceStatus.TALKING)
+                            await pipeline.token_queue.put(msg)
+                            await self._emit_chunk(msg, sequence, final=False)
+                            sequence += 1
+                    await pipeline.token_queue.put(None)
+                    final_text = result.get_output()
+                    if final_text:
+                        await self._emit_chunk(final_text, sequence, final=True)
+            else:
+                result = await agent.run(user_prompt, message_history=history or None)
+                output = result.get_output()
+                if output:
+                    await pipeline.token_queue.put(output)
+                    await self._emit_chunk(output, 0, final=True)
+                await pipeline.token_queue.put(None)
+        except asyncio.CancelledError:
+            await pipeline.token_queue.put(None)
+            raise
+        finally:
+            manager = self.manager
+            if manager is not None:
+                await manager.emit("voice_idle", VoiceIdleData(voice=self.name), source=self.name)
             await self._set_status(VoiceStatus.IDLE)
             _remove_pipeline(self.name)
 
@@ -764,7 +825,7 @@ class VoiceAgent(Plugin):
         match envelope.data:
             case TranscriptionData(text=text):
                 message = ChatMessage(role="user", content=self._bounded_event_text(text))
-            case TextChunk(text=text):
+            case TextChunk(text=text) if text:
                 message = ChatMessage(role="assistant", content=self._bounded_event_text(text))
             case VoiceRequestData(prompt=prompt):
                 message = ChatMessage(role="user", content=self._bounded_event_text(prompt))

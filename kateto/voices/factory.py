@@ -69,7 +69,7 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             endpoint=voice_settings.endpoint,
             api_key=voice_settings.api_key,
         )
-        external_mcp = ctx.shared.get("external_mcp_manager") if ctx.shared is not None else None
+        external_mcp = ctx.external_mcp
         executor = VoiceToolExecutor(
             config_dir=ctx.config.paths.config_dir,
             cli_settings=ctx.config.settings.cli,
@@ -77,5 +77,28 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             mcp_server_names=tuple(settings.mcp_servers),
         )
         voice.setup_agent(agent_provider=agent_provider, tool_executor=executor)
+
+        try:
+            from pydantic_ai import Agent
+            from pydantic_ai.models.openai import OpenAIChatModel
+            from pydantic_ai.providers.openai import OpenAIProvider
+            from kateto.voices.tools import KatetoToolset
+
+            model = OpenAIChatModel(
+                model_name=voice_settings.model,
+                provider=OpenAIProvider(
+                    base_url=voice_settings.endpoint,
+                    api_key=voice_settings.api_key or "sk-no-key-required",
+                ),
+            )
+            kateto_toolset = KatetoToolset(executor)
+            pydantic_agent = Agent(
+                model=model,
+                system_prompt=profile.system_prompt,
+                toolsets=[kateto_toolset.toolset],
+            )
+            voice.set_pydantic_agent(pydantic_agent)
+        except ImportError:
+            pass
 
     return voice
