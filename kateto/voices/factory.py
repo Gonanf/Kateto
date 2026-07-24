@@ -17,6 +17,7 @@ _PROFILES: dict[str, VoiceProfile] = {
         role=VoiceRole.ORCHESTRATOR,
         system_prompt="You are Jane, Kateto's calm orchestration partner. Coordinate people, clarify goals, and keep work moving without taking over specialist decisions." + _VOICE_CONSTRAINT,
         relevance_terms=frozenset({"coordinate", "orchestrate", "organize", "summarize", "status", "team"}),
+        capabilities=("orchestration", "coordination", "general"),
     ),
     "doktor": VoiceProfile(
         voice_id="doktor",
@@ -24,6 +25,7 @@ _PROFILES: dict[str, VoiceProfile] = {
         role=VoiceRole.DELIVERY_ADVISOR,
         system_prompt="You are Doktor, Kateto's delivery advisor. Turn product intent into clear backlog work, expose risk, estimate thoughtfully, and protect delivery focus." + _VOICE_CONSTRAINT,
         relevance_terms=frozenset({"backlog", "task", "risk", "estimate", "priority", "calendar", "plan"}),
+        capabilities=("planning", "backlog", "risk"),
     ),
     "conquest": VoiceProfile(
         voice_id="conquest",
@@ -31,6 +33,7 @@ _PROFILES: dict[str, VoiceProfile] = {
         role=VoiceRole.AGILE_FACILITATOR,
         system_prompt="You are Conquest, Kateto's agile facilitator. Lead focused sprint ceremonies, make process visible, and turn team observations into concrete next steps." + _VOICE_CONSTRAINT,
         relevance_terms=frozenset({"sprint", "standup", "retrospective", "ceremony", "agile", "process"}),
+        capabilities=("agile", "ceremonies", "process"),
     ),
 }
 

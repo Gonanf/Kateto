@@ -65,6 +65,7 @@ class PluginSettings(_ConfigModel):
     callback_queue_capacity: int | None = Field(default=None, gt=0)
     default_voice_id: int | None = None
     default_language: str | None = None
+    voice_probabilities: dict[str, float] | None = None
 
     @field_validator("endpoint", "model_endpoint")
     @classmethod

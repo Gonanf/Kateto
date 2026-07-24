@@ -116,6 +116,23 @@ class GenerateData(EventModel):
     phase_id: str | None = None
 
 
+class SpeakRequestData(EventModel):
+    voice: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    workflow: str | None = None
+    phase_id: str | None = None
+
+
+class SpeakingStateData(EventModel):
+    voice: str
+    active: bool
+
+
+class InterjectData(EventModel):
+    voice: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+
+
 class VoiceRequestData(EventModel):
     voice: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
@@ -292,6 +309,7 @@ class EventEnvelope(EventModel, Generic[Payload]):
     only_once: bool = False
     reply_to: str | None = None
     correlation_id: str | None = None
+    trace_id: str | None = None
 
     @field_validator("timestamp")
     @classmethod

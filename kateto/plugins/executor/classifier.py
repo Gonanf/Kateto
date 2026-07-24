@@ -96,7 +96,7 @@ class ClassifierExecutor(Plugin):
                         "generate",
                         GenerateData(prompt=classification.text),
                         source=self.name,
-                        target=voice,
+                        target="voice_manager",
                     )
             case Classification.IGNORE_SELF_TALK | Classification.IGNORE_THIRD_PARTY:
                 return

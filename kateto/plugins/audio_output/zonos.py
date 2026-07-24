@@ -8,6 +8,7 @@ from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData
 from kateto.core.plugin import Plugin
 from kateto.providers import ZonosProvider
+from kateto.voices.base import AudioPipeline, get_pipeline
 
 
 class ZonosAudioOutput(Plugin):
@@ -22,6 +23,7 @@ class ZonosAudioOutput(Plugin):
         self._provider_active: bool = False
         self._interrupted: bool = False
         self._stream_task: asyncio.Task[None] | None = None
+        self._pipeline_tasks: dict[str, asyncio.Task[None]] = {}
         self._playing = False
         self._status_emitted = False
 
@@ -42,6 +44,10 @@ class ZonosAudioOutput(Plugin):
     @override
     async def disable(self) -> None:
         await self._cancel_stream()
+        for task in self._pipeline_tasks.values():
+            if not task.done():
+                task.cancel()
+        self._pipeline_tasks.clear()
         if self._provider_active:
             await self._provider.aclose()
             self._provider_active = False
@@ -49,6 +55,16 @@ class ZonosAudioOutput(Plugin):
     async def on_text_chunk(self, data: TextChunk) -> None:
         if data.voice_id is None:
             return
+        pipeline = get_pipeline(data.voice_id)
+        if pipeline is not None:
+            # Data plane active — pipeline consumer task handles tokens
+            if data.voice_id not in self._pipeline_tasks:
+                self._pipeline_tasks[data.voice_id] = asyncio.create_task(
+                    self._run_pipeline_consumer(data.voice_id, pipeline),
+                    name=f"kateto-zonos-pipeline-{data.voice_id}",
+                )
+            return
+        # Fallback: event-based path
         self._interrupted = False
         task = asyncio.create_task(self._emit_pcm(data), name=f"kateto-zonos-{data.voice_id}")
         self._stream_task = task
@@ -62,10 +78,36 @@ class ZonosAudioOutput(Plugin):
                 self._stream_task = None
             await self._set_playing(False)
 
+    async def _run_pipeline_consumer(self, voice_id: str, pipeline: AudioPipeline) -> None:
+        await self._set_playing(True)
+        try:
+            while True:
+                token = await pipeline.token_queue.get()
+                if token is None:
+                    break
+                async for output in self._provider.stream_sentence(
+                    TextChunk(text=token, sequence=0, final=False, voice_id=voice_id),
+                    voice_id=voice_id,
+                ):
+                    if output.samples:
+                        await pipeline.pcm_queue.put(output.samples)
+                    if output.final:
+                        break
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await pipeline.pcm_queue.put(None)
+            self._pipeline_tasks.pop(voice_id, None)
+            await self._set_playing(False)
+
     async def on_interrupt(self, data: InterruptData) -> None:
         del data
         self._interrupted = True
         await self._cancel_stream()
+        for task in self._pipeline_tasks.values():
+            if not task.done():
+                task.cancel()
+        self._pipeline_tasks.clear()
 
     async def _emit_pcm(self, data: TextChunk) -> None:
         voice_id = data.voice_id

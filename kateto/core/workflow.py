@@ -54,6 +54,7 @@ class WorkflowPhase:
     checkpoints: tuple[str, ...]
     calls_skills: tuple[str, ...]
     calls_voices: tuple[str, ...]
+    result_type: str | None = None  # ponytail: reserved for pydantic-ai result validation
 
 
 @dataclass(frozen=True, slots=True)

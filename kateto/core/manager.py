@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK
 import logging
+import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
@@ -164,6 +165,7 @@ class PluginManager:
         only_once: bool = False,
         reply_to: str | None = None,
         correlation_id: str | None = None,
+        trace_id: str | None = None,
     ) -> EventEnvelope[BaseModel]:
         capability_filter = self._validate_filters(target, capabilities)
         if not isinstance(data, BaseModel):
@@ -173,6 +175,8 @@ class PluginManager:
         if contract is not None and not isinstance(data, contract):
             msg = f"{name} requires {contract.__name__}"
             raise TypeError(msg)
+        if trace_id is None:
+            trace_id = uuid.uuid4().hex
         envelope = EventEnvelope[BaseModel](
             name=name,
             data=data,
@@ -182,6 +186,7 @@ class PluginManager:
             only_once=only_once,
             reply_to=reply_to,
             correlation_id=correlation_id,
+            trace_id=trace_id,
         )
         history_envelope = self._compact_history_envelope(envelope)
         self._events.append(history_envelope)

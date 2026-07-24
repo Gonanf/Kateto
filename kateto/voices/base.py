@@ -5,7 +5,7 @@ import json
 import logging
 from collections import deque
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
@@ -30,6 +30,7 @@ from kateto.core.event import (
     EventEnvelope,
     GenerateData,
     InterruptData,
+    SpeakRequestData,
     TextChunk,
     ToolCallData,
     ToolResultData,
@@ -53,6 +54,24 @@ from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamTok
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import LoadedSkill, load_skills
 
+# Data plane: direct channels bypassing the event bus for streaming data
+_PIPELINES: dict[str, AudioPipeline] = {}
+
+
+@dataclass
+class AudioPipeline:
+    """Direct data channel for streaming tokens and PCM between voice, TTS, and player."""
+    token_queue: asyncio.Queue[str | None] = field(default_factory=lambda: asyncio.Queue(maxsize=64))
+    pcm_queue: asyncio.Queue[bytes | None] = field(default_factory=lambda: asyncio.Queue(maxsize=32))
+
+
+def _remove_pipeline(voice_id: str) -> None:
+    _PIPELINES.pop(voice_id, None)
+
+
+def get_pipeline(voice_id: str) -> AudioPipeline | None:
+    return _PIPELINES.get(voice_id)
+
 
 class VoiceRole(StrEnum):
     ORCHESTRATOR = "orchestrator"
@@ -67,6 +86,7 @@ class VoiceProfile:
     role: VoiceRole
     system_prompt: str
     relevance_terms: frozenset[str]
+    capabilities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,6 +277,7 @@ class VoiceAgent(Plugin):
         manager.register_event("tool_result", ToolResultData)
         manager.register_event("voice_request", VoiceRequestData)
         manager.register_event("generate", GenerateData)
+        manager.register_event("speak", SpeakRequestData)
         manager.register_event("workflow_run", WorkflowRunData)
         manager.register_event("workflow_started", WorkflowStartedData)
         manager.register_event("workflow_phase_start", WorkflowPhaseStartData)
@@ -290,6 +311,7 @@ class VoiceAgent(Plugin):
             except asyncio.CancelledError:
                 pass
         self._generation_task = None
+        _remove_pipeline(self.name)
         await self._set_status(VoiceStatus.IDLE)
 
     async def _enqueue(
@@ -390,6 +412,30 @@ class VoiceAgent(Plugin):
             if self._generation_task is generation:
                 self._generation_task = None
 
+    async def on_speak(self, data: SpeakRequestData) -> None:
+        prompt = data.prompt
+        if prompt is None or not prompt.strip():
+            return
+        self._interrupted = False
+        await self._set_status(VoiceStatus.THINKING)
+        generation = asyncio.create_task(
+            self._stream_response(
+                prompt,
+                workflow=data.workflow,
+                phase_id=data.phase_id,
+            ),
+            name=f"kateto-voice-{self.name}",
+        )
+        self._generation_task = generation
+        try:
+            await generation
+        except asyncio.CancelledError:
+            if not self._interrupted:
+                raise
+        finally:
+            if self._generation_task is generation:
+                self._generation_task = None
+
     def _prompt_for(self, data: GenerateData) -> str | None:
         if data.prompt is not None:
             return data.prompt
@@ -401,6 +447,13 @@ class VoiceAgent(Plugin):
                     continue
         return None
 
+    def _get_or_create_pipeline(self) -> AudioPipeline:
+        pipeline = _PIPELINES.get(self.name)
+        if pipeline is None:
+            pipeline = AudioPipeline()
+            _PIPELINES[self.name] = pipeline
+        return pipeline
+
     async def _stream_response(
         self,
         prompt: str,
@@ -408,6 +461,7 @@ class VoiceAgent(Plugin):
         workflow: str | None,
         phase_id: str | None,
     ) -> None:
+        pipeline = self._get_or_create_pipeline()
         if self._agent_provider is not None and self._tool_executor is not None:
             await self._agent_loop(prompt, workflow=workflow, phase_id=phase_id)
             return
@@ -422,8 +476,7 @@ class VoiceAgent(Plugin):
         )
         log.debug("[%s] _settings.stream=%s", self.name, self._settings.stream)
         if self._settings.stream:
-            log.debug("[%s] stream=true mode, emitting per token", self.name)
-            previous: str | None = None
+            log.debug("[%s] stream=true mode, pushing to pipeline", self.name)
             sequence = 0
             async for token in self._provider.stream(request):
                 if not isinstance(token, str) or not token:
@@ -432,12 +485,11 @@ class VoiceAgent(Plugin):
                     )
                 if self._status is not VoiceStatus.TALKING:
                     await self._set_status(VoiceStatus.TALKING)
-                if previous is not None:
-                    await self._emit_chunk(previous, sequence, final=False)
-                    sequence += 1
-                previous = token
-            if previous is not None:
-                await self._emit_chunk(previous, sequence, final=True)
+                await pipeline.token_queue.put(token)
+                await self._emit_chunk(token, sequence, final=False)
+                sequence += 1
+            await pipeline.token_queue.put(None)
+            await self._emit_chunk("", sequence, final=True)
         else:
             log.debug("[%s] stream=false mode, accumulating tokens...", self.name)
             tokens: list[str] = []
@@ -452,13 +504,18 @@ class VoiceAgent(Plugin):
             if tokens:
                 full = "".join(tokens)
                 log.debug("[%s] stream=false accumulated %d tokens -> %r", self.name, len(tokens), full)
+                await pipeline.token_queue.put(full)
+                await pipeline.token_queue.put(None)
                 await self._emit_chunk(full, 0, final=True)
+            else:
+                await pipeline.token_queue.put(None)
         manager = self.manager
         if manager is not None:
             await manager.emit(
                 "voice_idle", VoiceIdleData(voice=self.name), source=self.name
             )
         await self._set_status(VoiceStatus.IDLE)
+        _remove_pipeline(self.name)
 
     async def _agent_loop(
         self,
@@ -471,6 +528,7 @@ class VoiceAgent(Plugin):
         executor = self._tool_executor
         if provider is None or executor is None:
             return
+        pipeline = self._get_or_create_pipeline()
         chat_messages = await self._messages_for(
             prompt,
             workflow=workflow,
@@ -499,11 +557,13 @@ class VoiceAgent(Plugin):
                                 if self._status is not VoiceStatus.TALKING:
                                     await self._set_status(VoiceStatus.TALKING)
                                 if previous is not None:
+                                    await pipeline.token_queue.put(previous)
                                     await self._emit_chunk(previous, sequence, final=False)
                                     sequence += 1
                                 previous = token
                             case AgentResponse() as response if response.tool_calls:
                                 if previous is not None:
+                                    await pipeline.token_queue.put(previous)
                                     await self._emit_chunk(previous, sequence, final=True)
                                     previous = None
                                 await self._handle_tool_calls(
@@ -511,6 +571,7 @@ class VoiceAgent(Plugin):
                                 )
                                 had_tool_calls = True
                             case AgentResponse() as response if response.text.strip():
+                                await pipeline.token_queue.put(response.text)
                                 await self._emit_chunk(response.text, sequence, final=True)
                                 previous = None
                                 had_tool_calls = False
@@ -520,6 +581,7 @@ class VoiceAgent(Plugin):
                     if self._interrupted:
                         break
                     if previous is not None:
+                        await pipeline.token_queue.put(previous)
                         await self._emit_chunk(previous, sequence, final=True)
                     if not had_tool_calls:
                         break
@@ -530,18 +592,21 @@ class VoiceAgent(Plugin):
                     )
                     if not response.tool_calls:
                         if response.text and response.text.strip():
+                            await pipeline.token_queue.put(response.text)
                             await self._emit_chunk(response.text, 0, final=True)
                         break
                     await self._handle_tool_calls(
                         messages=messages, response=response, executor=executor,
                     )
         finally:
+            await pipeline.token_queue.put(None)
             manager = self.manager
             if manager is not None:
                 await manager.emit(
                     "voice_idle", VoiceIdleData(voice=self.name), source=self.name
                 )
             await self._set_status(VoiceStatus.IDLE)
+            _remove_pipeline(self.name)
 
     async def _handle_tool_calls(
         self,

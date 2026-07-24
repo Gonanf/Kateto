@@ -20,6 +20,7 @@ from kateto.core.workflow_engine import WorkflowEngine
 from kateto.live import build_event_runtime
 from kateto.plugins.system.external_mcp import ExternalMcpManager
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
+from kateto.plugins.system.voice_manager import VoiceManager
 from kateto.plugins.connector.calendar import CalendarFailure, build_google_calendar_connector
 from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration
 
@@ -36,20 +37,6 @@ class RuntimeComponents:
     mcp_servers: tuple[McpEventServer, ...]
     workflow_voices: tuple[str, ...]
     external_mcp: ExternalMcpManager | None = None
-
-
-class _VoiceManagerPlugin(Plugin):
-    def __init__(self, owner: RuntimeOwner) -> None:
-        super().__init__("voice_manager", streaming=True)
-        self._owner = owner
-
-    async def initialize(self) -> None:
-        if self.manager is not None:
-            self.manager.register_event("voice_enable", VoiceEnableData)
-            self.manager.register_event("voice_enabled", VoiceEnabledData)
-
-    async def on_voice_enable(self, data: VoiceEnableData) -> None:
-        await self._owner.on_voice_enable(data)
 
 
 @final
@@ -146,7 +133,10 @@ class RuntimeOwner(TuiConfigurationRuntime):
         try:
             for plugin in self._plugins:
                 await self._manager.enable_plugin(plugin)
-            voice_mgr = _VoiceManagerPlugin(self)
+            voice_mgr = VoiceManager(
+                self._config.settings.plugin.get("voice_manager") if self._config else None,
+                on_voice_enable=self.on_voice_enable,
+            )
             await self._manager.enable_plugin(voice_mgr)
             # Start external MCP servers after plugins so voice enable runs first,
             # but before internal event-server refresh so external tools are visible.

@@ -20,7 +20,7 @@ model_endpoint = "http://127.0.0.1:8091"
 model = "classifier"
 
 [plugin.executor_workflow_router]
-enabled = true
+enabled = false
 model_endpoint = "http://127.0.0.1:8091"
 model = "classifier"
 
@@ -87,3 +87,7 @@ enabled = true
 
 [plugin.voice_soul_manager]
 enabled = true
+
+[plugin.voice_manager]
+enabled = true
+voice_probabilities = { jane = 0.7, doktor = 0.15, conquest = 0.1 }
