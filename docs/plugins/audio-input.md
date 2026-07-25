@@ -33,6 +33,15 @@ When audio input detects voice activity while the system is responding:
    - **LLM Agent**: cancels current generation
    - **Other plugins**: per implementation
 
+## Modules
+
+- `silero.py` — Silero VAD integration for voice activity detection
+- `listener.py` — Continuous listening loop, manages silence/voice transitions
+- `capture.py` — PCM capture and AudioData packaging
+- `base.py` — Base audio input class
+- `mic.py` — Microphone input plugin
+- `meet.py` — Google Meet audio capture
+
 ## Plugins
 
 ### `audio_input_mic` (P0)

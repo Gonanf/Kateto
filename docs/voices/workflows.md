@@ -82,7 +82,7 @@ Every phase is declarative: the voice receives literal natural-language instruct
 
 ## Workflow Evolution
 
-Workflows are Python files. Both agents and humans can **create, modify, and improve** workflows via hot-reload. A voice can:
+Workflows are Python files. Both agents and humans can **create, modify, and improve** workflows. Changes require a runtime restart to take effect. A voice can:
 - Create a new workflow for a repeated process
 - Add phases to an existing workflow
 - Adjust instructions based on learning

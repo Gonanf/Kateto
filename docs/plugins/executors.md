@@ -15,7 +15,7 @@ Uses **mmBERT** fine-tuned to GGUF (via HTTP to llama.cpp) to classify transcrib
 | `IGNORE_THIRD_PARTY` | Conversation not meant for the system |
 
 ### v1 Behavior
-On `EXECUTE`, emits `generate` to ALL active voices. Voices self-filter by relevance since per-voice routing (VoiceClassifier) is P1.
+On `EXECUTE`, emits `generate` to `VoiceManager`, which routes to matching voices.
 
 Context window: up to 10 previous messages for classification context.
 
@@ -34,11 +34,9 @@ Listens for the `interrupt` event from audio input and forwards it to appropriat
 
 After interruption, the audio input resumes listening and the conversation loop restarts from the top.
 
-## executor_voice_classifier (P1)
+## executor_workflow_router (P0)
 
-Optional. Runs after the main Classifier (or standalone, but doesn't work 100% without it). Determines **which voice/agent** should respond.
-
-Requires fine-tuned models with training data from `Voices/{name}/training/`.
+Routes classified intents to the appropriate workflow engine. Disabled by default — enable in config when workflow execution is needed.
 
 ## executor_todo_list (P0)
 

@@ -7,7 +7,6 @@ A single TOML file. Each section header matches a plugin name, and the PluginMan
 ```toml
 [kateto]
 debug = true
-hot_reload = true
 
 [plugin.audio_input_mic]
 enabled = true
@@ -30,7 +29,6 @@ context_window = 10
 
 [voice.jane]
 enabled = true
-soul = "Voices/Jane/SOUL.md"
 ```
 
 ## Secrets: `.env`
@@ -65,17 +63,16 @@ silence_timeout = 3.0
 All configuration and mutable data lives in `config/kateto/`:
 
 ```
-config/kateto/
+~/.config/kateto/
 ├── config.toml              # Main configuration
-├── voices/                  # Per-voice data
-│   ├── Jane/
+├── voices/                  # Per-voice data (lowercase)
+│   ├── jane/
 │   │   ├── SOUL.md
 │   │   ├── JOURNAL.md
 │   │   ├── MEMORIES.md
 │   │   └── workflows/
-│   ├── Doktor/
-│   └── Conquest/
-├── workflows/               # Global workflows
+│   ├── doktor/
+│   └── conquest/
 └── secrets/
     └── .env
 ```

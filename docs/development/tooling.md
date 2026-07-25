@@ -20,16 +20,23 @@ Everything uses **uv**. No pip, no poetry, no conda, no manual virtualenv.
 
 Declared in `pyproject.toml` using `[project]` with `requires-python = ">=3.12"`.
 
-**Expected main dependencies** (subject to change during development):
-- `asyncio` (stdlib)
-- `aiohttp` — HTTP client/server for AI model servers
-- `websockets` — real-time communication
-- `textual` — TUI framework
-- `toml` — config parsing
-- `watchdog` — file monitoring for hot-reload
-- `pytest` + `pytest-asyncio` — testing
-- `openai` — OpenAI SDK (compatible with llama.cpp API)
+**Main dependencies** (from `pyproject.toml`):
+- `anyio` — async compatibility layer
+- `edge-tts` — Microsoft Edge TTS (free, no API key)
+- `fastapi` — HTTP server for external integrations
+- `google-auth-oauthlib` — Google Calendar OAuth2
+- `httpx` — async HTTP client
+- `mcp` — Model Context Protocol server
+- `numpy` — audio buffer manipulation
+- `openai` — OpenAI-compatible LLM API
+- `pydantic` — data validation
+- `pydantic-ai` — structured tool-calling for voice agents
 - `python-dotenv` — secrets management
+- `silero-vad` — voice activity detection
+- `sounddevice` — cross-platform audio capture/playback
+- `textual` — TUI framework
+- `torch` — Silero VAD runtime
+- `uvicorn` — ASGI server for FastAPI
 
 ## Python Version
 

@@ -30,24 +30,23 @@ When the LLM returns an end-of-text token, the voice emits a `voice_idle` event.
 
 ## Voice Creation
 
-### Manual (P0)
-Python file with a class inheriting from `VoiceAgent`. Required for voices with custom logic (Jane, Doktor, Conquest).
-
-### Declarative (P1+)
-Directory `Voices/{name}/` with `SOUL.md` and optional workflow files. No Python subclass needed — the manager creates a generic `VoiceAgent` with the SOUL as system prompt. Used for simpler voices (Narrador, Susurrante, all P2 voices).
+Voices are created declaratively via `factory.py`:
 
 ```
-Voices/
-├── Jane/
+~/.config/kateto/voices/
+├── jane/
 │   ├── SOUL.md
 │   ├── MEMORIES.md
 │   ├── JOURNAL.md
-│   ├── training/          # VoiceClassifier training data
 │   └── workflows/
-├── Doktor/
+├── doktor/
 │   └── workflows/
-└── ...
+└── conquest/
 ```
+
+**Key methods:**
+- `add_extra_tools(tools)` — public method to inject additional tools into the voice's toolset
+- `speak` event is in `immediate_events` — TTS output bypasses the queue for instant playback
 
 ## Coordination Between Voices
 

@@ -24,6 +24,14 @@ Terminal UI using **Textual** with live visualization of the bus and plugin stat
 └─────────────────────────────────────────┘
 ```
 
+## VoiceManager Plugin (P0)
+
+Routes `generate` events from the Classifier to the appropriate voices. The Classifier targets VoiceManager, not individual voices directly.
+
+## HTTP Server Plugin (P0)
+
+FastAPI HTTP server that mirrors the MCP server surface. Provides an HTTP API for external integrations that don't speak MCP. Endpoints mirror the MCP tools and resources.
+
 ## MCP Plugin (P0)
 
 Serves a **Model Context Protocol** server that exposes authorized system events (getters and setters) with **auto-detected types and instructions** from the event registry.
@@ -47,3 +55,7 @@ Once an authorized, config-declared server is created, the system:
 ### Purpose
 
 Allows authorized external AI agents (Codex, Claude, etc.) to communicate with Kateto through the MCP protocol.
+
+## External MCP Plugin (P0)
+
+Injects external MCP server tools into voice agent toolsets. Uses `DiscoveryContext.external_mcp` for explicit injection rather than implicit discovery.

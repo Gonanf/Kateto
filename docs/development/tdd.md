@@ -17,7 +17,7 @@ The TDD cycle is mandatory for all development. No exceptions.
 | Area | Focus |
 |---|---|
 | Event Bus | Registration, dispatch, filtering, error handling |
-| PluginManager | Lifecycle, enable/disable, hot-reload, singletons |
+| PluginManager | Lifecycle, enable/disable, singletons |
 | Plugin base class | Initialization, queue processing, capabilities |
 | Config | TOML parsing, validation, section injection |
 
@@ -37,75 +37,53 @@ Managed by the user.
 
 ```
 kateto/
-├── SPEC.md
-├── README.md
 ├── pyproject.toml
-├── .env
 ├── kateto/
 │   ├── __init__.py
+│   ├── __main__.py          # Entrypoint: main() dispatches argv
+│   ├── run_mode.py          # RuntimeOwner, RuntimeComponents assembly
+│   ├── live.py              # build_event_runtime() — wires everything
 │   ├── core/
-│   │   ├── plugin.py         # Plugin base class
-│   │   ├── manager.py        # PluginManager (singleton + event bus)
-│   │   ├── event.py          # Event system (registration, dispatch)
-│   │   ├── config.py         # TOML config loader
-│   │   └── hot_reload.py     # Watchdog watcher
+│   │   ├── config.py        # TOML loading, bootstrap, ConfigPaths
+│   │   ├── discovery.py     # Plugin/plugin discovery by directory
+│   │   ├── event.py         # EventModel base, all event contracts
+│   │   ├── exceptions.py
+│   │   ├── manager.py       # PluginManager (singleton + event bus)
+│   │   ├── plugin.py        # Plugin base class
+│   │   ├── storage.py       # VoiceFileStore (path isolation)
+│   │   ├── workflow.py      # WorkflowCatalog, WorkflowDefinition
+│   │   └── workflow_engine.py # WorkflowEngine (runner)
 │   ├── plugins/
 │   │   ├── audio_input/
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py
-│   │   │   └── mic.py
-│   │   ├── audio_processor/
-│   │   │   ├── __init__.py
-│   │   │   └── whisper.py
+│   │   │   ├── base.py, capture.py, listener.py, mic.py, meet.py, silero.py
 │   │   ├── audio_output/
-│   │   │   ├── __init__.py
-│   │   │   └── zonos.py
+│   │   │   ├── base.py, camb.py, edgetts.py, player.py, zonos.py
+│   │   ├── audio_processor/
+│   │   │   └── whisper.py
 │   │   ├── executor/
-│   │   │   ├── __init__.py
-│   │   │   ├── classifier.py
-│   │   │   ├── interrupt.py
-│   │   │   ├── todo_list.py
-│   │   │   └── voice_classifier.py
+│   │   │   ├── classifier.py, interrupt.py, todo_list.py, workflow_router.py
 │   │   ├── connector/
-│   │   │   ├── __init__.py
-│   │   │   ├── calendar.py
-│   │   │   ├── google_meet.py
-│   │   │   └── cli.py
-│   │   └── system/
-│   │       ├── __init__.py
-│   │       ├── tui.py
-│   │       └── mcp_server.py
+│   │   │   ├── calendar.py, cli.py
+│   │   ├── system/
+│   │   │   ├── external_mcp.py, http_server.py, mcp_server.py, tui.py, voice_manager.py
+│   │   ├── voice_soul_manager/
+│   │   │   └── scheduler.py, updater.py
+│   │   └── work/
+│   │       └── backlog.py
 │   ├── voices/
-│   │   ├── __init__.py
-│   │   ├── base.py           # VoiceAgent class
-│   │   ├── jane.py
-│   │   ├── doktor.py
-│   │   └── conquest.py
-│   └── tests/
-│       ├── __init__.py
-│       ├── test_event_bus.py
-│       ├── test_plugin_manager.py
-│       └── test_audio_pipeline.py
-├── config/kateto/
-│   ├── config.toml
-│   ├── voices/
-│   │   ├── Jane/
-│   │   │   ├── SOUL.md
-│   │   │   ├── MEMORIES.md
-│   │   │   ├── JOURNAL.md
-│   │   │   ├── training/
-│   │   │   └── workflows/
-│   │   ├── Doktor/
-│   │   │   └── workflows/
-│   │   └── Conquest/
-│   ├── workflows/
-│   └── secrets/
-│       └── .env
-└── servers/              # Scripts to launch external servers
-    ├── llama.cpp
-    ├── whisper.cpp
-    ├── mmbert/
-    └── zonos2.cpp
+│   │   ├── base.py          # VoiceAgent (profile, memory, generation)
+│   │   ├── factory.py       # create_voice(), VoiceProfile dict
+│   │   ├── memory.py        # VoiceMemory
+│   │   ├── skills.py        # load_skills()
+│   │   └── tools.py         # VoiceToolExecutor (built-in + user tools)
+│   ├── providers/           # LLM, TTS, classifier HTTP providers
+│   └── tests/               # 157 tests, pytest-asyncio
+├── config/
+│   └── defaults/            # Bootstrap template (config.toml, voices, skills)
+├── docs/
+│   └── ...
+└── script/
+    └── qa/                  # Fixture scripts, acceptance.py
 ```
 
 ## Default Servers

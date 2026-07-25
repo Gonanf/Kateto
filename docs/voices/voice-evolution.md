@@ -1,6 +1,6 @@
 # Voice Evolution — SOUL, JOURNAL, MEMORIES
 
-Agents **read** their SOUL, MEMORIES, and JOURNAL as part of their context, and can **modify their own SOUL** at the end of a session.
+Agents **read** their SOUL, MEMORIES, and JOURNAL as part of their context. SOUL updates are handled by `VoiceSOULManager`, not agent self-modification.
 
 ## SOUL.md
 
@@ -34,4 +34,4 @@ Long-term recall — what the agent should remember.
 
 ## When SOUL Updates
 
-At the end of a session (system stops or agent idle for a period), the LLM modifies its own SOUL via MCP — the agent calls an MCP tool to read/write the files.
+`VoiceSOULManager` handles SOUL saves on idle timeout (5 minutes). The manager reads current SOUL + JOURNAL + MEMORIES, rewrites SOUL preserving core identity while incorporating new experiences. Agents do not self-modify their SOUL directly.

@@ -24,12 +24,6 @@ Google Calendar integration via OAuth2 installed-app flow.
 - Token cached in `config/kateto/secrets/`
 - Listens to getter/setter events for calendar operations
 
-### `connector_google_meet` (P0)
-Google Meet integration.
-
-- Joins meetings
-- Captures meeting audio (routes through `audio_input_meet`)
-
 ### `connector_cli` (P0)
 Terminal command execution.
 

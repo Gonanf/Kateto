@@ -21,7 +21,7 @@ The **PluginManager** is a singleton that is injected into every plugin during i
 3. **Event Registration**: `on_*` methods are scanned and registered as subscribers; plugin registers events it can emit
 4. **Enable**: Plugin starts receiving events
 5. **Disable**: Plugin unregisters from all events, queue is cleared
-6. **Unload**: Plugin is removed from the system (hot-reload)
+6. **Unload**: Plugin is removed from the system (requires runtime restart)
 
 ## Plugin Queue Types
 

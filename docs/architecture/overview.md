@@ -39,19 +39,32 @@ RED → GREEN → REFACTOR is mandatory for all development.
 User speaks → AudioInput records → emits audio_chunk
   → AudioProcessor transcribes → emits transcription
   → Classifier classifies intent
-    → On EXECUTE: emits generate for matching voices
-  → VoiceAgent generates response (streaming tokens)
+    → On EXECUTE: emits generate to VoiceManager
+  → VoiceManager routes to matching voices
+  → VoiceAgent generates response (streaming tokens via AudioPipeline queue)
     → Tokens stream to TTS → audio output
     → Tokens also emitted as event for other voices
   → User interrupts → AudioInput emits interrupt
     → TTS stops, LLM cancelled, loop restarts
 ```
 
+### Data Plane
+
+Voice generation uses direct pipeline queues (`AudioPipeline` with `token_queue` and `pcm_queue`) for tokens and PCM audio, bypassing the event bus for low-latency streaming. The event bus handles control flow (classify, interrupt, generate triggers) while the data plane handles bulk streaming data.
+
+### HTTP Server
+
+A FastAPI HTTP server mirrors the MCP server surface, providing an HTTP API for external integrations that don't speak MCP.
+
+### Agent Tool-Calling
+
+Voice agents use **pydantic-ai** for structured tool-calling. `KatetoToolset` wraps `VoiceToolExecutor` for pydantic-ai integration, providing built-in tools (file ops, skill loading, runtime tools) plus user MCP servers injected per-voice.
+
 ## Priority Overview
 
 | Priority | Components |
 |---|---|
-| **P0** | Event Bus, PluginManager, Audio Input (Mic), Whisper, Zonos TTS, Classifier, Interrupt, Jane, Doktor, Conquest, TODO List Executor, CLI Connector, TUI, MCP Server, Google Meet, Calendar |
-| **P1** | Narrador, Susurrante, VoiceClassifier |
+| **P0** | Event Bus, PluginManager, Audio Input (Mic), Whisper, Zonos TTS, EdgeTTS, Classifier, Interrupt, Jane, Doktor, Conquest, TODO List Executor, WorkflowRouter, CLI Connector, TUI, MCP Server, HTTP Server, VoiceManager, Calendar |
+| **P1** | Narrador, Susurrante |
 | **P2** | Drakula, Xavier, Greedy, Informante, Germ, Business, Lovers, Discord, OpenProject, RandomTalk, Podcast, Avatars |
 | **P3** | Workspaces, VideoRAG, Remotion Tutorial Runner |

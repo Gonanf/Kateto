@@ -1,23 +1,26 @@
 # Voices Overview
 
-Voices are AI agents that inherit from `VoiceAgent(Plugin)`. They are the "people" of Kateto — each with a distinct personality, role, and capabilities.
+Voices are AI agents created from configuration + data. They are the "people" of Kateto — each with a distinct personality, role, and capabilities.
 
-## Auto-Detection & Instantiation
+## Factory-Based Discovery
 
-Voices are auto-detected and instantiated like any other plugin. The PluginManager scans:
+Voices are created by `kateto/voices/factory.py` using `VoiceProfile` dicts from the `_PROFILES` registry. No Python subclass scanning.
 
 | Location | What It Contains |
 |---|---|
-| `kateto/voices/` | Python subclasses of `VoiceAgent` (code — versioned) |
-| `config/kateto/voices/{name}/` | Per-voice data files (SOUL, JOURNAL, MEMORIES — mutable) |
+| `kateto/voices/factory.py` | `VoiceProfile` definitions and `create_voice()` factory |
+| `~/.config/kateto/voices/{name}/` | Per-voice data files (SOUL, JOURNAL, MEMORIES — mutable) |
 
 **Discovery flow:**
-1. Manager scans `kateto/voices/` for Python files with `VoiceAgent` subclasses
-2. For each class, checks `config/kateto/voices/{name}/` for data files (creates defaults if missing)
-3. Voice is instantiated with its config section and data directory path
-4. Hot-reload works identically to any plugin
+1. `create_voice(name)` looks up `VoiceProfile` in `_PROFILES` dict
+2. Profile provides: `voice_id`, `display_name`, `role`, `system_prompt`
+3. `VoiceAgent` is instantiated with profile + `VoiceMemory` for data storage
+4. Optional: `VoiceToolExecutor` + `KatetoToolset` for pydantic-ai tool-calling
 
-**Declarative-only voices** (P1+) don't need a Python subclass — just a data directory with `SOUL.md` is enough for the manager to create a generic `VoiceAgent` instance.
+**Adding a new voice:**
+1. Add `VoiceProfile` entry to `_PROFILES` in `factory.py`
+2. Create config section `[voice.<name>]` in `config.toml`
+3. Create `~/.config/kateto/voices/<name>/SOUL.md`
 
 ## Processing Mode
 
