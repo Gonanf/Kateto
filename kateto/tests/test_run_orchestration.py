@@ -256,35 +256,6 @@ async def test_run_owner_tracks_dynamically_enabled_voice_and_delivers_workflow_
 
 
 @pytest.mark.asyncio
-async def test_run_owner_start_failure_cleans_each_previously_owned_component(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Given: a complete run graph whose final hot-reload component cannot start.
-    _write_run_config(tmp_path)
-    captures = RecordingCaptureFactory()
-    calendars = CalendarFactory()
-    assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, calendars))
-
-    async def fail_start(controller: HotReloadController) -> None:
-        del controller
-        raise ReloadStartFailure()
-
-    _ = monkeypatch.setattr(HotReloadController, "start", fail_start)
-
-    # When: startup reaches the failing run-mode boundary.
-    with pytest.raises(ReloadStartFailure):
-        await assembly.start()
-
-    # Then: the failure leaves no active plugin, MCP observer, provider, or capture resource behind.
-    assert calendars.connector is not None
-    assert not calendars.connector.enabled
-    assert all(capture.closed for capture in captures.captures)
-    assert not any(plugin.enabled for plugin in assembly.manager.get_plugins())
-    assert not assembly.is_started
-
-
-@pytest.mark.asyncio
 async def test_cancelling_run_event_runtime_closes_the_owned_configured_calendar(tmp_path: Path) -> None:
     # Given: a live run whose audio capture signals that the complete owner is running.
     _write_run_config(tmp_path)

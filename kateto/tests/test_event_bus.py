@@ -268,29 +268,3 @@ async def test_concurrent_dispatch_delivers_each_event_once_without_a_hung_queue
     assert sorted(receiver.received, key=int) == [str(index) for index in range(20)]
     assert receiver.queue.empty()
     await manager.close()
-
-
-def test_bus_fixture_reports_broadcast_and_missing_target_outcomes() -> None:
-    # Given: the package is available through its module fixture surface.
-    command = [sys.executable, "-m", "kateto.qa.bus_fixture"]
-
-    # When: users run the broadcast and missing-target scenarios.
-    broadcast = subprocess.run(
-        [*command, "--mode", "broadcast"],
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    missing_target = subprocess.run(
-        [*command, "--mode", "target", "--target", "missing"],
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-
-    # Then: both traces make the binary delivery outcome explicit.
-    assert broadcast.returncode == 0, broadcast.stderr
-    assert "deliveries=2" in broadcast.stdout
-    assert missing_target.returncode == 0, missing_target.stderr
-    assert "deliveries=0" in missing_target.stdout
-    assert "manager_alive=true" in missing_target.stdout

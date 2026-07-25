@@ -124,7 +124,7 @@ async def test_discovery_routes_shuffled_configured_plugins_through_initialized_
                 source="fixture",
             )
             await manager.wait_for_idle()
-            assert "audio_input_mic" <= set(registrations["audio_output"].receivers)
+            assert "audio_input_mic" in set(registrations["audio_output"].receivers)
     finally:
         await manager.close()
 

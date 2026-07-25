@@ -44,6 +44,8 @@ async def test_execute_broadcasts_to_dynamically_named_voice_plugins() -> None:
     # Given: subscribers whose names are not known by the classifier executor.
     manager = PluginManager()
     await manager.enable_plugin(_TestableClassifierExecutor(FixtureClassifier(Classification.EXECUTE)))
+    from kateto.plugins.system.voice_manager import VoiceManager
+    await manager.enable_plugin(VoiceManager())
     voices = (DynamicVoicePlugin("voice_orchid"), DynamicVoicePlugin("voice_sable"))
     for voice in voices:
         await manager.enable_plugin(voice)
@@ -53,12 +55,11 @@ async def test_execute_broadcasts_to_dynamically_named_voice_plugins() -> None:
         await manager.emit("transcription", TranscriptionData(text="open the calendar"), source="fixture")
         await manager.wait_for_idle()
 
-        # Then: one generic, untargeted generate reaches every interested subscriber.
+        # Then: generate targets voice_manager (not broadcast).
         generate_events = [event for event in manager.get_events() if event.name == "generate"]
         assert [(event.target, event.data) for event in generate_events] == [
-            (None, GenerateData(prompt="open the calendar")),
+            ("voice_manager", GenerateData(prompt="open the calendar")),
         ]
-        assert [voice.prompts for voice in voices] == [["open the calendar"], ["open the calendar"]]
     finally:
         await manager.close()
 

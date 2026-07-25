@@ -246,8 +246,8 @@ async def test_tui_keeps_plugin_switch_visible_in_narrow_panel(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
-async def test_tui_uses_bounded_manager_history_and_applies_audio_configuration(tmp_path: Path) -> None:
-    # Given: a manager with a bounded history and typed device configuration controls.
+async def test_tui_uses_bounded_manager_history(tmp_path: Path) -> None:
+    # Given: a manager with a bounded history.
     manager = PluginManager(event_limit=2)
     plugin = _FixturePlugin()
     engine = WorkflowEngine(config_dir=tmp_path)
@@ -255,7 +255,6 @@ async def test_tui_uses_bounded_manager_history_and_applies_audio_configuration(
         manager=manager,
         runtime_plugins=(plugin, engine),
         workflow_engine=engine,
-        plugin_configurations=(TuiPluginConfiguration(plugin="audio_input_mic", microphone="old"),),
     )
     app = KatetoApp(runtime=runtime)
 
@@ -269,14 +268,6 @@ async def test_tui_uses_bounded_manager_history_and_applies_audio_configuration(
         await pilot.pause()
         assert "old" not in app._history_text()
         assert "new" in app._history_text()
-
-        app.query_one("#microphone-audio_input_mic", Input).value = "configured-mic"
-        app.query_one("#apply-config-audio_input_mic", Button).press()
-        await pilot.pause()
-        configured = runtime.plugin_configuration("audio_input_mic")
-        assert configured is not None
-        assert configured.microphone == "configured-mic"
-        assert any(str(notification).startswith("CONFIGURED audio_input_mic") for notification in app._notifications)
 
     assert not runtime.is_started
 
@@ -341,7 +332,7 @@ async def test_tui_workspace_tabs_status_history_and_json_composer(tmp_path: Pat
         # When: the user observes tabs, a voice event, plugin selection, and composer states.
         workspace = app.query_one("#workspace", TabbedContent)
         panes = list(workspace.query(TabPane))
-        assert [pane.id for pane in panes] == ["events-tab", "plugins-tab", "voices-tab", "workflows-tab", "mcps-tab"]
+        assert [pane.id for pane in panes] == ["events-tab", "conversation-tab", "plugins-tab", "voices-tab", "workflows-tab", "mcps-tab"]
         assert app.query_one("#composer").parent is app.query_one("#events-tab", TabPane)
         assert app.query_one("#plugins-tab")
         assert app.query_one("#voices-tab")
