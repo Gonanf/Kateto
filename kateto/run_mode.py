@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, final
 
 from loguru import logger
 
 from kateto.core.config import LoadedConfig
+from kateto.core.hot_reload import HotReloadController
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.core.workflow import WorkflowCatalog
@@ -47,12 +49,15 @@ class RuntimeOwner:
         plugins: tuple[Plugin, ...],
         components: RuntimeComponents,
         config: LoadedConfig | None = None,
+        shared: dict[str, Any] | None = None,
     ) -> None:
         self._manager = manager
         self._plugins = plugins
         self._components = components
         self._config = config
+        self._shared = shared or {}
         self._started = False
+        self._hot_reload: HotReloadController | None = None
 
     @property
     def manager(self) -> PluginManager:
@@ -136,6 +141,16 @@ class RuntimeOwner:
         except BaseException:  # noqa: BROAD_EXCEPT_OK
             await self.stop()
             raise
+        if self._config is not None and self._config.settings.kateto.hot_reload:
+            controller = HotReloadController(
+                manager=self._manager,
+                watched_root=self._config.paths.config_dir,
+                source_roots=(Path(__file__).resolve().parent / "plugins",),
+                config=self._config,
+                shared=self._shared,
+            )
+            await controller.start()
+            self._hot_reload = controller
         self._started = True
 
     async def _sync_external_tools(self) -> None:
@@ -157,6 +172,10 @@ class RuntimeOwner:
 
     async def stop(self) -> None:
         try:
+            controller = self._hot_reload
+            self._hot_reload = None
+            if controller is not None:
+                await controller.close()
             try:
                 http_server = self.http_server
                 if http_server is not None:
@@ -198,6 +217,7 @@ def build_runtime_owner(
         manager=manager,
         plugins=runtime_plugins,
         config=config,
+        shared=shared,
         components=RuntimeComponents(
             plugins=(),
             mcp_servers=shared.get("mcp_servers") or (),
