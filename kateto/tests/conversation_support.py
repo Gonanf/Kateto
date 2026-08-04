@@ -115,7 +115,7 @@ class BlockingAudioOutput(Plugin):
 
 
 def write_references(config_dir: Path) -> None:
-    for voice in ("jane", "doktor", "conquest"):
+    for voice in ("jane", "doktor", "conquest", "whisperer"):
         reference = config_dir / "voices" / voice / "reference.wav"
         reference.parent.mkdir(parents=True, exist_ok=True)
         reference.write_bytes(b"RIFFfixtureWAVE")
@@ -126,12 +126,12 @@ async def enable_voices(
     *,
     config_dir: Path,
     provider: object,
-) -> tuple[VoiceAgent, VoiceAgent, VoiceAgent]:
+) -> tuple[VoiceAgent, ...]:
     from kateto.voices.factory import _PROFILES
     voices = tuple(
         VoiceAgent(profile=_PROFILES[name], config_dir=config_dir, provider=provider)
-        for name in ("jane", "doktor", "conquest")
+        for name in ("jane", "doktor", "conquest", "whisperer")
     )
     for voice in voices:
         await manager.enable_plugin(voice)
-    return voices  # type: ignore[return-value]
+    return voices

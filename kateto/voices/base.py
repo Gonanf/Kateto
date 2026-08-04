@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from loguru import logger
 from collections import deque
@@ -86,6 +87,8 @@ class VoiceRole(StrEnum):
     ORCHESTRATOR = "orchestrator"
     DELIVERY_ADVISOR = "delivery_advisor"
     AGILE_FACILITATOR = "agile_facilitator"
+    PROJECT_MANAGER = "project_manager"
+    ADVERSARY = "adversary"
 
 
 @dataclass(frozen=True, slots=True)
@@ -707,13 +710,17 @@ class VoiceAgent(Plugin):
                             await self._emit_chunk(msg, sequence, final=False)
                             sequence += 1
                     await pipeline.token_queue.put(None)
-                    final_text = result.get_output()
-                    if final_text:
+                    raw_output = result.get_output()
+                    if inspect.isawaitable(raw_output):
+                        final_text = await raw_output
+                    else:
+                        final_text = raw_output
+                    if final_text and isinstance(final_text, str):
                         await self._emit_chunk(final_text, sequence, final=True)
             else:
                 result = await agent.run(user_prompt, message_history=history or None)
-                output = result.get_output()
-                if output:
+                output = result.output
+                if output and isinstance(output, str):
                     await pipeline.token_queue.put(output)
                     await self._emit_chunk(output, 0, final=True)
                 await pipeline.token_queue.put(None)

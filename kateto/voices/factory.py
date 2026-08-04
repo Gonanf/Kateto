@@ -17,27 +17,36 @@ _PROFILES: dict[str, VoiceProfile] = {
         voice_id="jane",
         display_name="Jane",
         role=VoiceRole.ORCHESTRATOR,
-        system_prompt="You are Jane, Kateto's calm orchestration partner. Coordinate people, clarify goals, and keep work moving without taking over specialist decisions." + _VOICE_CONSTRAINT,
-        relevance_terms=frozenset({"coordinate", "orchestrate", "organize", "summarize", "status", "team"}),
+        system_prompt="You are Jane, Kateto's calm orchestration partner and voice of reason. Coordinate people, clarify goals, and keep work moving without taking over specialist decisions." + _VOICE_CONSTRAINT,
+        relevance_terms=frozenset({"coordinate", "orchestrate", "organize", "summarize", "status", "team", "reason"}),
         capabilities=("orchestration", "coordination", "general"),
+        depts=("fun",),
+    ),
+    "whisperer": VoiceProfile(
+        voice_id="whisperer",
+        display_name="Whisperer",
+        role=VoiceRole.ADVERSARY,
+        system_prompt="You are Whisperer, Jane's passionate counterpart and the voice of doubt and contrast in streams. Challenge assumptions, question plans intensely, and act as a constructive adversary." + _VOICE_CONSTRAINT,
+        relevance_terms=frozenset({"contrast", "doubt", "challenge", "stream", "adversary", "debate"}),
+        capabilities=("stream", "contrast", "general"),
         depts=("fun",),
     ),
     "doktor": VoiceProfile(
         voice_id="doktor",
         display_name="Doktor",
-        role=VoiceRole.DELIVERY_ADVISOR,
-        system_prompt="You are Doktor, Kateto's delivery advisor. Turn product intent into clear backlog work, expose risk, estimate thoughtfully, and protect delivery focus." + _VOICE_CONSTRAINT,
-        relevance_terms=frozenset({"backlog", "task", "risk", "estimate", "priority", "calendar", "plan"}),
-        capabilities=("planning", "backlog", "risk"),
+        role=VoiceRole.PROJECT_MANAGER,
+        system_prompt="You are Doktor, Kateto's Project Manager. Initiate, plan, execute, finalize, and verify projects. Define methodologies, communication plans, create WBS, Gantt, SoW, and project documents." + _VOICE_CONSTRAINT,
+        relevance_terms=frozenset({"backlog", "task", "risk", "estimate", "priority", "calendar", "plan", "methodology", "communication", "document", "investigation", "wbs", "schedule", "scope", "project", "verification"}),
+        capabilities=("planning", "backlog", "risk", "methodology", "communication-plan", "documents", "project-lifecycle"),
         depts=("management",),
     ),
     "conquest": VoiceProfile(
         voice_id="conquest",
         display_name="Conquest",
         role=VoiceRole.AGILE_FACILITATOR,
-        system_prompt="You are Conquest, Kateto's agile facilitator. Lead focused sprint ceremonies, make process visible, and turn team observations into concrete next steps." + _VOICE_CONSTRAINT,
-        relevance_terms=frozenset({"sprint", "standup", "retrospective", "ceremony", "agile", "process"}),
-        capabilities=("agile", "ceremonies", "process"),
+        system_prompt="You are Conquest, Kateto's agile facilitator and tech lead for human and AI agent teams. Lead sprint ceremonies, track progress, log bugs and decisions, and gather stakeholder feedback." + _VOICE_CONSTRAINT,
+        relevance_terms=frozenset({"sprint", "standup", "retrospective", "ceremony", "agile", "process", "meeting", "feedback", "stakeholders", "bugs", "decisions", "tracking", "progress"}),
+        capabilities=("agile", "ceremonies", "process", "tracking", "feedback"),
         depts=("management",),
     ),
 }
@@ -55,6 +64,23 @@ def _resolve_depts(ctx, profile: VoiceProfile, settings: VoiceSettings) -> Voice
 
 def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent:
     profile = _resolve_depts(ctx, _PROFILES[voice_name], settings)
+
+    if voice_name == "doktor":
+        from pathlib import Path
+        docs_dir = Path.home() / "Documentos" / "gestion de proyectos" / "anotaciones"
+        if docs_dir.exists() and docs_dir.is_dir():
+            pm_notes: list[str] = []
+            for file in sorted(docs_dir.glob("*")):
+                if file.is_file() and file.suffix.lower() in {".txt", ".md", ".json", ".toml"}:
+                    try:
+                        content = file.read_text(encoding="utf-8").strip()
+                        if content:
+                            pm_notes.append(f"--- PM Template/Note: {file.name} ---\n{content}")
+                    except Exception:
+                        pass
+            if pm_notes:
+                extra_context = "\n\nPROJECT MANAGEMENT KNOWLEDGE & TEMPLATES:\n" + "\n\n".join(pm_notes)
+                profile = replace(profile, system_prompt=profile.system_prompt + extra_context)
 
     voice_settings = ctx.config.settings.plugin.get("voice_llm")
     if voice_settings is None:

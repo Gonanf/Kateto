@@ -68,6 +68,12 @@ skills = ["backlog"]
 mcp_servers = ["system"]
 stream = false
 
+[voice.whisperer]
+enabled = true
+skills = ["orchestrator"]
+mcp_servers = ["system"]
+stream = false
+
 [mcp_servers.system]
 command = "kateto"
 
