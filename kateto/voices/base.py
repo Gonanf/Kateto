@@ -246,6 +246,10 @@ class VoiceAgent(Plugin):
         return self.profile.role
 
     @property
+    def settings(self) -> VoiceSettings:
+        return self._settings
+
+    @property
     def loaded_skills(self) -> tuple[LoadedSkill, ...]:
         return self._skills
 
@@ -861,24 +865,25 @@ class VoiceAgent(Plugin):
             parts.append(memories)
         if journal:
             parts.append(journal)
+        from kateto.voices.prompt_blocks import (
+            get_agent_prompt_block,
+            get_mcp_prompt_block,
+            get_workflow_prompt_block,
+        )
+
         workflows = WorkflowCatalog(config_dir=self._config_dir).discover(voice=self.name)
-        if workflows:
-            available = "\n".join(
-                f"- {workflow.name}: {workflow.description}"
-                for workflow in workflows
-            )
-            parts.append(
-                "Available workflows for this voice:\n"
-                f"{available}\n"
-                "Start an applicable workflow by dispatching the workflow_run event "
-                "with its exact workflow name and this voice."
-            )
+        parts.append(get_workflow_prompt_block(workflows if workflows else None))
+
+        if self._tool_executor is not None:
+            mcp_servers = getattr(self._tool_executor, "_mcp_server_names", ())
+            if mcp_servers:
+                parts.append(get_mcp_prompt_block(mcp_servers))
+
         for skill in self._skills:
             parts.append(skill.instructions)
 
         # Boson prompt block injection (F11)
-        if getattr(self.settings, "tts_provider", "") == "boson" and (set(self.profile.depts) & {"fun"}):
-            from kateto.voices.prompt_blocks import get_agent_prompt_block
+        if getattr(self._settings, "tts_provider", "") == "boson" and (set(self.profile.depts) & {"fun"}):
             block = get_agent_prompt_block("boson")
             if block:
                 parts.append(block)

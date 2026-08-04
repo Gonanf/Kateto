@@ -62,42 +62,20 @@ class ClassifierExecutor(Plugin):
             msg = "classifier executor must be enabled before use"
             raise RuntimeError(msg)
         agents = self._collect_agent_names()
-        workflows = self._collect_workflow_names()
-        if workflows:
-            classification = await classifier.classify(data.text, agents=agents, workflows=workflows)
-        else:
-            classification = await classifier.classify(data.text, agents=agents)
+        workflows = ()  # Workflow classifier disabled
+        classification = await classifier.classify(data.text, agents=agents)
         manager = self.required_manager
         _ = await manager.emit("classification", classification, source=self.name)
         if self._workflow_router_enabled():
             return
-        workflow = classification.workflow
-        voice = self._resolve_voice(classification.voice)
-        if workflow is None and classification.project_state is ProjectState.NEW and self._is_new_project_request(data.text):
-            workflow = self._find_workflow("project-initiation", workflows)
-            voice = voice or self._resolve_voice("jane")
         match classification.category:
             case Classification.EXECUTE:
-                if self._skip_existing_project_workflow(classification):
-                    return
-                if workflow is not None and voice is not None:
-                    _ = await manager.emit(
-                        "workflow_run",
-                        WorkflowRunData(
-                            workflow=workflow,
-                            voice=voice,
-                            context={"project_state": classification.project_state.value},
-                        ),
-                        source=self.name,
-                        target="workflow_engine",
-                    )
-                else:
-                    _ = await manager.emit(
-                        "generate",
-                        GenerateData(prompt=classification.text),
-                        source=self.name,
-                        target="voice_manager",
-                    )
+                _ = await manager.emit(
+                    "generate",
+                    GenerateData(prompt=classification.text),
+                    source=self.name,
+                    target="voice_manager",
+                )
             case Classification.IGNORE_SELF_TALK | Classification.IGNORE_THIRD_PARTY:
                 return
             case unreachable:
@@ -118,15 +96,7 @@ class ClassifierExecutor(Plugin):
         return tuple(names)
 
     def _collect_workflow_names(self) -> tuple[str, ...]:
-        manager = self.manager
-        if manager is None:
-            return ()
-        names: set[str] = set()
-        for plugin in manager.get_plugins():
-            if isinstance(plugin, WorkflowEngine):
-                for voice in self._collect_agent_names():
-                    names.update(workflow.name for workflow in plugin.catalog.discover(voice=voice))
-        return tuple(sorted(names, key=str.casefold))
+        return ()
 
     def _resolve_voice(self, selected: str | None) -> str | None:
         if selected is None:
