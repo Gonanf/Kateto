@@ -55,7 +55,9 @@ def create_plugins(ctx: DiscoveryContext) -> tuple[Plugin, ...]:
         )
         http_settings = ctx.config.settings.plugin.get("http_server")
         if http_settings is not None and http_settings.enabled:
-            ctx.get_shared("http_server", lambda: HttpServer(manager))
+            host = http_settings.host or "127.0.0.1"
+            port = http_settings.port or 8080
+            ctx.get_shared("http_server", lambda: HttpServer(manager, host=host, port=port))
 
     voice_manager_settings = ctx.config.settings.plugin.get("voice_manager")
     voice_manager = VoiceManager(

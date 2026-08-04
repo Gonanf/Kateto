@@ -69,6 +69,8 @@ class PluginSettings(_ConfigModel):
     default_language: str | None = None
     voice_probabilities: dict[str, float] | None = None
     conversation_id: str | None = None
+    host: str | None = None
+    port: int | None = Field(default=None, gt=0, lt=65536)
 
     @field_validator("endpoint", "model_endpoint")
     @classmethod
