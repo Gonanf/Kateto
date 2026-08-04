@@ -50,6 +50,21 @@ class TranscriptionData(EventModel):
     duration_ms: float | None = Field(default=None, ge=0.0)
 
 
+class VisionFrameData(EventModel):
+    frame: bytes
+    source_pid: int | None = None
+    ts: float
+    dept: str = "fun"
+
+
+class ProcessTranscriptionData(EventModel):
+    text: str = Field(min_length=1)
+    source_pid: int
+    ts: float
+    dept: str = "fun"
+    language: str | None = None
+
+
 class ClassificationData(EventModel):
     text: str = Field(min_length=1)
     category: Classification
