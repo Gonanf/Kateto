@@ -8,7 +8,7 @@ Uses the already-installed ``mcp[1.28.1]`` library: ``stdio_client``,
 from __future__ import annotations
 
 import asyncio
-import logging
+from loguru import logger
 from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
@@ -17,7 +17,7 @@ from openai.types.chat import ChatCompletionToolParam
 
 from kateto.core.config import McpServerSettings
 
-log = logging.getLogger(__name__)
+log = logger
 
 
 class ExternalMcpClient:
@@ -42,7 +42,7 @@ class ExternalMcpClient:
             self._session = await self._session_cm.__aenter__()
             await self._session.initialize()
         except Exception as exc:
-            log.warning("External MCP '%s' failed to start: %s", self.name, exc)
+            log.warning("External MCP '{}' failed to start: {}", self.name, exc)
             await self.stop()
 
     async def list_tools(self) -> list:
@@ -143,7 +143,7 @@ class ExternalMcpManager:
         )
         for (name, _client), result in zip(self._clients.items(), results):
             if isinstance(result, BaseException):
-                log.warning("External MCP '%s' failed to start: %s", name, result)
+                log.warning("External MCP '{}' failed to start: {}", name, result)
 
     async def get_tools_for(
         self, server_names: list[str]
@@ -183,6 +183,6 @@ class ExternalMcpManager:
         )
         for result in results:
             if isinstance(result, BaseException):
-                log.warning("Error stopping external MCP: %s", result)
+                log.warning("Error stopping external MCP: {}", result)
         self._clients.clear()
         self._voice_servers.clear()

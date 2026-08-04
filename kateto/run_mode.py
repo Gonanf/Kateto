@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from dataclasses import dataclass
 from typing import Any, final
+
+from loguru import logger
 
 from kateto.core.config import LoadedConfig
 from kateto.core.event import VoiceEnableData, VoiceEnabledData
@@ -19,6 +22,11 @@ from kateto.plugins.system.external_mcp import ExternalMcpManager
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
 from kateto.plugins.system.voice_manager import VoiceManager
 from kateto.plugins.system.http_server import HttpServer
+
+
+def _configure_logging(config: LoadedConfig) -> None:
+    logger.remove()
+    _ = logger.add(sys.stderr, level=config.settings.kateto.log_level.upper())
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,6 +287,7 @@ async def run_event_runtime(
     *,
     dependencies: RuntimeDependencies | None = None,
 ) -> None:
+    _configure_logging(config)
     owner = build_runtime_owner(config, dependencies=dependencies)
     await owner.start()
     try:

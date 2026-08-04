@@ -44,6 +44,7 @@ class KatetoSettings(_ConfigModel):
     hot_reload: bool = False
     language: str = "en"
     name: str = "Kateto"
+    log_level: str = "INFO"
 
 
 class PluginSettings(_ConfigModel):

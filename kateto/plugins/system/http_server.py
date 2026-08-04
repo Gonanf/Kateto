@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
+from loguru import logger
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from kateto.core.event import EventEnvelope
 from kateto.core.manager import PluginManager
 
-log = logging.getLogger(__name__)
+log = logger
 
 
 class EventListItem(BaseModel):
@@ -178,7 +178,7 @@ class HttpServer:
         config = uvicorn.Config(self._app, host=self._host, port=self._port, log_level="warning")
         self._server = uvicorn.Server(config)
         asyncio.create_task(self._server.serve(), name="kateto-http-server")
-        log.info("HTTP server started on %s:%d", self._host, self._port)
+        log.info("HTTP server started on {}:{}", self._host, self._port)
 
     async def stop(self) -> None:
         if self._server is not None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from loguru import logger
 import random
 from collections.abc import Callable
 from typing import Any
@@ -19,7 +19,7 @@ from kateto.core.event import (
 from kateto.core.plugin import Plugin
 from kateto.voices.base import VoiceProfile
 
-log = logging.getLogger(__name__)
+log = logger
 
 _DEFAULT_PROBABILITIES: dict[str, float] = {
     "jane": 0.7,
@@ -62,7 +62,7 @@ class VoiceManager(Plugin):
             log.warning("voice_manager: no eligible voices for generate")
             return
         chosen = self._pick_voice(eligible)
-        log.info("voice_manager: routing to %s (probabilities: %s)", chosen, self._probabilities)
+        log.info("voice_manager: routing to {} (probabilities: {})", chosen, self._probabilities)
         envelope = await manager.emit(
             "speak",
             SpeakRequestData(

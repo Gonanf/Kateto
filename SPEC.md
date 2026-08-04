@@ -95,6 +95,7 @@ a qué responder. Doktor puede anotar "hay reuniones los martes"; el martes, un
 ---
 
 ## 3. Logging con loguru, visible en `kateto run`
+- **Estado:** ✅ HECHO (2026-08-04).
 - Migrar de `logging` estándar a **loguru** en todo el codebase.
 - Configurar logger de loguru al arrancar el runtime (`run_event_runtime` /
   `RuntimeOwner.start`) con salida a consola (y opcionalmente archivo en el
@@ -105,6 +106,17 @@ a qué responder. Doktor puede anotar "hay reuniones los martes"; el martes, un
   con plugin/evento/origen.
 - Reemplazar `import logging` + `logging.getLogger(...)` por
   `from loguru import logger` en todos los módulos.
+- **Realizado:** dependencia `loguru` añadida a `pyproject.toml` + `uv.lock`.
+  Los 8 módulos con `import logging` (`core/manager.py`, `voices/base.py`,
+  `providers/zonos.py`, `providers/edgetts.py`, `providers/camb.py`,
+  `plugins/system/http_server.py`, `plugins/system/voice_manager.py`,
+  `plugins/system/external_mcp.py`) migrados a `from loguru import logger`
+  (alias `log = logger`) con formatos `%s`/`%r`/`%d` → `{}`. Nuevo
+  `_configure_logging()` en `run_mode.py` (sink stderr, nivel configurable) y
+  campo `kateto.log_level` (default `INFO`) en `KatetoSettings` +
+  `config/defaults/config.toml`. Verificado: `kateto run` muestra
+  `HTTP server started on 127.0.0.1:8080` vía loguru (INFO). Suite completa:
+  153 passed.
 
 ---
 

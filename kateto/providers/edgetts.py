@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK
-import logging
+from loguru import logger
 from collections.abc import AsyncIterator
 from types import TracebackType
 from typing import Self
@@ -9,7 +9,7 @@ from typing import Self
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, TextChunk
 
-log = logging.getLogger(__name__)
+log = logger
 
 _CHUNK_SIZE = 65536  # ~1.4s PCM at 24000Hz s16le mono
 
@@ -117,7 +117,7 @@ class EdgeTTSProvider:
                         pass
 
         log.debug(
-            "[edgetts] TTS for voice=%s text=%r: %d PCM bytes across %d chunks",
+            "[edgetts] TTS for voice={} text={!r}: {} PCM bytes across {} chunks",
             voice, sentence.text, total_pcm, seq,
         )
         yield AudioOutput(

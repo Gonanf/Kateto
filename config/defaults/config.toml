@@ -3,6 +3,7 @@ name = "Kateto"
 language = "en"
 debug = false
 hot_reload = false
+log_level = "INFO"
 
 [plugin.audio_input_mic]
 enabled = true

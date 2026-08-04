@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from collections.abc import AsyncIterator
 from wave import Wave_read
 
@@ -9,7 +9,7 @@ import httpx
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, TextChunk
 
-log = logging.getLogger(__name__)
+log = logger
 
 from ._http import HttpProvider, configured_endpoint
 from ._models import CambRequest
@@ -85,7 +85,7 @@ class CambProvider(HttpProvider):
             body = await response.aread()
             if not body:
                 return
-            log.debug("[camb] TTS stream for voice_id=%d language=%s: %d bytes", voice_id, language, len(body))
+            log.debug("[camb] TTS stream for voice_id={} language={}: {} bytes", voice_id, language, len(body))
             pcm, sample_rate = _wav_to_pcm(body)
             yield AudioOutput(
                 samples=pcm,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
+from loguru import logger
 from collections import deque
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import uuid4
 from typing import Any, Protocol, assert_never
 
-log = logging.getLogger(__name__)
+log = logger
 
 from openai import AsyncOpenAI
 from openai.types.chat import (
@@ -507,9 +507,9 @@ class VoiceAgent(Plugin):
                 phase_id=phase_id,
             ),
         )
-        log.debug("[%s] _settings.stream=%s", self.name, self._settings.stream)
+        log.debug("[{}] _settings.stream={}", self.name, self._settings.stream)
         if self._settings.stream:
-            log.debug("[%s] stream=true mode, pushing to pipeline", self.name)
+            log.debug("[{}] stream=true mode, pushing to pipeline", self.name)
             sequence = 0
             async for token in self._provider.stream(request):
                 if not isinstance(token, str) or not token:
@@ -524,7 +524,7 @@ class VoiceAgent(Plugin):
             await pipeline.token_queue.put(None)
             await self._emit_chunk("", sequence, final=True)
         else:
-            log.debug("[%s] stream=false mode, accumulating tokens...", self.name)
+            log.debug("[{}] stream=false mode, accumulating tokens...", self.name)
             tokens: list[str] = []
             async for token in self._provider.stream(request):
                 if not isinstance(token, str) or not token:
@@ -536,7 +536,7 @@ class VoiceAgent(Plugin):
                 tokens.append(token)
             if tokens:
                 full = "".join(tokens)
-                log.debug("[%s] stream=false accumulated %d tokens -> %r", self.name, len(tokens), full)
+                log.debug("[{}] stream=false accumulated {} tokens -> {!r}", self.name, len(tokens), full)
                 await pipeline.token_queue.put(full)
                 await pipeline.token_queue.put(None)
                 await self._emit_chunk(full, 0, final=True)

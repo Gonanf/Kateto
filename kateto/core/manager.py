@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK
-import logging
+from loguru import logger
 import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from .event import EventEnvelope, InterruptData, PluginErrorData
 from .plugin import Plugin
 
-log = logging.getLogger("kateto.manager")
+log = logger
 
 EventHandler = Callable[[BaseModel], Awaitable[None]]
 Subscriber = tuple[str, EventHandler]
@@ -194,13 +194,13 @@ class PluginManager:
         history_envelope = self._compact_history_envelope(envelope)
         self._events.append(history_envelope)
         self._history_for(self._sent_events, envelope.source.split("/", maxsplit=1)[0]).append(history_envelope)
-        log.debug("emit %s source=%s target=%s", name, source, target or "*")
+        log.debug("emit {} source={} target={}", name, source, target or "*")
         for observer in tuple(self._event_observers):
             observer(envelope)
         recipients = self._resolve_subscribers(envelope, capability_filter)
         if only_once:
             recipients = recipients[:1]
-        log.debug("dispatch %s to %s", name, [p.name for p, _ in recipients])
+        log.debug("dispatch {} to {}", name, [p.name for p, _ in recipients])
         for plugin, handler in recipients:
             self._history_for(self._received_events, plugin.name).append(history_envelope)
             task = asyncio.create_task(plugin._enqueue(envelope, handler))
