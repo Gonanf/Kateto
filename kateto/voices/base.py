@@ -697,7 +697,7 @@ class VoiceAgent(Plugin):
             if self._settings.stream:
                 sequence = 0
                 async with agent.run_stream(user_prompt, message_history=history or None) as result:
-                    async for msg in result.stream():
+                    async for msg in result.stream_text(delta=True):
                         if self._interrupted:
                             break
                         if isinstance(msg, str) and msg:
