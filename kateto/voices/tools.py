@@ -285,10 +285,12 @@ class VoiceToolExecutor:
             self._validate_name(name)
         except ValueError as e:
             return json.dumps({"error": str(e)})
-        path = self._config_dir / "voices" / name / "SOUL.md"
+        from kateto.voices.memory import VoiceMemory
+
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
+            memory = VoiceMemory.for_voice(config_dir=self._config_dir, voice=name)
+            await memory.write_soul(content)
+            path = memory.store.path_for("SOUL.md")
             return json.dumps({"status": "updated" if path.exists() else "created", "name": name, "path": str(path.relative_to(self._config_dir))})
         except Exception as e:
             return json.dumps({"error": str(e)})

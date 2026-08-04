@@ -808,6 +808,10 @@ class VoiceAgent(Plugin):
         phase_id: str | None,
     ) -> tuple[ChatMessage, ...]:
         soul = await self._memory.read_soul()
+        if not soul.strip():
+            restored = await self._memory.rollback_soul()
+            if restored:
+                soul = restored
         memories = await self._memory.read_memories()
         journal = await self._memory.read_journal()
         parts = [self.profile.system_prompt]

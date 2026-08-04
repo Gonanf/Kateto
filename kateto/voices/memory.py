@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from kateto.core.soul_store import SoulSnapshotBackend, open_soul_snapshot_store
 from kateto.core.storage import VoiceFileStore
 
 
@@ -16,10 +17,21 @@ MEMORIES_WORD_LIMIT: Final = 1_000
 @dataclass(frozen=True, slots=True)
 class VoiceMemory:
     store: VoiceFileStore
+    snapshots: SoulSnapshotBackend
 
     @classmethod
-    def for_voice(cls, *, config_dir: Path, voice: str) -> VoiceMemory:
-        return cls(store=VoiceFileStore.for_voice(config_dir=config_dir, voice=voice))
+    def for_voice(
+        cls,
+        *,
+        config_dir: Path,
+        voice: str,
+        snapshot_backend: str = "zodb",
+    ) -> VoiceMemory:
+        store = VoiceFileStore.for_voice(config_dir=config_dir, voice=voice)
+        return cls(
+            store=store,
+            snapshots=open_soul_snapshot_store(store.config_dir, backend=snapshot_backend),
+        )
 
     async def read_soul(self) -> str:
         return self._read("SOUL.md")
@@ -37,9 +49,17 @@ class VoiceMemory:
         return await self.read_soul()
 
     async def write_soul(self, soul: str) -> None:
+        self.snapshots.snapshot(self.store.voice, "soul", await self.read_soul())
         await self.store.write_text("SOUL.md", _first_words(soul, SOUL_WORD_LIMIT))
 
+    async def rollback_soul(self) -> str | None:
+        previous = self.snapshots.rollback(self.store.voice, "soul")
+        if previous is not None:
+            await self.store.write_text("SOUL.md", previous)
+        return previous
+
     async def append_journal(self, entry: str) -> None:
+        self.snapshots.snapshot(self.store.voice, "journal", await self.read_journal())
         existing_entries = tuple(line.strip() for line in (await self.read_journal()).splitlines() if line.strip())
         normalized_entry = " ".join(entry.split())
         entries = (*existing_entries, normalized_entry) if normalized_entry else existing_entries
@@ -49,6 +69,12 @@ class VoiceMemory:
         if bounded_entries and _token_count("\n".join(bounded_entries)) > JOURNAL_TOKEN_LIMIT:
             bounded_entries = (_last_words(bounded_entries[-1], JOURNAL_TOKEN_LIMIT),)
         await self.store.write_text("JOURNAL.md", "\n".join(bounded_entries))
+
+    async def rollback_journal(self) -> str | None:
+        previous = self.snapshots.rollback(self.store.voice, "journal")
+        if previous is not None:
+            await self.store.write_text("JOURNAL.md", previous)
+        return previous
 
     async def append_memories(self, memory: str) -> None:
         combined = " ".join((await self.read_memories()).split() + memory.split())
