@@ -145,6 +145,7 @@ class HermesProvider(OpenAIAgentProvider):
         endpoint: str | None = None,
         api_key: str | None = None,
         max_tokens: int = 4096,
+        manage_tools: bool = False,
     ) -> None:
         super().__init__(
             model=model,
@@ -153,8 +154,26 @@ class HermesProvider(OpenAIAgentProvider):
             max_tokens=max_tokens,
         )
         self._conversation_id = conversation_id
+        self._manage_tools = manage_tools
 
     def _base_kwargs(self, *, stream: bool) -> dict[str, Any]:
         kwargs = super()._base_kwargs(stream=stream)
         kwargs["extra_body"] = {"conversation_id": self._conversation_id}
         return kwargs
+
+    async def chat_with_tools(
+        self,
+        messages: list[dict[str, object]],
+        tools: tuple[ChatCompletionToolParam, ...],
+    ) -> AgentResponse:
+        effective_tools = tools if self._manage_tools else ()
+        return await super().chat_with_tools(messages, effective_tools)
+
+    async def chat_with_tools_stream(
+        self,
+        messages: list[dict[str, object]],
+        tools: tuple[ChatCompletionToolParam, ...],
+    ) -> AsyncIterator[StreamToken | AgentResponse]:
+        effective_tools = tools if self._manage_tools else ()
+        async for token in super().chat_with_tools_stream(messages, effective_tools):
+            yield token

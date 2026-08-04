@@ -79,30 +79,36 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
         from kateto.providers.agent import HermesProvider, OpenAIAgentProvider
         from kateto.voices.tools import VoiceToolExecutor
 
-        if voice_settings.conversation_id:
+        is_hermes = bool(voice_settings.conversation_id)
+        if is_hermes:
             agent_provider = HermesProvider(
                 conversation_id=voice_settings.conversation_id,
                 model=voice_settings.model,
                 endpoint=voice_settings.endpoint,
                 api_key=voice_settings.api_key,
+                manage_tools=False,
             )
+            mcp_servers = tuple(s for s in settings.mcp_servers if "cron" not in s.lower() and "schedule" not in s.lower())
         else:
             agent_provider = OpenAIAgentProvider(
                 model=voice_settings.model,
                 endpoint=voice_settings.endpoint,
                 api_key=voice_settings.api_key,
             )
+            mcp_servers = tuple(settings.mcp_servers)
+
         external_mcp = ctx.external_mcp or ctx.get_shared("external_mcp")
         executor = VoiceToolExecutor(
             config_dir=ctx.config.paths.config_dir,
             cli_settings=ctx.config.settings.cli,
             external_manager=external_mcp,
-            mcp_server_names=tuple(settings.mcp_servers),
+            mcp_server_names=mcp_servers,
             voice_name=voice_name,
+            disable_scheduling_tools=is_hermes,
         )
         voice.setup_agent(agent_provider=agent_provider, tool_executor=executor)
 
-        if voice_settings.conversation_id:
+        if is_hermes:
             # Hermes harness manages conversations itself; the pydantic-ai
             # agent path would bypass HermesProvider's conversation_id.
             return voice

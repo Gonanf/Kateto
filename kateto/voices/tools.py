@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 from openai.types.chat import ChatCompletionToolParam
 
 from kateto.core.config import CliSettings
+from kateto.core.event import ScheduleRequestData, ScheduleType
 from kateto.core.manager import PluginManager
 from kateto.providers.agent import ToolExecutor
 
@@ -30,6 +31,7 @@ class VoiceToolExecutor:
         external_manager: "ExternalMcpManager | None" = None,
         mcp_server_names: tuple[str, ...] = (),
         voice_name: str = "",
+        disable_scheduling_tools: bool = False,
     ) -> None:
         self._config_dir = config_dir.resolve()
         self._manager = manager
@@ -38,6 +40,7 @@ class VoiceToolExecutor:
         self._external_manager = external_manager
         self._mcp_server_names = mcp_server_names
         self._voice_name = voice_name
+        self._disable_scheduling_tools = disable_scheduling_tools
 
     def set_manager(self, manager: PluginManager) -> None:
         self._manager = manager
@@ -72,6 +75,10 @@ class VoiceToolExecutor:
                 return await self._update_soul(arguments)
             case "request_generation":
                 return await self._request_generation(arguments)
+            case "schedule_event":
+                if self._disable_scheduling_tools:
+                    return json.dumps({"error": "scheduling tools are disabled"})
+                return await self._schedule_event(arguments)
             case _:
                 if self._external_manager is not None and self._mcp_server_names:
                     result = await self._external_manager.try_call_tool(
@@ -317,6 +324,58 @@ class VoiceToolExecutor:
             return json.dumps({"status": "requested", "target_voice": target_voice, "depth": request.depth})
         except Exception as e:
             return json.dumps({"error": f"failed to request generation: {e}"})
+
+    async def _schedule_event(self, args: dict[str, Any]) -> str:
+        manager = self._manager
+        if manager is None:
+            return json.dumps({"error": "no plugin manager available"})
+
+        event_name = str(args.get("event_name", ""))
+        if not event_name:
+            return json.dumps({"error": "event_name is required"})
+
+        schedule_type_str = args.get("schedule_type")
+        delay = args.get("delay")
+        interval = args.get("interval")
+        cron = args.get("cron")
+        expression = args.get("expression")
+
+        if schedule_type_str:
+            stype = ScheduleType(schedule_type_str)
+        elif delay is not None:
+            stype = ScheduleType.ONE_SHOT
+            expression = f"{delay}s"
+        elif interval is not None:
+            stype = ScheduleType.INTERVAL
+            expression = f"{interval}s"
+        elif cron is not None:
+            stype = ScheduleType.CRON
+            expression = cron
+        else:
+            stype = ScheduleType.ONE_SHOT
+            expression = "0s"
+
+        if expression is None:
+            expression = "0s"
+
+        job_id = args.get("job_id") or f"job_{os.urandom(4).hex()}"
+        req = ScheduleRequestData(
+            schedule_type=stype,
+            expression=str(expression),
+            event_name=event_name,
+            data=args.get("data") or {},
+            job_id=job_id,
+            target_voice=args.get("target_voice"),
+            dept=args.get("dept"),
+            jitter_seconds=float(args.get("jitter_seconds", 0)),
+            max_fires=args.get("max_fires"),
+            active_hours=args.get("active_hours"),
+        )
+        try:
+            await manager.emit("schedule_request", req, source=self._voice_name or "tool_schedule_event")
+            return json.dumps({"job_id": job_id, "status": "scheduled", "event_name": event_name})
+        except Exception as e:
+            return json.dumps({"error": f"failed to schedule event: {e}"})
 
     async def _run_command(self, args: dict[str, Any]) -> str:
         command = args.get("command", "")
@@ -673,6 +732,43 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
             },
         },
     ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "schedule_event",
+            "description": "Schedule a future or recurring event.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_name": {
+                        "type": "string",
+                        "description": "Name of the event to fire when scheduled time arrives",
+                    },
+                    "delay": {
+                        "type": "number",
+                        "description": "Delay in seconds before firing (one-shot schedule)",
+                    },
+                    "interval": {
+                        "type": "number",
+                        "description": "Interval in seconds between firings (recurring schedule)",
+                    },
+                    "cron": {
+                        "type": "string",
+                        "description": "Cron expression for scheduled firing (e.g. '*/5 * * * *')",
+                    },
+                    "target_voice": {
+                        "type": "string",
+                        "description": "Optional target voice for the scheduled event",
+                    },
+                    "dept": {
+                        "type": "string",
+                        "description": "Optional department for routing",
+                    },
+                },
+                "required": ["event_name"],
+            },
+        },
+    ),
 )
 
 
@@ -686,6 +782,8 @@ class KatetoToolset:
         ts = FunctionToolset()
         for tool_def in BUILTIN_TOOLS:
             name = tool_def["function"]["name"]
+            if name == "schedule_event" and getattr(self._executor, "_disable_scheduling_tools", False):
+                continue
             description = tool_def["function"]["description"]
             parameters = tool_def["function"]["parameters"]
             ts.add_function(
