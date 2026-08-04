@@ -29,6 +29,7 @@ class VoiceToolExecutor:
         working_directory: Path | None = None,
         external_manager: "ExternalMcpManager | None" = None,
         mcp_server_names: tuple[str, ...] = (),
+        voice_name: str = "",
     ) -> None:
         self._config_dir = config_dir.resolve()
         self._manager = manager
@@ -36,6 +37,7 @@ class VoiceToolExecutor:
         self._working_directory = (working_directory or config_dir).resolve()
         self._external_manager = external_manager
         self._mcp_server_names = mcp_server_names
+        self._voice_name = voice_name
 
     def set_manager(self, manager: PluginManager) -> None:
         self._manager = manager
@@ -68,6 +70,8 @@ class VoiceToolExecutor:
                 return await self._update_workflow(arguments)
             case "update_soul":
                 return await self._update_soul(arguments)
+            case "request_generation":
+                return await self._request_generation(arguments)
             case _:
                 if self._external_manager is not None and self._mcp_server_names:
                     result = await self._external_manager.try_call_tool(
@@ -288,6 +292,29 @@ class VoiceToolExecutor:
             return json.dumps({"status": "updated" if path.exists() else "created", "name": name, "path": str(path.relative_to(self._config_dir))})
         except Exception as e:
             return json.dumps({"error": str(e)})
+
+    async def _request_generation(self, args: dict[str, Any]) -> str:
+        manager = self._manager
+        if manager is None:
+            return json.dumps({"error": "no plugin manager available"})
+        target_voice = args.get("target_voice", "")
+        prompt = args.get("prompt", "")
+        if not target_voice or not prompt:
+            return json.dumps({"error": "target_voice and prompt are required"})
+        from kateto.core.event import GenerateRequestData
+
+        request = GenerateRequestData(
+            target_voice=target_voice,
+            prompt=prompt,
+            source_voice=self._voice_name or "voice_agent",
+            depth=int(args.get("depth", 0)),
+            dept=args.get("dept"),
+        )
+        try:
+            await manager.emit("generate_request", request, source=self._voice_name or "voice_agent")
+            return json.dumps({"status": "requested", "target_voice": target_voice, "depth": request.depth})
+        except Exception as e:
+            return json.dumps({"error": f"failed to request generation: {e}"})
 
     async def _run_command(self, args: dict[str, Any]) -> str:
         command = args.get("command", "")
@@ -616,6 +643,31 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
                     "content": {"type": "string", "description": "New SOUL.md content"},
                 },
                 "required": ["name", "content"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "request_generation",
+            "description": "Ask another voice to generate a response. Use when another team member should speak or produce work.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target_voice": {
+                        "type": "string",
+                        "description": "The voice to request generation from (e.g. jane, doktor, conquest)",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "The task or question for the target voice",
+                    },
+                    "dept": {
+                        "type": "string",
+                        "description": "Optional department to route within",
+                    },
+                },
+                "required": ["target_voice", "prompt"],
             },
         },
     ),

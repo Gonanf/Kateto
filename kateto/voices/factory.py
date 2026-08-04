@@ -98,6 +98,7 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             cli_settings=ctx.config.settings.cli,
             external_manager=external_mcp,
             mcp_server_names=tuple(settings.mcp_servers),
+            voice_name=voice_name,
         )
         voice.setup_agent(agent_provider=agent_provider, tool_executor=executor)
 

@@ -116,6 +116,17 @@ class GenerateData(EventModel):
     phase_id: str | None = None
 
 
+GENERATE_REQUEST_MAX_DEPTH: int = 3
+
+
+class GenerateRequestData(EventModel):
+    target_voice: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    source_voice: str = Field(min_length=1)
+    depth: int = Field(default=0, ge=0)
+    dept: str | None = None
+
+
 class SpeakRequestData(EventModel):
     voice: str = Field(min_length=1)
     prompt: str = Field(min_length=1)

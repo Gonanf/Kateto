@@ -35,7 +35,9 @@ from pydantic_ai.messages import (
 from kateto.core.config import VoiceSettings
 from kateto.core.event import (
     EventEnvelope,
+    GENERATE_REQUEST_MAX_DEPTH,
     GenerateData,
+    GenerateRequestData,
     InterruptData,
     SpeakRequestData,
     TextChunk,
@@ -57,7 +59,7 @@ from kateto.core.event import (
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.core.workflow import WorkflowCatalog, WorkflowNotFoundError
 from kateto.providers import ChatMessage
-from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolExecutor
+from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolCall, ToolExecutor
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import LoadedSkill, load_skills
 
@@ -200,7 +202,7 @@ class OpenAICompatibleProvider:
 
 
 class VoiceAgent(Plugin):
-    immediate_events = frozenset({"interrupt", "speak"})
+    immediate_events = frozenset({"interrupt", "speak", "generate_request"})
 
     def __init__(
         self,
@@ -237,6 +239,7 @@ class VoiceAgent(Plugin):
         self._extra_tools: tuple[ChatCompletionToolParam, ...] = ()
         self._event_messages: deque[ChatMessage] = deque(maxlen=32)
         self._event_message_limit = 2_048
+        self._generation_depth = 0
 
     @property
     def role(self) -> VoiceRole:
@@ -312,6 +315,7 @@ class VoiceAgent(Plugin):
         manager.register_event("tool_result", ToolResultData)
         manager.register_event("voice_request", VoiceRequestData)
         manager.register_event("generate", GenerateData)
+        manager.register_event("generate_request", GenerateRequestData)
         manager.register_event("speak", SpeakRequestData)
         manager.register_event("workflow_run", WorkflowRunData)
         manager.register_event("workflow_started", WorkflowStartedData)
@@ -447,6 +451,29 @@ class VoiceAgent(Plugin):
             if self._generation_task is generation:
                 self._generation_task = None
 
+    async def on_generate_request(self, data: GenerateRequestData) -> None:
+        manager = self.manager
+        if manager is None:
+            return
+        if data.depth >= GENERATE_REQUEST_MAX_DEPTH:
+            log.warning(
+                "[{}] generate_request dropped: depth cap {} reached",
+                self.name,
+                GENERATE_REQUEST_MAX_DEPTH,
+            )
+            return
+        self._generation_depth = data.depth + 1
+        try:
+            await manager.emit(
+                "generate",
+                GenerateData(prompt=data.prompt),
+                source=data.source_voice,
+                target=data.target_voice,
+                dept=data.dept,
+            )
+        except ValueError as error:
+            log.warning("[{}] generate_request rejected: {}", self.name, error)
+
     async def on_speak(self, data: SpeakRequestData) -> None:
         prompt = data.prompt
         if prompt is None or not prompt.strip():
@@ -551,6 +578,7 @@ class VoiceAgent(Plugin):
             )
         await self._set_status(VoiceStatus.IDLE)
         _remove_pipeline(self.name)
+        self._generation_depth = 0
 
     async def _agent_loop(
         self,
@@ -645,6 +673,7 @@ class VoiceAgent(Plugin):
                 )
             await self._set_status(VoiceStatus.IDLE)
             _remove_pipeline(self.name)
+            self._generation_depth = 0
 
     async def _pydantic_agent_loop(
         self,
@@ -693,6 +722,7 @@ class VoiceAgent(Plugin):
                 await manager.emit("voice_idle", VoiceIdleData(voice=self.name), source=self.name)
             await self._set_status(VoiceStatus.IDLE)
             _remove_pipeline(self.name)
+            self._generation_depth = 0
 
     async def _handle_tool_calls(
         self,
@@ -713,6 +743,12 @@ class VoiceAgent(Plugin):
         for tc in response.tool_calls:
             correlation_id = uuid4().hex
             manager = self.manager
+            if tc.name == "request_generation":
+                tc = ToolCall(
+                    id=tc.id,
+                    name=tc.name,
+                    arguments={**tc.arguments, "depth": self._generation_depth},
+                )
             if manager is not None:
                 envelope = await manager.emit(
                     "tool_call",
