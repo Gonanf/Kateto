@@ -134,6 +134,35 @@ class SpeakRequestData(EventModel):
     phase_id: str | None = None
 
 
+class ScheduleType(StrEnum):
+    ONE_SHOT = "one_shot"
+    INTERVAL = "interval"
+    CRON = "cron"
+
+
+class ScheduleRequestData(EventModel):
+    schedule_type: ScheduleType
+    expression: str = Field(min_length=1)  # "30s"/"5m"/"1h" o cron expr "*/5 * * * *"
+    event_name: str = Field(min_length=1)
+    data: dict[str, JsonValue] = Field(default_factory=dict)
+    job_id: str | None = None
+    target_voice: str | None = None  # None => voz al azar al disparar
+    dept: str | None = None
+    jitter_seconds: float = Field(default=0, ge=0)
+    max_fires: int | None = Field(default=None, gt=0)
+    active_hours: str | None = None  # "09:00-22:00"; None = sin restricción
+
+
+class ScheduleResultData(EventModel):
+    job_id: str
+    next_run: str | None = None
+    error: str | None = None
+
+
+class ScheduleCancelData(EventModel):
+    job_id: str = Field(min_length=1)
+
+
 class SpeakingStateData(EventModel):
     voice: str
     active: bool
