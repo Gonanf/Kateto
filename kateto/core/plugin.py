@@ -25,6 +25,7 @@ class Plugin:
         name: str,
         *,
         capabilities: tuple[str, ...] = (),
+        depts: tuple[str, ...] = (),
         streaming: bool = True,
         batch_trigger: str = "generate",
         receive_self_events: bool = False,
@@ -34,6 +35,7 @@ class Plugin:
             raise ValueError(msg)
         self.name = name
         self.capabilities = capabilities
+        self.depts = tuple(dept.casefold() for dept in depts)
         self.streaming = streaming
         self.batch_trigger = batch_trigger
         self.receive_self_events = receive_self_events

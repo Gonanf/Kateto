@@ -164,6 +164,7 @@ class PluginManager:
         *,
         source: str = "plugin_manager",
         target: str | None = None,
+        dept: str | None = None,
         capabilities: Iterable[str] = (),
         only_once: bool = False,
         reply_to: str | None = None,
@@ -171,6 +172,7 @@ class PluginManager:
         trace_id: str | None = None,
     ) -> EventEnvelope[BaseModel]:
         capability_filter = self._validate_filters(target, capabilities)
+        dept_filter = self._validate_dept(dept, source)
         if not isinstance(data, BaseModel):
             msg = "event payload must be a Pydantic model"
             raise TypeError(msg)
@@ -185,6 +187,7 @@ class PluginManager:
             data=data,
             source=source,
             target=target,
+            dept=dept_filter,
             capabilities=list(capability_filter) or None,
             only_once=only_once,
             reply_to=reply_to,
@@ -335,10 +338,32 @@ class PluginManager:
                 continue
             if envelope.target is not None and plugin_name != envelope.target:
                 continue
+            if envelope.dept is not None and envelope.dept not in plugin.depts:
+                continue
             if capabilities and not all(capability in plugin.capabilities for capability in capabilities):
                 continue
             matching.append((plugin, handler))
         return matching
+
+    def _validate_dept(self, dept: str | None, source: str) -> str | None:
+        if dept is None:
+            return None
+        if not isinstance(dept, str) or not dept.strip():
+            msg = "dept must be a non-empty string"
+            raise ValueError(msg)
+        normalized = dept.casefold()
+        source_plugin = source.split("/", maxsplit=1)[0]
+        plugin = self._plugins.get(source_plugin)
+        # Anti-spoofing: a voice may only emit into departments it belongs to.
+        # Plugins without a dept policy (empty depts) are unconstrained.
+        if plugin is not None and "voice" in plugin.capabilities and plugin.depts:
+            if normalized not in plugin.depts:
+                msg = (
+                    f"voice {source_plugin} cannot emit into dept {normalized!r}: "
+                    f"its departments are {', '.join(plugin.depts)}"
+                )
+                raise ValueError(msg)
+        return normalized
 
     def _validate_filters(
         self,

@@ -94,6 +94,7 @@ class VoiceProfile:
     system_prompt: str
     relevance_terms: frozenset[str]
     capabilities: tuple[str, ...] = ()
+    depts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +214,7 @@ class VoiceAgent(Plugin):
         super().__init__(
             profile.voice_id,
             capabilities=("voice", "agent", profile.role.value),
+            depts=profile.depts,
             streaming=False,
             batch_trigger="generate",
         )

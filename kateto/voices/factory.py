@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from kateto.core.config import VoiceSettings
 from kateto.voices.base import OpenAICompatibleProvider, VoiceAgent, VoiceProfile, VoiceRole
 
@@ -18,6 +20,7 @@ _PROFILES: dict[str, VoiceProfile] = {
         system_prompt="You are Jane, Kateto's calm orchestration partner. Coordinate people, clarify goals, and keep work moving without taking over specialist decisions." + _VOICE_CONSTRAINT,
         relevance_terms=frozenset({"coordinate", "orchestrate", "organize", "summarize", "status", "team"}),
         capabilities=("orchestration", "coordination", "general"),
+        depts=("fun",),
     ),
     "doktor": VoiceProfile(
         voice_id="doktor",
@@ -26,6 +29,7 @@ _PROFILES: dict[str, VoiceProfile] = {
         system_prompt="You are Doktor, Kateto's delivery advisor. Turn product intent into clear backlog work, expose risk, estimate thoughtfully, and protect delivery focus." + _VOICE_CONSTRAINT,
         relevance_terms=frozenset({"backlog", "task", "risk", "estimate", "priority", "calendar", "plan"}),
         capabilities=("planning", "backlog", "risk"),
+        depts=("management",),
     ),
     "conquest": VoiceProfile(
         voice_id="conquest",
@@ -34,12 +38,23 @@ _PROFILES: dict[str, VoiceProfile] = {
         system_prompt="You are Conquest, Kateto's agile facilitator. Lead focused sprint ceremonies, make process visible, and turn team observations into concrete next steps." + _VOICE_CONSTRAINT,
         relevance_terms=frozenset({"sprint", "standup", "retrospective", "ceremony", "agile", "process"}),
         capabilities=("agile", "ceremonies", "process"),
+        depts=("management",),
     ),
 }
 
 
+def _resolve_depts(ctx, profile: VoiceProfile, settings: VoiceSettings) -> VoiceProfile:
+    if settings.dept is not None:
+        return replace(profile, depts=(settings.dept,))
+    if settings.depts:
+        return replace(profile, depts=tuple(settings.depts))
+    if not profile.depts:
+        return replace(profile, depts=(ctx.config.settings.kateto.default_voice_dept,))
+    return profile
+
+
 def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent:
-    profile = _PROFILES[voice_name]
+    profile = _resolve_depts(ctx, _PROFILES[voice_name], settings)
 
     voice_settings = ctx.config.settings.plugin.get("voice_llm")
     if voice_settings is None:

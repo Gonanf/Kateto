@@ -45,6 +45,7 @@ class KatetoSettings(_ConfigModel):
     language: str = "en"
     name: str = "Kateto"
     log_level: str = "INFO"
+    default_voice_dept: str = "fun"
 
 
 class PluginSettings(_ConfigModel):
@@ -86,6 +87,8 @@ class VoiceSettings(_ConfigModel):
     enabled: bool = True
     skills: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(default_factory=list)
+    dept: str | None = None
+    depts: list[str] | None = None
     soul: str | None = None
     journal: str | None = None
     memories: str | None = None
@@ -95,6 +98,22 @@ class VoiceSettings(_ConfigModel):
     camb_voice_id: int | None = None
     camb_language: str | None = None
     edge_tts_voice: str | None = None
+
+    @model_validator(mode="after")
+    def validate_dept_fields(self) -> Self:
+        if self.dept is not None and self.depts is not None:
+            raise ValueError("dept and depts are mutually exclusive")
+        return self
+
+    @field_validator("dept")
+    @classmethod
+    def casefold_dept(cls, value: str | None) -> str | None:
+        return value.casefold() if value is not None else None
+
+    @field_validator("depts")
+    @classmethod
+    def casefold_depts(cls, value: list[str] | None) -> list[str] | None:
+        return [item.casefold() for item in value] if value is not None else None
 
     @field_validator(*_ASSET_FIELDS)
     @classmethod

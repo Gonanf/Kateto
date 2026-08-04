@@ -305,6 +305,7 @@ class EventEnvelope(EventModel, Generic[Payload]):
     source: str = Field(min_length=1)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     target: str | None = None
+    dept: str | None = None
     capabilities: list[str] | None = None
     only_once: bool = False
     reply_to: str | None = None
