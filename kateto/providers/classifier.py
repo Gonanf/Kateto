@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import httpx
+import json
 from pydantic import ValidationError
 
 from kateto.core.config import PluginSettings
@@ -65,7 +66,15 @@ class ClassifierProvider(HttpProvider):
         request = ClassifierRequest(
             model=self._model,
             messages=(
-                ChatMessage(role="system", content="Return the classification JSON object."),
+                ChatMessage(role="system", content=(
+                    "Return a JSON object with the exact schema:\n"
+                    '  "category": one of "EXECUTE", "IGNORE_SELF_TALK", "IGNORE_THIRD_PARTY"\n'
+                    '  "voice": string or null (one of the given agents)\n'
+                    '  "workflow": string or null (one of the given workflows)\n'
+                    '  "project_state": "new" or "already_underway"\n'
+                    '  "confidence": float between 0 and 1, or null\n'
+                    "No markdown, no extra keys."
+                )),
                 ChatMessage(role="user", content=text),
             ),
             agents=agents,
@@ -78,15 +87,19 @@ class ClassifierProvider(HttpProvider):
         )
         _ = response.raise_for_status()
         try:
-            completion = ClassificationResponse.model_validate_json(response.content)
-        except ValidationError as error:
+            # llama-server (and other non-OpenAI servers) append extra top-level
+            # fields (__verbose, timings, usage, ...). EventModel forbids extras,
+            # so we tolerate them by reading only the chat-completion content.
+            _body = json.loads(response.content)
+            completion = _body["choices"][0]["message"]["content"]
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError) as error:
             raise MalformedUpstreamResponse(provider="classifier", reason="expected chat completion JSON") from error
         try:
-            payload = ClassificationPayload.model_validate_json(completion.choices[0].message.content)
+            payload = ClassificationPayload.model_validate_json(completion)
         except ValidationError:
             try:
                 payload = ClassificationPayload(
-                    category=Classification(completion.choices[0].message.content.strip()),
+                    category=Classification(completion.strip()),
                 )
             except (ValidationError, ValueError) as plain_error:
                 raise MalformedUpstreamResponse(
@@ -120,9 +133,10 @@ class ClassifierProvider(HttpProvider):
         )
         _ = response.raise_for_status()
         try:
-            completion = ClassificationResponse.model_validate_json(response.content)
-            payload = WorkflowSelectionPayload.model_validate_json(completion.choices[0].message.content)
-        except (ValidationError, IndexError) as error:
+            _body = json.loads(response.content)
+            completion = _body["choices"][0]["message"]["content"]
+            payload = WorkflowSelectionPayload.model_validate_json(completion)
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValidationError) as error:
             raise MalformedUpstreamResponse(
                 provider="classifier",
                 reason="expected workflow selection JSON",

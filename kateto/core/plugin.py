@@ -115,13 +115,18 @@ class Plugin:
             envelope, handler = await self.queue.get()
             self._current_envelope = envelope
             try:
+                data = envelope.data
+                if isinstance(data, dict) and self.manager is not None:
+                    contract = self.manager.get_event_contract(envelope.name)
+                    if contract is not None:
+                        data = contract.model_validate(data)
                 if self.streaming or envelope.name in self.immediate_events:
-                    await handler(envelope.data)
+                    await handler(data)
                 else:
                     self._batch_events.append(envelope)
                     if envelope.name == self.batch_trigger:
                         try:
-                            await handler(envelope.data)
+                            await handler(data)
                         finally:
                             self._batch_events.clear()
                 self._consecutive_failures = 0

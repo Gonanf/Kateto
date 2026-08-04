@@ -12,6 +12,31 @@ and receives typed events through the `PluginManager`:
 - **Doktor** turns intent into plans, risks, backlog items, and deliverables.
 - **Conquest** facilitates agile execution and keeps progress visible.
 
+### Vision: Kateto as a company
+
+Think of Kateto as a company. The company has **departments** (Project
+Management, Software Development, Graphic Design, Marketing, Legal, Accounting,
+…). Each department has **voices**, and each voice plays a role/task inside the
+department. Jane, Doktor and Conquest live in Project Management: Jane handles
+client and cross-department communication, Doktor produces communication plans,
+project portfolios, proposals, WBS, and risk analysis, and Conquest runs the
+ceremonies (Scrum / Lean / Waterfall) and reports progress back to Doktor.
+
+Any node on the bus — a user input, a cron job, a workflow, another agent or
+program — can be a publisher and a subscriber. Voices decide which events they
+respond to. Doktor might note "meetings happen Tuesdays"; on Tuesday an
+executor triggers Conquest to run the meeting on its own. Four goals drive this
+design:
+
+- **Focused context** — small/local LLMs degrade when one agent is handed the
+  whole world. Departments keep each voice's context to what it needs.
+- **Proactive, not just reactive** — the bus is a pub/sub graph: subscribers
+  fire on their own when their events arrive, not only when a human prompts.
+- **Efficient** — deterministic, LLM-free work runs as **Workflows** (checkpoints
+  verify results automatically, no human-in-the-loop) instead of burning tokens.
+- **Pleasant / fun** — formal when needed, theatrical for marketing; interruptions
+  double as comedy or as two AIs debating a problem from different angles.
+
 ![The Kateto team](public/the_lovers1.svg)
 
 Kateto was built to make project coordination observable and actionable. A

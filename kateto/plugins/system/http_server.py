@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from kateto.core.event import EventEnvelope
@@ -57,6 +58,12 @@ class HttpServer:
             self._manager.remove_event_observer(self._on_event)
 
         app = FastAPI(title="Kateto HTTP Server", lifespan=lifespan)
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
         @app.get("/events")
         async def list_events() -> list[EventListItem]:

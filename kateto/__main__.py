@@ -30,9 +30,14 @@ def main() -> int:
         case ["run"]:
             return _run_event_runtime()
         case ["smoke", "--fixture"]:
-            evidence = Path.cwd() / ".omo" / "evidence" / "kateto-mvp" / "recovery" / "smoke-cleanup"
+            # ponytail: smoke runs the core test suite instead of the
+            # deleted scripts/qa/acceptance.py.  Add a dedicated e2e
+            # runner when a full bounded smoke is needed.
             return subprocess.run(
-                [sys.executable, str(Path(__file__).resolve().parents[1] / "scripts" / "qa" / "acceptance.py"), "--fixture", "--evidence-dir", str(evidence)],
+                [sys.executable, "-m", "pytest",
+                 "kateto/tests/test_event_bus.py", "kateto/tests/test_plugin_manager.py",
+                 "kateto/tests/test_config.py", "kateto/tests/test_workflow.py",
+                 "kateto/tests/test_storage.py", "-q"],
                 check=False,
             ).returncode
         case ["tui"]:

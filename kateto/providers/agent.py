@@ -42,16 +42,22 @@ class OpenAIAgentProvider:
         self._client = AsyncOpenAI(api_key=api_key or "sk-no-key-required", base_url=endpoint)
         self._max_tokens = max_tokens
 
+    def _base_kwargs(self, *, stream: bool) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "model": self._model,
+            "max_tokens": self._max_tokens,
+        }
+        if stream:
+            kwargs["stream"] = True
+        return kwargs
+
     async def chat_with_tools(
         self,
         messages: list[dict[str, object]],
         tools: tuple[ChatCompletionToolParam, ...],
     ) -> AgentResponse:
-        kwargs: dict[str, Any] = {
-            "model": self._model,
-            "messages": messages,
-            "max_tokens": self._max_tokens,
-        }
+        kwargs = self._base_kwargs(stream=False)
+        kwargs["messages"] = messages
         if tools:
             kwargs["tools"] = list(tools)
         response = await self._client.chat.completions.create(**kwargs)
@@ -74,12 +80,8 @@ class OpenAIAgentProvider:
         messages: list[dict[str, object]],
         tools: tuple[ChatCompletionToolParam, ...],
     ) -> AsyncIterator[StreamToken | AgentResponse]:
-        kwargs: dict[str, Any] = {
-            "model": self._model,
-            "messages": messages,
-            "max_tokens": self._max_tokens,
-            "stream": True,
-        }
+        kwargs = self._base_kwargs(stream=True)
+        kwargs["messages"] = messages
         if tools:
             kwargs["tools"] = list(tools)
         stream = await self._client.chat.completions.create(**kwargs)
@@ -129,3 +131,30 @@ def _parse_json(raw: str) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         pass
     return {"raw": raw}
+
+
+class HermesProvider(OpenAIAgentProvider):
+    """OpenAI-compatible provider for a Hermes harness that manages
+    conversations itself and requires conversation_id in the request body."""
+
+    def __init__(
+        self,
+        conversation_id: str,
+        *,
+        model: str,
+        endpoint: str | None = None,
+        api_key: str | None = None,
+        max_tokens: int = 4096,
+    ) -> None:
+        super().__init__(
+            model=model,
+            endpoint=endpoint,
+            api_key=api_key,
+            max_tokens=max_tokens,
+        )
+        self._conversation_id = conversation_id
+
+    def _base_kwargs(self, *, stream: bool) -> dict[str, Any]:
+        kwargs = super()._base_kwargs(stream=stream)
+        kwargs["extra_body"] = {"conversation_id": self._conversation_id}
+        return kwargs

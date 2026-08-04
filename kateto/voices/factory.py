@@ -61,14 +61,22 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
     )
 
     if voice_settings.model:
-        from kateto.providers.agent import OpenAIAgentProvider
+        from kateto.providers.agent import HermesProvider, OpenAIAgentProvider
         from kateto.voices.tools import VoiceToolExecutor
 
-        agent_provider = OpenAIAgentProvider(
-            model=voice_settings.model,
-            endpoint=voice_settings.endpoint,
-            api_key=voice_settings.api_key,
-        )
+        if voice_settings.conversation_id:
+            agent_provider = HermesProvider(
+                conversation_id=voice_settings.conversation_id,
+                model=voice_settings.model,
+                endpoint=voice_settings.endpoint,
+                api_key=voice_settings.api_key,
+            )
+        else:
+            agent_provider = OpenAIAgentProvider(
+                model=voice_settings.model,
+                endpoint=voice_settings.endpoint,
+                api_key=voice_settings.api_key,
+            )
         external_mcp = ctx.external_mcp
         executor = VoiceToolExecutor(
             config_dir=ctx.config.paths.config_dir,
@@ -77,6 +85,11 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             mcp_server_names=tuple(settings.mcp_servers),
         )
         voice.setup_agent(agent_provider=agent_provider, tool_executor=executor)
+
+        if voice_settings.conversation_id:
+            # Hermes harness manages conversations itself; the pydantic-ai
+            # agent path would bypass HermesProvider's conversation_id.
+            return voice
 
         try:
             from pydantic_ai import Agent

@@ -122,6 +122,9 @@ class PluginManager:
             received=tuple(self._received_events.get(plugin_name, ())),
         )
 
+    def get_event_contract(self, name: str) -> type[BaseModel] | None:
+        return self._contracts.get(name)
+
     def get_event_registrations(self) -> tuple[EventRegistration, ...]:
         return tuple(
             EventRegistration(
@@ -238,7 +241,7 @@ class PluginManager:
                 compacted = compacted.model_copy(update={field_name: replacement})
         return compacted
 
-    async def wait_for_idle(self, *, timeout: float = 5) -> None:
+    async def wait_for_idle(self, *, timeout: float = 30) -> None:
         try:
             async with asyncio.timeout(timeout):
                 while True:

@@ -24,6 +24,13 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 from pydantic import BaseModel
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    SystemPromptPart,
+    TextPart,
+    UserPromptPart,
+)
 
 from kateto.core.config import VoiceSettings
 from kateto.core.event import (
@@ -117,6 +124,22 @@ class ProviderStreamError(Exception):
 
     def __str__(self) -> str:
         return f"voice {self.voice} provider stream is invalid: {self.reason}"
+
+
+def _to_pydantic_messages(
+    messages: tuple[ChatMessage, ...],
+) -> list[ModelRequest | ModelResponse]:
+    # pydantic-ai message_history needs Message objects (they carry .conversation_id);
+    # raw dicts crash in resolve_conversation_id — see bug 38.
+    result: list[ModelRequest | ModelResponse] = []
+    for message in messages:
+        if message.role == "assistant":
+            result.append(ModelResponse(parts=[TextPart(content=message.content)]))
+        elif message.role in ("system", "developer"):
+            result.append(ModelRequest(parts=[SystemPromptPart(content=message.content)]))
+        else:
+            result.append(ModelRequest(parts=[UserPromptPart(content=message.content)]))
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -633,7 +656,7 @@ class VoiceAgent(Plugin):
             return
         pipeline = self._get_or_create_pipeline()
         messages = await self._messages_for(prompt, workflow=workflow, phase_id=phase_id)
-        history = [{"role": m.role, "content": m.content} for m in messages[:-1]]
+        history = _to_pydantic_messages(messages[:-1])
         user_prompt = messages[-1].content if messages else prompt
         try:
             if self._settings.stream:
