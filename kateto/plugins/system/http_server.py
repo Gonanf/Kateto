@@ -178,7 +178,13 @@ class HttpServer:
         import uvicorn
         config = uvicorn.Config(self._app, host=self._host, port=self._port, log_level="warning")
         self._server = uvicorn.Server(config)
-        asyncio.create_task(self._server.serve(), name="kateto-http-server")
+        self._serve_task = asyncio.create_task(self._server.serve(), name="kateto-http-server")
+        while not self._server.started and not self._serve_task.done():
+            await asyncio.sleep(0.05)
+        if self._serve_task.done() and self._serve_task.exception() is not None:
+            exc = self._serve_task.exception()
+            log.error("HttpServer failed to start on {}:{}: {}", self._host, self._port, exc)
+            raise exc  # type: ignore
         log.info("HTTP server started on {}:{}", self._host, self._port)
 
     async def stop(self) -> None:
