@@ -71,6 +71,8 @@ class PluginSettings(_ConfigModel):
     conversation_id: str | None = None
     host: str | None = None
     port: int | None = Field(default=None, gt=0, lt=65536)
+    dept: str | None = None
+    depts: list[str] | None = None
 
     @field_validator("endpoint", "model_endpoint")
     @classmethod

@@ -101,13 +101,27 @@ class ZonosAudioOutput(Plugin):
             await self._set_playing(False)
 
     async def on_interrupt(self, data: InterruptData) -> None:
-        del data
         self._interrupted = True
         await self._cancel_stream()
-        for task in self._pipeline_tasks.values():
-            if not task.done():
-                task.cancel()
-        self._pipeline_tasks.clear()
+        manager = self.manager
+        target_voices: set[str] | None = None
+        if data.dept and manager is not None:
+            target_voices = {
+                plugin.name
+                for plugin in manager.get_plugins()
+                if "voice" in plugin.capabilities and data.dept in plugin.depts
+            }
+        if target_voices is not None:
+            for voice_id, task in list(self._pipeline_tasks.items()):
+                if voice_id in target_voices:
+                    if not task.done():
+                        task.cancel()
+                    self._pipeline_tasks.pop(voice_id, None)
+        else:
+            for task in self._pipeline_tasks.values():
+                if not task.done():
+                    task.cancel()
+            self._pipeline_tasks.clear()
 
     async def _emit_pcm(self, data: TextChunk) -> None:
         voice_id = data.voice_id

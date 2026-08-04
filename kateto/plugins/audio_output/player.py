@@ -172,14 +172,33 @@ class AudioOutputPlayer(Plugin):
         await super()._enqueue(envelope, handler)
 
     async def on_interrupt(self, data: InterruptData) -> None:
-        del data
-        self._close_stream()
-        if self._mixer_task is not None and not self._mixer_task.done():
-            self._mixer_task.cancel()
-        self._mixer_task = None
-        self._active_pipelines.clear()
-        self._pipeline_queues.clear()
-        await self._set_playing(False)
+        manager = self.manager
+        target_voices: set[str] | None = None
+        if data.dept and manager is not None:
+            target_voices = {
+                plugin.name
+                for plugin in manager.get_plugins()
+                if "voice" in plugin.capabilities and data.dept in plugin.depts
+            }
+        if target_voices is not None:
+            for voice_id in list(self._active_pipelines.keys()):
+                if voice_id in target_voices:
+                    self._active_pipelines.pop(voice_id, None)
+                    self._pipeline_queues.pop(voice_id, None)
+            if not self._active_pipelines:
+                self._close_stream()
+                if self._mixer_task is not None and not self._mixer_task.done():
+                    self._mixer_task.cancel()
+                self._mixer_task = None
+                await self._set_playing(False)
+        else:
+            self._close_stream()
+            if self._mixer_task is not None and not self._mixer_task.done():
+                self._mixer_task.cancel()
+            self._mixer_task = None
+            self._active_pipelines.clear()
+            self._pipeline_queues.clear()
+            await self._set_playing(False)
 
     async def _stream_for(self, data: AudioOutput) -> SoundDeviceOutputStream:
         requested_format = (data.sample_rate, data.channels)

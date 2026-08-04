@@ -116,6 +116,7 @@ class AudioOutputStatusData(EventModel):
 
 class InterruptData(EventModel):
     reason: str = "voice_activity"
+    dept: str | None = None
 
 
 class PluginErrorData(EventModel):

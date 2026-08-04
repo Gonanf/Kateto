@@ -58,6 +58,7 @@ class AudioInputConfig:
     silence_timeout: float
     vad_threshold: float
     interrupt_on_vad: bool
+    dept: str | None = "fun"
     callback_queue_capacity: int = 32
 
     @classmethod
@@ -87,6 +88,7 @@ class AudioInputConfig:
                 reason="must name an OS loopback or virtual input device",
             )
         device = "default" if not configured_device else configured_device
+        dept = settings.dept or (settings.depts[0] if settings.depts else "fun")
         return cls(
             source=source,
             device=device,
@@ -103,6 +105,7 @@ class AudioInputConfig:
             interrupt_on_vad=(
                 True if settings.interrupt_on_vad is None else settings.interrupt_on_vad
             ),
+            dept=dept,
             callback_queue_capacity=(
                 32 if settings.callback_queue_capacity is None else settings.callback_queue_capacity
             ),

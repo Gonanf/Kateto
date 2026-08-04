@@ -38,7 +38,8 @@ class AudioInputPlugin(Plugin):
         vad: SileroVad,
         capture_factory: CaptureFactory,
     ) -> None:
-        super().__init__(identity.name)
+        depts = (identity.config.dept,) if identity.config.dept else ()
+        super().__init__(identity.name, depts=depts)
         self._payload_source = identity.payload_source
         self._event_source = f"{identity.name}/{identity.payload_source}"
         self._config = identity.config
@@ -183,6 +184,7 @@ class AudioInputPlugin(Plugin):
         await self._require_manager().interrupt(
             reason="voice_activity",
             source=self._event_source,
+            dept=self._config.dept,
         )
 
     async def _emit_segment(self, samples: bytes) -> None:

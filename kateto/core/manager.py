@@ -149,12 +149,14 @@ class PluginManager:
         target: str | None = None,
         reason: str = "voice_activity",
         source: str = "plugin_manager",
+        dept: str | None = None,
     ) -> EventEnvelope[BaseModel]:
         return await self.emit(
             "interrupt",
-            InterruptData(reason=reason),
+            InterruptData(reason=reason, dept=dept),
             source=source,
             target=target,
+            dept=dept,
         )
 
     async def emit(
@@ -338,7 +340,7 @@ class PluginManager:
                 continue
             if envelope.target is not None and plugin_name != envelope.target:
                 continue
-            if envelope.dept is not None and envelope.dept not in plugin.depts:
+            if envelope.dept is not None and plugin.depts and envelope.dept not in plugin.depts:
                 continue
             if capabilities and not all(capability in plugin.capabilities for capability in capabilities):
                 continue

@@ -17,12 +17,6 @@ class InterruptExecutor(Plugin):
 
     async def on_interrupt(self, data: InterruptData) -> None:
         manager = self.required_manager
-        for plugin in manager.get_plugins():
-            if plugin is self:
-                continue
-            handler = plugin.iter_event_handlers().get("interrupt")
-            if handler is not None:
-                await handler(data)
         if self._interrupted:
             return
         self._interrupted = True

@@ -431,6 +431,10 @@ class VoiceAgent(Plugin):
                 await task
             except asyncio.CancelledError:
                 pass
+        pipeline = get_pipeline(self.name)
+        if pipeline is not None:
+            pipeline.token_queue = asyncio.Queue(maxsize=64)
+            pipeline.pcm_queue = asyncio.Queue(maxsize=32)
         await self._set_status(VoiceStatus.IDLE)
 
     async def on_generate(self, data: GenerateData) -> None:
