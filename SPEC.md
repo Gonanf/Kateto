@@ -63,6 +63,7 @@ a qué responder. Doktor puede anotar "hay reuniones los martes"; el martes, un
 ---
 
 ## 2. CLI con Cliff (openstack/cliff)
+- **Estado:** ✅ HECHO (2026-08-04).
 - **Ref:** https://github.com/openstack/cliff — framework de CLI basado en
   `argparse` + `stevedore` (plugins de comandos). Cada comando es una clase
   `Command` con `get_parser()` + `take_action()`.
@@ -79,6 +80,17 @@ a qué responder. Doktor puede anotar "hay reuniones los martes"; el martes, un
   al `pyproject.toml`. Mantener `uv`.
 - `__main__.py` queda como thin entrypoint que instancia la app Cliff y corre
   `run(argv)`.
+- **Realizado:** nuevo paquete `kateto/cli/` — `registry.py` (registro interno
+  `register_command()`/`all_commands()`, la opción "registry interno" del SPEC,
+  sin entry points stevedore), `commands.py` (`ConfigCheck`, `Run`, `Smoke`,
+  `Tui` como subclases de `cliff.command.Command`, con `--fixture` en
+  `Smoke`/`Tui` y manejo de errores de config → exit 2), `app.py`
+  (`KatetoCommandManager` que carga del registry + `KatetoApp(App)` con
+  `deferred_help=True`). `kateto/__main__.py` es ahora un thin entrypoint
+  (`main()` → `KatetoApp().run(argv)`, sin argv → help, exit 0). Se añadió
+  `cliff==4.15.0` a `pyproject.toml` + `uv.lock`. `kateto/tests/test_cli_live.py`
+  actualizado (help expone `run`/`config check`; dispatch de `run`
+  monkeypatchea `kateto.cli.commands`). Suite completa: 153 passed.
 
 ---
 

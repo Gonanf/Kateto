@@ -6,6 +6,7 @@ import sys
 import pytest
 
 from kateto import __main__ as cli
+from kateto.cli import commands as cli_commands
 
 
 def test_help_exposes_the_event_runtime_path() -> None:
@@ -18,7 +19,8 @@ def test_help_exposes_the_event_runtime_path() -> None:
 
     # Then: help makes the live run path discoverable without starting hardware or providers.
     assert top_level.returncode == 0, top_level.stderr
-    assert "kateto run" in top_level.stdout
+    assert "run" in top_level.stdout
+    assert "config check" in top_level.stdout
     assert run_help.returncode == 0, run_help.stderr
     assert "usage: kateto run" in run_help.stdout
 
@@ -33,8 +35,8 @@ def test_run_dispatches_to_the_event_runtime_without_a_fixture_substitute(monkey
     async def run_event_runtime_probe(config: str) -> None:
         calls.append(config)
 
-    monkeypatch.setattr(cli, "load_config", load_config_probe)
-    monkeypatch.setattr(cli, "run_event_runtime", run_event_runtime_probe)
+    monkeypatch.setattr(cli_commands, "load_config", load_config_probe)
+    monkeypatch.setattr(cli_commands, "run_event_runtime", run_event_runtime_probe)
     monkeypatch.setattr(sys, "argv", ["kateto", "run"])
 
     # When: the non-fixture run command is invoked.

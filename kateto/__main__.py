@@ -1,74 +1,17 @@
 from __future__ import annotations
 
-import asyncio  # noqa: ANYIO_OK
 import sys
-import subprocess
-from pathlib import Path
-from typing import Final
 
-from kateto.core.config import load_config
-from kateto.core.exceptions import ConfigError
-from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
-from kateto.plugins.system.tui import run_tui
-from kateto.run_mode import run_event_runtime
-
-_USAGE: Final = "usage: kateto [-h] | kateto config check | kateto run | kateto smoke --fixture | kateto tui [--fixture]\n"
-_RUN_USAGE: Final = "usage: kateto run\n"
-_CONFIG_ERRORS: Final = (ConfigError,)
+import kateto.cli.commands as _commands  # noqa: F401  (register CLI commands)
+from kateto.cli.app import KatetoApp
 
 
 def main() -> int:
-    match sys.argv[1:]:
-        case [] | ["-h"] | ["--help"]:
-            print(_USAGE, end="")
-            return 0
-        case ["config", "check"]:
-            return _check_config()
-        case ["run", "-h"] | ["run", "--help"]:
-            print(_RUN_USAGE, end="")
-            return 0
-        case ["run"]:
-            return _run_event_runtime()
-        case ["smoke", "--fixture"]:
-            # ponytail: smoke runs the core test suite instead of the
-            # deleted scripts/qa/acceptance.py.  Add a dedicated e2e
-            # runner when a full bounded smoke is needed.
-            return subprocess.run(
-                [sys.executable, "-m", "pytest",
-                 "kateto/tests/test_event_bus.py", "kateto/tests/test_plugin_manager.py",
-                 "kateto/tests/test_config.py", "kateto/tests/test_workflow.py",
-                 "kateto/tests/test_storage.py", "-q"],
-                check=False,
-            ).returncode
-        case ["tui"]:
-            run_tui()
-            return 0
-        case ["tui", "--fixture"]:
-            run_tui(fixture=True)
-            return 0
-        case _:
-            print(_USAGE, end="", file=sys.stderr)
-            return 2
-
-
-def _check_config() -> int:
-    try:
-        loaded = load_config()
-    except _CONFIG_ERRORS as error:
-        print(f"config check: {error}", file=sys.stderr)
-        return 2
-    print(f"config check: ok ({loaded.paths.config_dir})")
-    return 0
-
-
-def _run_event_runtime() -> int:
-    try:
-        loaded = load_config()
-        asyncio.run(run_event_runtime(loaded))
-    except (*_CONFIG_ERRORS, EventRuntimeConfigurationError) as error:
-        print(f"run: {error}", file=sys.stderr)
-        return 2
-    return 0
+    argv = sys.argv[1:]
+    if not argv:
+        _ = KatetoApp().run(["--help"])
+        return 0
+    return KatetoApp().run(argv)
 
 
 if __name__ == "__main__":
