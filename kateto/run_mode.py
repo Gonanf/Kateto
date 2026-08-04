@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from pathlib import Path
-from collections.abc import Callable
 from typing import Any, final
 
 from kateto.core.config import LoadedConfig
 from kateto.core.event import VoiceEnableData, VoiceEnabledData
 from kateto.core.discovery import (
     DiscoveryContext,
-    LiveAssemblyConfigurationError,
     discover_plugins,
 )
 from kateto.core.manager import PluginManager
@@ -22,13 +19,11 @@ from kateto.plugins.system.external_mcp import ExternalMcpManager
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
 from kateto.plugins.system.voice_manager import VoiceManager
 from kateto.plugins.system.http_server import HttpServer
-from kateto.plugins.connector.calendar import CalendarFailure, build_google_calendar_connector
 
 
 @dataclass(frozen=True, slots=True)
 class RuntimeDependencies:
     shared: dict[str, Any] | None = None
-    calendar_factory: Callable[[Path], Plugin] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,7 +256,6 @@ def build_runtime_owner(
     runtime_plugins = (
         *discovered,
         WorkflowEngine(config_dir=config.paths.config_dir),
-        *_configured_calendar(config, resolved_dependencies),
     )
     mcp_servers = _authorized_mcp_servers(manager, config)
     http_settings = config.settings.plugin.get("http_server")
@@ -291,35 +285,6 @@ async def run_event_runtime(
         _ = await asyncio.Event().wait()
     finally:
         await owner.stop()
-
-
-def _configured_calendar(
-    config: LoadedConfig,
-    dependencies: RuntimeDependencies,
-) -> tuple[Plugin, ...]:
-    settings = config.settings.plugin.get("connector_calendar")
-    if settings is None or not settings.enabled:
-        return ()
-    factory = dependencies.calendar_factory
-    if factory is None:
-        try:
-            connector = build_google_calendar_connector(
-                config.paths.config_dir,
-                endpoint=settings.endpoint,
-            )
-        except CalendarFailure as error:
-            raise LiveAssemblyConfigurationError(
-                field="plugin.connector_calendar",
-                reason=f"Google Calendar provider is unavailable: {error}",
-            ) from error
-    else:
-        connector = factory(config.paths.config_dir)
-    if connector.name != "connector_calendar":
-        raise LiveAssemblyConfigurationError(
-            field="plugin.connector_calendar",
-            reason="factory must return the connector_calendar plugin",
-        )
-    return (connector,)
 
 
 def _authorized_mcp_servers(

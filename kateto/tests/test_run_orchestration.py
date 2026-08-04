@@ -9,7 +9,6 @@ import pytest
 from kateto.core.config import load_config
 from kateto.core.event import GenerateData, VoiceRequestData, WorkflowRunData
 from kateto.core.plugin import Plugin
-from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
 from kateto.plugins.audio_input.base import AudioInputConfig
 from kateto.run_mode import RuntimeDependencies, RuntimeOwner, build_runtime_owner, run_event_runtime
 
@@ -44,22 +43,6 @@ class RecordingCaptureFactory:
         capture = RecordingCapture(self.started)
         self.captures.append(capture)
         return capture
-
-
-class RecordingCalendar(Plugin):
-    def __init__(self) -> None:
-        super().__init__("connector_calendar", capabilities=("calendar",))
-
-
-class CalendarFactory:
-    def __init__(self) -> None:
-        self.connector: RecordingCalendar | None = None
-
-    def __call__(self, config_dir: Path) -> RecordingCalendar:
-        del config_dir
-        connector = RecordingCalendar()
-        self.connector = connector
-        return connector
 
 
 class DynamicVoice(Plugin):
@@ -122,9 +105,6 @@ endpoint = "http://127.0.0.1:8093"
 [plugin.audio_output_player]
 enabled = true
 
-[plugin.connector_calendar]
-enabled = true
-
 [voice.doktor]
 enabled = true
 mcp_servers = ["system"]
@@ -150,30 +130,10 @@ def _write_run_config_with_voice(config_dir: Path, *, voice_name: str) -> None:
     )
 
 
-def _dependencies(captures: RecordingCaptureFactory, calendars: CalendarFactory) -> RuntimeDependencies:
+def _dependencies(captures: RecordingCaptureFactory) -> RuntimeDependencies:
     return RuntimeDependencies(
         shared={"vad": QuietVad(), "capture_factory": captures},
-        calendar_factory=calendars,
     )
-
-
-def test_run_owner_reports_actionable_calendar_provider_unavailability_without_factory(tmp_path: Path) -> None:
-    # Given: the live config enables calendar but production has no provider boundary configured.
-    _write_run_config(tmp_path)
-    captures = RecordingCaptureFactory()
-    dependencies = RuntimeDependencies(
-        shared={"vad": QuietVad(), "capture_factory": captures},
-    )
-
-    # When: the run owner assembles the configured production graph.
-    with pytest.raises(EventRuntimeConfigurationError) as failure:
-        build_runtime_owner(load_config(config_dir=tmp_path), dependencies=dependencies)
-
-    # Then: the failure identifies provider unavailability and the concrete credential remediation.
-    assert failure.value.field == "plugin.connector_calendar"
-    assert "Google Calendar provider is unavailable" in failure.value.reason
-    assert "credentials are missing" in failure.value.reason
-    assert "google-calendar-credentials.json" in failure.value.reason
 
 
 @pytest.mark.asyncio
@@ -181,18 +141,16 @@ async def test_run_owner_composes_starts_and_stops_configured_components(tmp_pat
     # Given: an explicitly authorized MCP grant and every run-mode owner configured.
     _write_run_config(tmp_path)
     captures = RecordingCaptureFactory()
-    calendars = CalendarFactory()
-    assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, calendars))
+    assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures))
 
     try:
         # When: the production run owner starts its single lifecycle.
         await assembly.start()
         tools = {tool.name for tool in await assembly.mcp_servers[0].fastmcp.list_tools()}
 
-        # Then: the live graph owns calendar, CLI, backlog, workflow, authorized MCP.
+        # Then: the live graph owns CLI, backlog, workflow, authorized MCP.
         assert isinstance(assembly, RuntimeOwner)
         assert {
-            "connector_calendar",
             "connector_cli",
             "backlog",
             "workflow_engine",
@@ -205,8 +163,6 @@ async def test_run_owner_composes_starts_and_stops_configured_components(tmp_pat
     finally:
         await assembly.stop()
 
-    assert calendars.connector is not None
-    assert not calendars.connector.enabled
     assert all(capture.closed for capture in captures.captures)
     assert not assembly.is_started
 
@@ -233,7 +189,7 @@ async def test_run_owner_tracks_dynamically_enabled_voice_and_delivers_workflow_
     dynamic_voice = DynamicVoice()
     monkeypatch.setattr("kateto.voices.factory.create_voice", lambda *args, **kwargs: dynamic_voice)
     captures = RecordingCaptureFactory()
-    assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, CalendarFactory()))
+    assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures))
 
     try:
         # When: the workflow engine starts and requests its disabled specialist.
@@ -256,13 +212,12 @@ async def test_run_owner_tracks_dynamically_enabled_voice_and_delivers_workflow_
 
 
 @pytest.mark.asyncio
-async def test_cancelling_run_event_runtime_closes_the_owned_configured_calendar(tmp_path: Path) -> None:
+async def test_cancelling_run_event_runtime_closes_the_owned_capture_boundaries(tmp_path: Path) -> None:
     # Given: a live run whose audio capture signals that the complete owner is running.
     _write_run_config(tmp_path)
     captures = RecordingCaptureFactory()
-    calendars = CalendarFactory()
     task = asyncio.create_task(
-        run_event_runtime(load_config(config_dir=tmp_path), dependencies=_dependencies(captures, calendars))
+        run_event_runtime(load_config(config_dir=tmp_path), dependencies=_dependencies(captures))
     )
 
     # When: the active run task is cancelled like an interrupted CLI session.
@@ -271,7 +226,5 @@ async def test_cancelling_run_event_runtime_closes_the_owned_configured_calendar
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    # Then: cancellation reaches the shared owner and releases its calendar and capture boundaries.
-    assert calendars.connector is not None
-    assert not calendars.connector.enabled
+    # Then: cancellation reaches the shared owner and releases its capture boundaries.
     assert all(capture.closed for capture in captures.captures)

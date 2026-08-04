@@ -24,7 +24,6 @@ Declared in `pyproject.toml` using `[project]` with `requires-python = ">=3.12"`
 - `anyio` — async compatibility layer
 - `edge-tts` — Microsoft Edge TTS (free, no API key)
 - `fastapi` — HTTP server for external integrations
-- `google-auth-oauthlib` — Google Calendar OAuth2
 - `httpx` — async HTTP client
 - `mcp` — Model Context Protocol server
 - `numpy` — audio buffer manipulation

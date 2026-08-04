@@ -17,13 +17,6 @@ All credentials go in `.env` — never in `config.toml`.
 
 ## Plugins
 
-### `connector_calendar` (P0)
-Google Calendar integration via OAuth2 installed-app flow.
-
-- Reads/writes calendar events
-- Token cached in `config/kateto/secrets/`
-- Listens to getter/setter events for calendar operations
-
 ### `connector_cli` (P0)
 Terminal command execution.
 

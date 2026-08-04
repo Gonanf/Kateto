@@ -16,7 +16,6 @@ All runtime dependencies are deliberate choices, not convenience bloat:
 | `sounddevice` | Cross-platform audio capture/playback via PortAudio. No stdlib API for audio device access. |
 | `textual` | Terminal UI framework. No stdlib equivalent for async TUI. |
 | `openai` | OpenAI-compatible LLM API (works with llama.cpp, OpenAI, and compatible servers). No stdlib equivalent. |
-| `google-auth-oauthlib` | Google Calendar OAuth2 flow. Conditional import via `importlib`, not loaded unless calendar connector is configured. |
 
 **Guiding principle:** Zero new dependencies unless they pull their weight. The existing set is reviewed and approved. No dep is removed without a concrete (not theoretical) stdlib alternative that covers the same edge cases.
 
