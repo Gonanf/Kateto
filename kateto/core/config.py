@@ -95,6 +95,7 @@ class VoiceSettings(_ConfigModel):
     reference_audio: str | None = None
     reference_clip: str | None = None
     stream: bool = True
+    tts_provider: str = "zonos"
     camb_voice_id: int | None = None
     camb_language: str | None = None
     edge_tts_voice: str | None = None

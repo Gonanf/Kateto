@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kateto Visual Overlay</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      overflow: hidden;
+      font-family: sans-serif;
+      color: white;
+    }
+    #container {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #avatar {
+      width: 120px;
+      height: 120px;
+      position: relative;
+    }
+    #subtitles {
+      background: rgba(0, 0, 0, 0.7);
+      padding: 8px 16px;
+      border-radius: 8px;
+      max-width: 600px;
+      text-align: center;
+      margin-top: 10px;
+      font-size: 1.1rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <canvas id="avatarCanvas" width="120" height="120"></canvas>
+    <div id="subtitles">...</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("avatarCanvas");
+    const ctx = canvas.getContext("2d");
+    const subtitles = document.getElementById("subtitles");
+
+    let isSpeaking = false;
+    let rms = 0;
+    let bobbingAngle = 0;
+
+    const ws = new WebSocket(`ws://${location.host}/ws/overlay`);
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "subtitle") {
+        subtitles.innerText = data.text;
+      } else if (data.type === "viseme") {
+        rms = data.rms || 0;
+        isSpeaking = rms > 0.01;
+      }
+    };
+
+    function render() {
+      ctx.clearRect(0, 0, 120, 120);
+
+      bobbingAngle += isSpeaking ? 0.1 : 0.02;
+      const bobY = Math.sin(bobbingAngle) * (isSpeaking ? 5 : 2);
+
+      // Draw avatar head
+      ctx.fillStyle = "#4a90e2";
+      ctx.beginPath();
+      ctx.arc(60, 50 + bobY, 40, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw eyes
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(45, 42 + bobY, 6, 0, Math.PI * 2);
+      ctx.arc(75, 42 + bobY, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw mouth based on RMS
+      const mouthHeight = Math.min(25, 4 + rms * 60);
+      ctx.fillStyle = "#e74c3c";
+      ctx.beginPath();
+      ctx.ellipse(60, 65 + bobY, 12, mouthHeight / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      requestAnimationFrame(render);
+    }
+
+    render();
+  </script>
+</body>
+</html>

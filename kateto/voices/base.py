@@ -875,6 +875,29 @@ class VoiceAgent(Plugin):
             )
         for skill in self._skills:
             parts.append(skill.instructions)
+
+        # Boson prompt block injection (F11)
+        if getattr(self.settings, "tts_provider", "") == "boson" and (set(self.profile.depts) & {"fun"}):
+            from kateto.voices.prompt_blocks import get_agent_prompt_block
+            block = get_agent_prompt_block("boson")
+            if block:
+                parts.append(block)
+
+        # Semantic memory injection (F7)
+        if self.manager is not None:
+            memory_plugin = self.manager._plugins.get("memory_sink")
+            if memory_plugin is not None and hasattr(memory_plugin, "query_memory"):
+                try:
+                    relevant = memory_plugin.query_memory(
+                        prompt,
+                        top_k=3,
+                        dept=self.profile.depts[0] if self.profile.depts else None,
+                    )
+                    if relevant:
+                        parts.append("Relevant memories:\n" + "\n".join(f"- {r}" for r in relevant))
+                except Exception:
+                    pass
+
         messages = [ChatMessage(role="system", content="\n\n".join(parts))]
         history = tuple(
             message
