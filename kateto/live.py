@@ -26,7 +26,8 @@ def build_event_runtime(
     *,
     shared: dict[str, Any] | None = None,
 ) -> tuple[PluginManager, tuple[Plugin, ...]]:
-    shared = shared or {}
+    if shared is None:
+        shared = {}
     manager = PluginManager()
     # Registered before discovery so system factories can bind services to it.
     shared["manager"] = manager

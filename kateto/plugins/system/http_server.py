@@ -76,7 +76,7 @@ class HttpServer:
                 items.append(EventListItem(
                     name=reg.name,
                     contract=contract_schema,
-                    receivers=[r.name for r in reg.receivers],
+                    receivers=list(reg.receivers),
                 ))
             return items
 
@@ -176,10 +176,17 @@ class HttpServer:
 
     async def start(self) -> None:
         import uvicorn
+        log.info("HttpServer.start called for {}:{}", self._host, self._port)
         config = uvicorn.Config(self._app, host=self._host, port=self._port, log_level="warning")
         self._server = uvicorn.Server(config)
         self._serve_task = asyncio.create_task(self._server.serve(), name="kateto-http-server")
-        while not self._server.started and not self._serve_task.done():
+        for i in range(100):
+            if self._server.started:
+                log.info("uvicorn.Server.started is True after {} checks", i)
+                break
+            if self._serve_task.done():
+                log.error("uvicorn serve_task finished early. Exception: {}", self._serve_task.exception())
+                break
             await asyncio.sleep(0.05)
         if self._serve_task.done() and self._serve_task.exception() is not None:
             exc = self._serve_task.exception()
