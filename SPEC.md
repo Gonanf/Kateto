@@ -121,6 +121,7 @@ a qué responder. Doktor puede anotar "hay reuniones los martes"; el martes, un
 ---
 
 ## 4. `run_mode.py` sin dependencias de plugins (desacoplar bootstrap)
+- **Estado:** ✅ HECHO (2026-08-04).
 **Objetivo:** `run_mode.py` debe arrancar el runtime SIN importar ni conocer
 ningún plugin por nombre. Hoy el ensamblado es hardcodeado; se vuelve
 declarativo por descubrimiento.
@@ -188,11 +189,33 @@ acopla el bootstrap al core.
   `add_tools()`).
 
 ### Criterio de done (run_mode)
-- `run_mode.py` no contiene ningún
-  `from kateto.plugins... import <PluginConcreto>` ni
-  `from kateto.core.workflow_engine import WorkflowEngine`.
-- Agregar un plugin = crear archivo en `kateto/plugins/...`, sin tocar
-  `run_mode.py`.
+- ✅ `run_mode.py` no importa ni instancia ningún plugin concreto en runtime:
+  los únicos imports a `kateto.plugins.*` quedan bajo `if TYPE_CHECKING:` y solo
+  anotan los campos de `RuntimeComponents`/propiedades (no se ejecutan ni
+  acoplan el ensamblado). Sin `from kateto.core.workflow_engine import WorkflowEngine`:
+  la propiedad `workflow_engine` resuelve por nombre
+  (`plugin.name == "workflow_engine"`).
+- ✅ Agregar un plugin = crear archivo en `kateto/plugins/...` (o su
+  `create_plugins(ctx)`), sin tocar `run_mode.py`.
+- **Realizado (2026-08-04):** nuevo `kateto/plugins/system/__init__.py` con
+  `create_plugins(ctx)` — el factory que `_scan_plugins` ya invocaba — construye
+  los servicios no-plugin (ExternalMcpManager, McpEventServers internos,
+  HttpServer config-gated) en `ctx.shared` y devuelve los plugins core siempre
+  activos (`VoiceManager`, `WorkflowEngine`) para discovery. `kateto/live.py`
+  crea el `PluginManager` ANTES de discovery y lo registra en
+  `shared["manager"]`. `VoiceManager` es autónomo: eliminado el callback
+  `on_voice_enable` de run_mode; el handler resuelve su `DiscoveryContext` vía
+  `discovery_context_for((self,))` (import lazy de `create_voice` para compat
+  con el monkeypatch de `test_run_orchestration`) y replica la lógica previa de
+  voice_enabled/creación dinámica. `run_mode.py` sin imports de plugins en
+  runtime: eliminados `ExternalMcpManager`, `McpEventServer`/`McpServerOptions`,
+  `VoiceManager`, `HttpServer`, `WorkflowEngine` y `create_voice`;
+  `RuntimeOwner.start()` deja de instanciar `VoiceManager`;
+  `_authorized_mcp_servers` eliminado (los McpEventServers salen de
+  `shared["mcp_servers"]`); `build_runtime_owner` lee
+  mcp_servers/http_server/external_mcp de `shared`.
+  `voices/factory.py`: `external_mcp = ctx.external_mcp or ctx.get_shared("external_mcp")`.
+  Suite completa: 153 passed; `smoke --fixture`: 44 passed.
 
 ---
 

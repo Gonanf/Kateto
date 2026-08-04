@@ -3,25 +3,20 @@ from __future__ import annotations
 import asyncio
 import sys
 from dataclasses import dataclass
-from typing import Any, final
+from typing import TYPE_CHECKING, Any, final
 
 from loguru import logger
 
 from kateto.core.config import LoadedConfig
-from kateto.core.event import VoiceEnableData, VoiceEnabledData
-from kateto.core.discovery import (
-    DiscoveryContext,
-    discover_plugins,
-)
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.core.workflow import WorkflowCatalog
-from kateto.core.workflow_engine import WorkflowEngine
 from kateto.live import build_event_runtime
-from kateto.plugins.system.external_mcp import ExternalMcpManager
-from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
-from kateto.plugins.system.voice_manager import VoiceManager
-from kateto.plugins.system.http_server import HttpServer
+
+if TYPE_CHECKING:
+    from kateto.plugins.system.external_mcp import ExternalMcpManager
+    from kateto.plugins.system.http_server import HttpServer
+    from kateto.plugins.system.mcp_server import McpEventServer
 
 
 def _configure_logging(config: LoadedConfig) -> None:
@@ -104,16 +99,18 @@ class RuntimeOwner:
         return self._components.http_server
 
     @property
-    def workflow_engine(self) -> WorkflowEngine:
+    def workflow_engine(self) -> Plugin:
         return next(
             plugin
             for plugin in self.runtime_plugins
-            if isinstance(plugin, WorkflowEngine)
+            if plugin.name == "workflow_engine"
         )
 
     @property
     def workflow_catalog(self) -> WorkflowCatalog:
-        return self.workflow_engine.catalog
+        catalog = getattr(self.workflow_engine, "catalog", None)
+        assert isinstance(catalog, WorkflowCatalog)
+        return catalog
 
     @property
     def is_started(self) -> bool:
@@ -125,11 +122,6 @@ class RuntimeOwner:
         try:
             for plugin in self._plugins:
                 await self._manager.enable_plugin(plugin)
-            voice_mgr = VoiceManager(
-                self._config.settings.plugin.get("voice_manager") if self._config else None,
-                on_voice_enable=self.on_voice_enable,
-            )
-            await self._manager.enable_plugin(voice_mgr)
             # Start external MCP servers after plugins so voice enable runs first,
             # but before internal event-server refresh so external tools are visible.
             external_mcp = self.external_mcp
@@ -191,47 +183,6 @@ class RuntimeOwner:
             if isinstance(result, BaseException):
                 raise result
 
-    async def on_voice_enable(self, data: VoiceEnableData) -> None:
-        voice_name = data.voice_name
-        config = self._config
-        if config is None:
-            msg = "runtime config not available for voice enable"
-            raise RuntimeError(msg)
-        configured_name = next(
-            (name for name in config.settings.voice if name.casefold() == voice_name.casefold()),
-            None,
-        )
-        voice_settings = config.settings.voice.get(configured_name) if configured_name else None
-        if voice_settings is None:
-            msg = f"voice not configured: {voice_name}"
-            raise ValueError(msg)
-        for plugin in self._manager.get_plugins():
-            if plugin.name.casefold() == voice_name.casefold():
-                if plugin.enabled:
-                    await self._manager.emit(
-                        "voice_enabled",
-                        VoiceEnabledData(voice_name=plugin.name),
-                        source="voice_manager",
-                    )
-                    return
-                await self._manager.enable_plugin(plugin)
-                await self._manager.emit(
-                    "voice_enabled",
-                    VoiceEnabledData(voice_name=plugin.name),
-                    source="voice_manager",
-                )
-                return
-        from kateto.voices.factory import create_voice
-
-        ctx = DiscoveryContext(config=config, shared={}, external_mcp=self._components.external_mcp)
-        voice = create_voice(ctx, voice_settings, voice_name=configured_name or voice_name)
-        await self._manager.enable_plugin(voice)
-        await self._manager.emit(
-            "voice_enabled",
-            VoiceEnabledData(voice_name=voice.name),
-            source="voice_manager",
-        )
-
 
 def build_runtime_owner(
     config: LoadedConfig,
@@ -239,45 +190,20 @@ def build_runtime_owner(
     dependencies: RuntimeDependencies | None = None,
 ) -> RuntimeOwner:
     resolved_dependencies = RuntimeDependencies() if dependencies is None else dependencies
-
-    # --- external MCP (created early so voice factory can reference it) ---
-    external_mcp = ExternalMcpManager()
-    for voice_name, voice in config.settings.voice.items():
-        if not voice.enabled:
-            continue
-        for server_name in voice.mcp_servers:
-            if server_name == "system":
-                continue
-            server_settings = config.settings.mcp_servers.get(server_name)
-            if server_settings is not None:
-                external_mcp.configure(voice_name, server_name, server_settings)
-
     shared = resolved_dependencies.shared
     if shared is None:
         shared = {}
-
-    manager, discovered = build_event_runtime(
-        config,
-        shared=shared,
-        external_mcp=external_mcp,
-    )
-    runtime_plugins = (
-        *discovered,
-        WorkflowEngine(config_dir=config.paths.config_dir),
-    )
-    mcp_servers = _authorized_mcp_servers(manager, config)
-    http_settings = config.settings.plugin.get("http_server")
-    http_server = HttpServer(manager) if http_settings is not None and http_settings.enabled else None
+    manager, runtime_plugins = build_event_runtime(config, shared=shared)
     return RuntimeOwner(
         manager=manager,
         plugins=runtime_plugins,
         config=config,
         components=RuntimeComponents(
             plugins=(),
-            mcp_servers=mcp_servers,
+            mcp_servers=shared.get("mcp_servers") or (),
             workflow_voices=tuple(config.settings.voice.keys()),
-            external_mcp=external_mcp if external_mcp._clients else None,
-            http_server=http_server,
+            external_mcp=shared.get("external_mcp"),
+            http_server=shared.get("http_server"),
         ),
     )
 
@@ -294,21 +220,3 @@ async def run_event_runtime(
         _ = await asyncio.Event().wait()
     finally:
         await owner.stop()
-
-
-def _authorized_mcp_servers(
-    manager: PluginManager,
-    config: LoadedConfig,
-) -> tuple[McpEventServer, ...]:
-    return tuple(
-        McpEventServer(
-            manager,
-            config.settings,
-            McpServerOptions(server_name=server_name, voice_name=voice_name),
-            config_dir=config.paths.config_dir,
-        )
-        for voice_name, voice in config.settings.voice.items()
-        if voice.enabled
-        for server_name in voice.mcp_servers
-        if server_name == "system"  # only internal event servers
-    )

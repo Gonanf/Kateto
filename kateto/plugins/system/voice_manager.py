@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from loguru import logger
 import random
-from collections.abc import Callable
-from typing import Any
 
 from kateto.core.config import PluginSettings
+from kateto.core.discovery import discovery_context_for
 from kateto.core.event import (
     GenerateData,
     InterjectData,
@@ -29,17 +28,11 @@ _DEFAULT_PROBABILITIES: dict[str, float] = {
 
 
 class VoiceManager(Plugin):
-    def __init__(
-        self,
-        settings: PluginSettings | None = None,
-        *,
-        on_voice_enable: Callable[[VoiceEnableData], Any] | None = None,
-    ) -> None:
+    def __init__(self, settings: PluginSettings | None = None) -> None:
         super().__init__("voice_manager", streaming=True)
         self._settings = settings
         self._probabilities = dict(_DEFAULT_PROBABILITIES)
         self._speaking: str | None = None
-        self._on_voice_enable = on_voice_enable
         if settings is not None and settings.voice_probabilities:
             self._probabilities.update(settings.voice_probabilities)
 
@@ -104,8 +97,43 @@ class VoiceManager(Plugin):
             )
 
     async def on_voice_enable(self, data: VoiceEnableData) -> None:
-        if self._on_voice_enable is not None:
-            await self._on_voice_enable(data)
+        # Self-contained: resolves discovery context instead of a run_mode callback.
+        manager = self.required_manager
+        ctx = discovery_context_for((self,))
+        if ctx is None:
+            log.warning(
+                "voice_manager: discovery context unavailable, ignoring voice enable for {}",
+                data.voice_name,
+            )
+            return
+        voice_name = data.voice_name
+        configured_name = next(
+            (name for name in ctx.config.settings.voice if name.casefold() == voice_name.casefold()),
+            None,
+        )
+        voice_settings = ctx.config.settings.voice.get(configured_name) if configured_name else None
+        if voice_settings is None:
+            msg = f"voice not configured: {voice_name}"
+            raise ValueError(msg)
+        for plugin in manager.get_plugins():
+            if plugin.name.casefold() == voice_name.casefold():
+                if not plugin.enabled:
+                    await manager.enable_plugin(plugin)
+                await manager.emit(
+                    "voice_enabled",
+                    VoiceEnabledData(voice_name=plugin.name),
+                    source=self.name,
+                )
+                return
+        from kateto.voices.factory import create_voice
+
+        voice = create_voice(ctx, voice_settings, voice_name=configured_name or voice_name)
+        await manager.enable_plugin(voice)
+        await manager.emit(
+            "voice_enabled",
+            VoiceEnabledData(voice_name=voice.name),
+            source=self.name,
+        )
 
     def _eligible_voices(self) -> list[str]:
         manager = self.manager

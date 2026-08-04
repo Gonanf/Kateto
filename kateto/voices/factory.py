@@ -77,7 +77,7 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
                 endpoint=voice_settings.endpoint,
                 api_key=voice_settings.api_key,
             )
-        external_mcp = ctx.external_mcp
+        external_mcp = ctx.external_mcp or ctx.get_shared("external_mcp")
         executor = VoiceToolExecutor(
             config_dir=ctx.config.paths.config_dir,
             cli_settings=ctx.config.settings.cli,
