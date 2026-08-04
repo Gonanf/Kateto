@@ -57,7 +57,12 @@ def create_plugins(ctx: DiscoveryContext) -> tuple[Plugin, ...]:
         if http_settings is not None and http_settings.enabled:
             host = http_settings.host or "127.0.0.1"
             port = http_settings.port or 8080
+            from loguru import logger
+            logger.info("HttpServer enabled in config. Instantiating on {}:{}", host, port)
             ctx.get_shared("http_server", lambda: HttpServer(manager, host=host, port=port))
+        else:
+            from loguru import logger
+            logger.debug("HttpServer disabled or not configured in settings")
 
     voice_manager_settings = ctx.config.settings.plugin.get("voice_manager")
     voice_manager = VoiceManager(

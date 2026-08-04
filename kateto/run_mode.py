@@ -137,6 +137,8 @@ class RuntimeOwner:
                 server.refresh_tools()
             http_server = self.http_server
             if http_server is not None:
+                from loguru import logger
+                logger.info("Starting HttpServer from RuntimeOwner...")
                 await http_server.start()
         except BaseException:  # noqa: BROAD_EXCEPT_OK
             await self.stop()

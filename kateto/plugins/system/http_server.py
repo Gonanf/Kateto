@@ -49,6 +49,7 @@ class HttpServer:
         self._app = self._build_app()
         self._server: Any = None
         self._observers: list[WebSocket] = []
+        log.info("Initialized HttpServer instance for {}:{}", self._host, self._port)
 
     def _build_app(self) -> FastAPI:
         @asynccontextmanager
