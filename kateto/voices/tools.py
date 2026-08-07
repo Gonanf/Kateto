@@ -82,6 +82,8 @@ class VoiceToolExecutor:
                 if self._disable_scheduling_tools:
                     return json.dumps({"error": "scheduling tools are disabled"})
                 return await self._schedule_event(arguments)
+            case "get_current_time":
+                return self._get_current_time()
             case _:
                 if self._external_manager is not None and self._mcp_server_names:
                     result = await self._external_manager.try_call_tool(
@@ -467,6 +469,9 @@ class VoiceToolExecutor:
         except Exception as e:
             return json.dumps({"error": str(e)})
 
+    def _get_current_time(self) -> str:
+        return datetime.now().isoformat()
+
 
 def build_event_tools(manager: PluginManager) -> tuple[ChatCompletionToolParam, ...]:
     tools: list[ChatCompletionToolParam] = []
@@ -806,6 +811,17 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
             },
         },
     ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "get_current_time",
+            "description": "Return the current local date and time.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    ),
 )
 
 
@@ -838,11 +854,6 @@ class KatetoToolset:
                 description=description,
                 prepare=self._make_prepare(name, parameters),
             )
-        ts.add_function(
-            self._get_current_time,
-            name="get_current_time",
-            description="Return the current local date and time.",
-        )
         return ts
 
     def _make_prepare(self, tool_name: str, parameters: dict[str, Any]) -> Any:
@@ -869,6 +880,3 @@ class KatetoToolset:
     @property
     def toolset(self) -> Any:
         return self._toolset
-
-    def _get_current_time(self) -> str:
-        return datetime.now().isoformat()
