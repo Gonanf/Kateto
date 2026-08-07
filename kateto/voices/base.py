@@ -878,6 +878,7 @@ class VoiceAgent(Plugin):
             parts.append(journal)
         from kateto.voices.prompt_blocks import (
             get_agent_prompt_block,
+            get_delegation_prompt_block,
             get_mcp_prompt_block,
             get_workflow_prompt_block,
         )
@@ -889,6 +890,9 @@ class VoiceAgent(Plugin):
             mcp_servers = getattr(self._tool_executor, "_mcp_server_names", ())
             if mcp_servers:
                 parts.append(get_mcp_prompt_block(mcp_servers))
+
+        if self._pydantic_agent is not None:
+            parts.append(get_delegation_prompt_block())
 
         for skill in self._skills:
             parts.append(skill.instructions)

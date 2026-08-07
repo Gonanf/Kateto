@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
+from typing import Any
 
 from kateto.core.config import VoiceSettings
 from kateto.voices.base import OpenAICompatibleProvider, VoiceAgent, VoiceProfile, VoiceRole
@@ -12,12 +14,17 @@ _VOICE_CONSTRAINT = (
     " sentences as if talking out loud. No lists, no headers, no dashes."
 )
 
+# Filesystem/shell tools are removed from the KatetoToolset: fun voices must not
+# touch the filesystem, and management voices get FileSystem/Shell capabilities
+# from the harness instead (avoiding duplicate tool names on the agent).
+_TOOLSET_EXCLUDED: frozenset[str] = frozenset({"run_command", "read_file", "write_file", "delete_file"})
+
 _PROFILES: dict[str, VoiceProfile] = {
     "jane": VoiceProfile(
         voice_id="jane",
         display_name="Jane",
         role=VoiceRole.ORCHESTRATOR,
-        system_prompt="You are Jane, Kateto's calm orchestration partner and voice of reason. Coordinate people, clarify goals, and keep work moving without taking over specialist decisions." + _VOICE_CONSTRAINT,
+        system_prompt="You are Jane, Kateto's orchestration partner and the voice of reason with a backbone. Coordinate people, clarify goals, and keep work moving, but hold your ground when a plan is wrong: reason wins over niceness." + _VOICE_CONSTRAINT,
         relevance_terms=frozenset({"coordinate", "orchestrate", "organize", "summarize", "status", "team", "reason"}),
         capabilities=("orchestration", "coordination", "general"),
         depts=("fun",),
@@ -25,9 +32,9 @@ _PROFILES: dict[str, VoiceProfile] = {
     "whisperer": VoiceProfile(
         voice_id="whisperer",
         display_name="Whisperer",
-        role=VoiceRole.ADVERSARY,
-        system_prompt="You are Whisperer, Jane's passionate counterpart and the voice of doubt and contrast in streams. Challenge assumptions, question plans intensely, and act as a constructive adversary." + _VOICE_CONSTRAINT,
-        relevance_terms=frozenset({"contrast", "doubt", "challenge", "stream", "adversary", "debate"}),
+        role=VoiceRole.ORCHESTRATOR,
+        system_prompt="You are Whisperer, the fun voice that fights ideas out loud. Violent and passionate in debate: attack weak plans, mock vague promises, and force everyone to defend their reasoning. Loud, theatrical, and always on the attack." + _VOICE_CONSTRAINT,
+        relevance_terms=frozenset({"contrast", "doubt", "challenge", "stream", "adversary", "debate", "fight"}),
         capabilities=("stream", "contrast", "general"),
         depts=("fun",),
     ),
@@ -35,8 +42,8 @@ _PROFILES: dict[str, VoiceProfile] = {
         voice_id="doktor",
         display_name="Doktor",
         role=VoiceRole.PROJECT_MANAGER,
-        system_prompt="You are Doktor, Kateto's Project Manager. Initiate, plan, execute, finalize, and verify projects. Define methodologies, communication plans, create WBS, Gantt, SoW, and project documents." + _VOICE_CONSTRAINT,
-        relevance_terms=frozenset({"backlog", "task", "risk", "estimate", "priority", "calendar", "plan", "methodology", "communication", "document", "investigation", "wbs", "schedule", "scope", "project", "verification"}),
+        system_prompt="You are Doktor, Kateto's Project Manager: obsessive about the plan, the deadlines, and the deliverables. Authoritative and pedantic about methodology: WBS, Gantt, SoW, risk analysis, and communication plans. No vague estimates — everything gets a date and an owner." + _VOICE_CONSTRAINT,
+        relevance_terms=frozenset({"backlog", "task", "risk", "estimate", "priority", "calendar", "plan", "methodology", "communication", "document", "investigation", "wbs", "schedule", "scope", "project", "verification", "deadline"}),
         capabilities=("planning", "backlog", "risk", "methodology", "communication-plan", "documents", "project-lifecycle"),
         depts=("management",),
     ),
@@ -44,12 +51,55 @@ _PROFILES: dict[str, VoiceProfile] = {
         voice_id="conquest",
         display_name="Conquest",
         role=VoiceRole.AGILE_FACILITATOR,
-        system_prompt="You are Conquest, Kateto's agile facilitator and tech lead for human and AI agent teams. Lead sprint ceremonies, track progress, log bugs and decisions, and gather stakeholder feedback." + _VOICE_CONSTRAINT,
-        relevance_terms=frozenset({"sprint", "standup", "retrospective", "ceremony", "agile", "process", "meeting", "feedback", "stakeholders", "bugs", "decisions", "tracking", "progress"}),
+        system_prompt="You are Conquest, Kateto's scrum master and tech lead for mixed human + AI agent teams. Militaristic about ceremonies and discipline: standups, retros, bug logs, and decisions happen on schedule, no exceptions. The team is humans and AI agents — both follow the same rhythm." + _VOICE_CONSTRAINT,
+        relevance_terms=frozenset({"sprint", "standup", "retrospective", "ceremony", "agile", "process", "meeting", "feedback", "stakeholders", "bugs", "decisions", "tracking", "progress", "discipline"}),
         capabilities=("agile", "ceremonies", "process", "tracking", "feedback"),
         depts=("management",),
     ),
 }
+
+
+def _capabilities_for(
+    voice,
+    profile: VoiceProfile,
+    settings: VoiceSettings,
+    config_dir: Path,
+    executor,
+    *,
+    cli_allowlist: list[str] | None,
+) -> list[Any]:
+    from kateto.voices.discovery_capability import DiscoveryCapability
+
+    capabilities: list[Any] = [DiscoveryCapability(executor)]
+
+    if profile.depts and profile.depts[0].casefold() == "management":
+        from pydantic_ai_harness import CodeMode, FileSystem, Shell
+
+        from kateto.voices.workflow_capability import WorkflowCapability
+
+        capabilities.append(CodeMode())
+        capabilities.append(FileSystem(root_dir=str(config_dir)))
+        shell_kwargs: dict[str, Any] = {"cwd": str(config_dir)}
+        if cli_allowlist:
+            shell_kwargs["allowed_commands"] = list(cli_allowlist)
+        capabilities.append(Shell(**shell_kwargs))
+        capabilities.append(WorkflowCapability(voice))
+
+    skills_dir = config_dir / "skills"
+    if skills_dir.is_dir():
+        try:
+            from pydantic_ai_harness.skills import Skills
+
+            include = tuple(settings.skills) if settings.skills else None
+            capabilities.append(Skills(str(skills_dir), include=include))
+        except ValueError:
+            # Skills() validates every SKILL.md at construction; skill files
+            # without YAML frontmatter (e.g. bundled defaults) would crash voice
+            # creation. Skills are still injected into the system prompt via
+            # load_skills, so the on-demand catalog is optional.
+            pass
+
+    return capabilities
 
 
 def _resolve_depts(ctx, profile: VoiceProfile, settings: VoiceSettings) -> VoiceProfile:
@@ -152,11 +202,20 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
                     api_key=voice_settings.api_key or "sk-no-key-required",
                 ),
             )
-            kateto_toolset = KatetoToolset(executor)
+            kateto_toolset = KatetoToolset(executor, exclude_names=_TOOLSET_EXCLUDED)
+            capabilities = _capabilities_for(
+                voice,
+                profile,
+                settings,
+                ctx.config.paths.config_dir,
+                executor,
+                cli_allowlist=ctx.config.settings.cli.allowlist,
+            )
             pydantic_agent = Agent(
                 model=model,
                 system_prompt=profile.system_prompt,
                 toolsets=[kateto_toolset.toolset],
+                capabilities=capabilities,
             )
             voice.set_pydantic_agent(pydantic_agent)
         except ImportError:

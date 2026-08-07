@@ -144,11 +144,26 @@ class McpServerSettings(_ConfigModel):
 
 
 class CliSettings(_ConfigModel):
-    allowlist: list[str] = Field(min_length=1)
+    allowlist: list[str] | None = Field(
+        default_factory=lambda: sorted(SAFE_CLI_COMMANDS),
+        description=(
+            "Executables the CLI connector may run. Defaults to SAFE_CLI_COMMANDS. "
+            "Set to [] to disable the allowlist entirely (unrestricted execution — security risk)."
+        ),
+    )
+    cli_restricted: bool = Field(
+        default=True,
+        description=(
+            "When False, skip per-argument path/shell validation. The command "
+            "allowlist (if any) still applies. Disabling is a security risk."
+        ),
+    )
 
     @field_validator("allowlist")
     @classmethod
-    def validate_allowlist(cls, value: list[str]) -> list[str]:
+    def validate_allowlist(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
         for executable in value:
             if executable not in SAFE_CLI_COMMANDS:
                 raise ValueError(f"contains rejected command {executable!r}")
@@ -293,6 +308,8 @@ def validate_cli_command(command: Sequence[str], *, settings: CliSettings) -> tu
     if not command:
         raise ConfigError("cli command rejected: <empty>")
     executable = command[0]
-    if Path(executable).name != executable or executable not in settings.allowlist:
+    allowlist = settings.allowlist
+    # None/[] allowlist = unrestricted execution (explicit opt-in-out of the allowlist).
+    if allowlist and (Path(executable).name != executable or executable not in allowlist):
         raise ConfigError(f"cli command rejected: {executable}")
     return tuple(command)

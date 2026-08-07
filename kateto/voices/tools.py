@@ -773,19 +773,27 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
 
 
 class KatetoToolset:
-    def __init__(self, executor: VoiceToolExecutor) -> None:
+    def __init__(
+        self,
+        executor: VoiceToolExecutor,
+        *,
+        exclude_names: frozenset[str] = frozenset(),
+    ) -> None:
         self._executor = executor
+        self._exclude_names = exclude_names
         self._toolset = self._build_toolset()
 
     def _build_toolset(self) -> Any:
         from pydantic_ai import FunctionToolset
         ts = FunctionToolset()
         for tool_def in BUILTIN_TOOLS:
-            name = tool_def["function"]["name"]
+            function = tool_def["function"]
+            name = function["name"]
+            if name in self._exclude_names:
+                continue
             if name == "schedule_event" and getattr(self._executor, "_disable_scheduling_tools", False):
                 continue
-            description = tool_def["function"]["description"]
-            parameters = tool_def["function"]["parameters"]
+            description = function.get("description", "")
             ts.add_function(
                 self._make_tool_func(name),
                 name=name,

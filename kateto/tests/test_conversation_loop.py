@@ -105,7 +105,7 @@ async def test_audio_to_execute_emits_ordered_transcript_classification_and_one_
             if event.name == "text_chunk" and isinstance(event.data, TextChunk) and event.data.text
         ]
         assert len(text_chunk_voices) == 1
-        assert text_chunk_voices[0] in ("jane", "doktor", "conquest")
+        assert text_chunk_voices[0] in ("jane", "doktor", "conquest", "whisperer")
     finally:
         await manager.close()
 

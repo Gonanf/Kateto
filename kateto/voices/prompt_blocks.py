@@ -53,3 +53,14 @@ def get_mcp_prompt_block(mcp_server_names: tuple[str, ...] | None = None) -> str
         "- Tool results are dispatched back as event results for seamless context synthesis."
     )
     return "\n".join(lines)
+
+
+def get_delegation_prompt_block() -> str:
+    return (
+        "DELEGATION INSTRUCTION:\n"
+        "- You can ask other voices for input. Use `request_generation(target_voice, prompt)` "
+        "to request a spoken response from another team member.\n"
+        "- Use `directory_voices()` to list the team and their departments before delegating, "
+        "and `directory_plugins()` / `directory_events()` to inspect the runtime.\n"
+        "- Delegate specialized work to the right voice instead of doing it yourself."
+    )

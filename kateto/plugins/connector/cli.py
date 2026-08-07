@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from kateto.core.event import BacklogAddData, BacklogItem, BacklogPriority, BacklogStatus, EventEnvelope, EventModel, InterruptData, TodoItemData
 from kateto.core.config import ConfigError, CliSettings, validate_cli_command
 from kateto.core.plugin import EventHandler, Plugin
+from loguru import logger
 
 
 _SHELL_CONTROL_CHARACTERS: Final[frozenset[str]] = frozenset(";&|<>`$!\r\n\x00")
@@ -100,7 +101,15 @@ class CliConnector(Plugin):
         working_directory: Path | None = None,
     ) -> None:
         super().__init__("connector_cli")
-        self._settings = CliSettings(allowlist=list(settings.allowlist))
+        self._settings = CliSettings(
+            allowlist=list(settings.allowlist) if settings.allowlist is not None else None,
+            cli_restricted=settings.cli_restricted,
+        )
+        if not self._settings.allowlist:
+            logger.warning(
+                "CLI allowlist is empty or disabled: command execution is unrestricted. "
+                "This is a security risk; set cli.allowlist or keep cli_restricted=true."
+            )
         self._runner = SubprocessCommandRunner() if runner is None else runner
         self._working_directory = (Path.cwd() if working_directory is None else working_directory).resolve()
         self._active_task: asyncio.Task[None] | None = None
@@ -193,6 +202,8 @@ def normalize_argv(command: str, *, settings: CliSettings, working_directory: Pa
     except ValueError as error:
         raise CliArgumentRejectedError(reason="malformed argv") from error
     normalized = validate_cli_command(argv, settings=settings)
+    if not settings.cli_restricted:
+        return normalized
     resolved_working_directory = working_directory.resolve()
     for argument in normalized[1:]:
         _validate_argument(argument, working_directory=resolved_working_directory)
