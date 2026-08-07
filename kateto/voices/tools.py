@@ -6,6 +6,7 @@ import os
 import re
 import shlex
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, get_origin
 
@@ -53,6 +54,8 @@ class VoiceToolExecutor:
                 return self._read_file(arguments)
             case "write_file":
                 return self._write_file(arguments)
+            case "delete_file":
+                return self._delete_file(arguments)
             case "send_event":
                 return await self._send_event(arguments)
             case "list_events":
@@ -137,7 +140,9 @@ class VoiceToolExecutor:
                 fields = {}
                 for name, field_info in reg.contract.model_fields.items():
                     fields[name] = {
-                        "type": field_info.annotation.__name__ if field_info.annotation else "unknown",
+                        "type": getattr(field_info.annotation, "__name__", str(field_info.annotation))
+                        if field_info.annotation
+                        else "unknown",
                         "required": field_info.is_required(),
                     }
                 events.append({
@@ -447,6 +452,21 @@ class VoiceToolExecutor:
         except Exception as e:
             return json.dumps({"error": str(e)})
 
+    def _delete_file(self, args: dict[str, Any]) -> str:
+        path = args.get("path", "")
+        if not path:
+            return json.dumps({"error": "no path provided"})
+        resolved = (self._working_directory / path).resolve()
+        if not resolved.is_relative_to(self._working_directory):
+            return json.dumps({"error": "path escapes working directory"})
+        if not resolved.is_file():
+            return json.dumps({"error": f"file not found: {path}"})
+        try:
+            resolved.unlink()
+            return json.dumps({"deleted": str(resolved.relative_to(self._working_directory))})
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
 
 def build_event_tools(manager: PluginManager) -> tuple[ChatCompletionToolParam, ...]:
     tools: list[ChatCompletionToolParam] = []
@@ -515,7 +535,7 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
         type="function",
         function={
             "name": "read_file",
-            "description": "Read the contents of a file. Returns the text content.",
+            "description": "Read the contents of a text file from the working directory and return it. Use to inspect generated documents, plans, notes, or source files before editing. Content longer than 50000 characters is truncated. Paths are relative to the working directory; do not use absolute paths.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -532,20 +552,37 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
         type="function",
         function={
             "name": "write_file",
-            "description": "Write content to a file. Creates parent directories if needed.",
+            "description": "Create or overwrite a file with the given content. Creates parent directories automatically. Use this to produce any deliverable: markdown documents, plans, reports, notes, or code files. Paths are relative to the working directory; do not use absolute paths.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Relative path to the file to write",
+                        "description": "Relative path of the file to create or overwrite (e.g. 'docs/plan.md')",
                     },
                     "content": {
                         "type": "string",
-                        "description": "The content to write to the file",
+                        "description": "The full text content to write to the file",
                     },
                 },
                 "required": ["path", "content"],
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "delete_file",
+            "description": "Delete a file from the working directory. Use when a file is obsolete, incorrect, or should be removed. Paths are relative to the working directory; do not use absolute paths.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path of the file to delete",
+                    }
+                },
+                "required": ["path"],
             },
         },
     ),
@@ -794,12 +831,30 @@ class KatetoToolset:
             if name == "schedule_event" and getattr(self._executor, "_disable_scheduling_tools", False):
                 continue
             description = function.get("description", "")
+            parameters = function.get("parameters") or {"type": "object", "properties": {}}
             ts.add_function(
                 self._make_tool_func(name),
                 name=name,
                 description=description,
+                prepare=self._make_prepare(name, parameters),
             )
+        ts.add_function(
+            self._get_current_time,
+            name="get_current_time",
+            description="Return the current local date and time.",
+        )
         return ts
+
+    def _make_prepare(self, tool_name: str, parameters: dict[str, Any]) -> Any:
+        del tool_name
+        # add_function introspects the **kwargs signature, which yields an empty
+        # schema; inject the real parameter schema at request time instead.
+        def _prepare(ctx: Any, tool_def: Any) -> Any:
+            del ctx
+            tool_def.parameters_json_schema = parameters
+            return tool_def
+
+        return _prepare
 
     def _make_tool_func(self, tool_name: str) -> Any:
         executor = self._executor
@@ -814,3 +869,6 @@ class KatetoToolset:
     @property
     def toolset(self) -> Any:
         return self._toolset
+
+    def _get_current_time(self) -> str:
+        return datetime.now().isoformat()

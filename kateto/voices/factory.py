@@ -59,6 +59,36 @@ _PROFILES: dict[str, VoiceProfile] = {
 }
 
 
+def _ensure_voice_skills(config_dir: Path, voice_name: str) -> Path:
+    """Create the per-voice skills dir with symlinks to the shared skills.
+
+    Shared skills live in `config_dir/skills/<name>/SKILL.md`. Each voice gets
+    `config_dir/voices/<voice>/skills/<name>` symlinked to the shared package,
+    plus any voice-specific skill packages already present there. `Skills()`
+    then points at the per-voice dir only. Symlink failures degrade silently:
+    `Skills()` raises ValueError at construction when a target lacks frontmatter
+    or is missing, which `_capabilities_for` already handles.
+    """
+    voice_dir = config_dir / "voices" / voice_name
+    voice_skills_dir = voice_dir / "skills"
+    shared_skills_dir = config_dir / "skills"
+    if not shared_skills_dir.is_dir():
+        return voice_skills_dir
+    try:
+        voice_skills_dir.mkdir(parents=True, exist_ok=True)
+        for skill_dir in shared_skills_dir.iterdir():
+            if not skill_dir.is_dir() or not (skill_dir / "SKILL.md").is_file():
+                continue
+            link = voice_skills_dir / skill_dir.name
+            if not link.exists():
+                link.symlink_to(skill_dir, target_is_directory=True)
+    except OSError:
+        # ponytail: no fallback copy; Skills() raising ValueError and being
+        # skipped keeps voice creation safe if symlinks are unsupported.
+        pass
+    return voice_skills_dir
+
+
 def _capabilities_for(
     voice,
     profile: VoiceProfile,
@@ -71,33 +101,117 @@ def _capabilities_for(
     from kateto.voices.discovery_capability import DiscoveryCapability
 
     capabilities: list[Any] = [DiscoveryCapability(executor)]
+    voice_name = profile.voice_id
+    voice_dir = config_dir / "voices" / voice_name
+    voice_skills_dir = _ensure_voice_skills(config_dir, voice_name)
+
+    # --- Base capabilities for every voice ---
+    # Each block is individually guarded: a missing harness extra or a model
+    # that rejects the capability degrades to fewer capabilities instead of
+    # breaking voice creation.
+    try:
+        from pydantic_ai_harness.memory import FileStore, Memory
+
+        capabilities.append(Memory(store=FileStore(voice_dir / "memory")))
+    except ImportError:
+        pass
+
+    try:
+        from pydantic_ai.capabilities import WebFetch, WebSearch
+
+        capabilities.append(WebSearch())
+        capabilities.append(WebFetch())
+    except ImportError:
+        pass
+
+    try:
+        from pydantic_ai_harness.filesystem import FileSystem
+
+        capabilities.append(FileSystem(root_dir=str(voice_dir)))
+    except ImportError:
+        pass
+
+    try:
+        from pydantic_ai.capabilities import ToolSearch
+
+        capabilities.append(ToolSearch())
+    except ImportError:
+        pass
+
+    try:
+        from pydantic_ai.capabilities import Thinking
+
+        capabilities.append(Thinking())
+    except (ImportError, ValueError):
+        pass  # model does not support thinking
+
+    try:
+        from pydantic_ai_harness.system_reminders import Reminder, SystemReminders
+
+        capabilities.append(SystemReminders(reminders=[Reminder(content=_VOICE_CONSTRAINT)]))
+    except (ImportError, ValueError):
+        pass
+
+    try:
+        from pydantic_ai_harness.conversation_search import ConversationSearch, SnapshotHistorySource
+        from pydantic_ai_harness.step_persistence import InMemoryStepStore
+
+        capabilities.append(ConversationSearch(source=SnapshotHistorySource(InMemoryStepStore())))
+    except (ImportError, TypeError):
+        pass
+
+    try:
+        from pydantic_ai_harness.planning import InMemoryPlanStore, Planning
+
+        capabilities.append(Planning(store=InMemoryPlanStore()))
+    except ImportError:
+        pass
+
+    try:
+        from pydantic_ai_harness.capability_creation import CapabilityCreation
+
+        capabilities.append(CapabilityCreation(directory=voice_dir / "capabilities"))
+    except ImportError:
+        pass
+
+    try:
+        from pydantic_ai_harness.spend import InMemorySpendStore, SpendLimits
+
+        capabilities.append(SpendLimits(store=InMemorySpendStore()))
+    except ImportError:
+        pass
+
+    try:
+        from pydantic_ai_harness.media import DiskMediaStore
+
+        capabilities.append(DiskMediaStore(directory=voice_dir / "media"))
+    except ImportError:
+        pass
+
+    try:
+        from pydantic_ai_harness.skills import Skills
+
+        include = tuple(settings.skills) if settings.skills else None
+        capabilities.append(Skills(str(voice_skills_dir), include=include))
+    except ValueError:
+        # Skills() validates every SKILL.md at construction; skill files
+        # without YAML frontmatter (e.g. bundled defaults) would crash voice
+        # creation. Skills are still injected into the system prompt via
+        # load_skills, so the on-demand catalog is optional.
+        pass
 
     if profile.depts and profile.depts[0].casefold() == "management":
-        from pydantic_ai_harness import CodeMode, FileSystem, Shell
+        from pydantic_ai_harness.code_mode import CodeMode
+        from pydantic_ai_harness.shell import Shell
 
         from kateto.voices.workflow_capability import WorkflowCapability
 
         capabilities.append(CodeMode())
-        capabilities.append(FileSystem(root_dir=str(config_dir)))
-        shell_kwargs: dict[str, Any] = {"cwd": str(config_dir)}
+        shell_kwargs: dict[str, Any] = {"cwd": str(voice_dir)}
         if cli_allowlist:
             shell_kwargs["allowed_commands"] = list(cli_allowlist)
         capabilities.append(Shell(**shell_kwargs))
         capabilities.append(WorkflowCapability(voice))
-
-    skills_dir = config_dir / "skills"
-    if skills_dir.is_dir():
-        try:
-            from pydantic_ai_harness.skills import Skills
-
-            include = tuple(settings.skills) if settings.skills else None
-            capabilities.append(Skills(str(skills_dir), include=include))
-        except ValueError:
-            # Skills() validates every SKILL.md at construction; skill files
-            # without YAML frontmatter (e.g. bundled defaults) would crash voice
-            # creation. Skills are still injected into the system prompt via
-            # load_skills, so the on-demand catalog is optional.
-            pass
 
     return capabilities
 
