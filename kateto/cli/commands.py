@@ -5,12 +5,14 @@ import asyncio  # noqa: ANYIO_OK
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import override
 
 from cliff.command import Command
 
+from kateto.cli.agency_convert import _resolve_source, convert_agency_pack
 from kateto.cli.registry import register_command
 from kateto.core.config import load_config
 from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
@@ -102,19 +104,7 @@ def _install_pack(*, source: str, config_dir: Path, force: bool) -> _Installed:
     Those layouts are already consumed by create_voice() and _ensure_voice_skills(),
     so copying them into config_dir is the whole job. Copy-missing unless --force.
     """
-    src_path = Path(source)
-    if src_path.exists():
-        pack_dir = src_path.resolve()
-    else:
-        # ponytail: git URL → clone into cache, pull if present. No new dep.
-        cache = Path.home() / ".cache" / "kateto" / "packs" / Path(source).stem.replace(".git", "")
-        if cache.is_dir():
-            subprocess.run(["git", "-C", str(cache), "pull", "--ff-only"], check=False)
-            pack_dir = cache
-        else:
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run(["git", "clone", "--depth", "1", source, str(cache)], check=True)
-            pack_dir = cache
+    pack_dir = _resolve_source(source, cache_root=Path.home() / ".cache" / "kateto" / "packs")
 
     installed_voices: list[str] = []
     installed_skills: list[str] = []
@@ -138,26 +128,37 @@ def _install_pack(*, source: str, config_dir: Path, force: bool) -> _Installed:
 
 
 class Install(Command):
-    """Install a voice/skill pack from a git repo or local path."""
+    """Install a voice/skill pack, or convert an agency-agents repo with --from-agency."""
 
     @override
     def get_parser(self, prog_name: str) -> argparse.ArgumentParser:
         parser = super().get_parser(prog_name)
-        _ = parser.add_argument("source", help="git URL or local path to a pack")
+        _ = parser.add_argument("source", help="git URL or local path to a pack (or agency-agents repo with --from-agency)")
         _ = parser.add_argument("--force", action="store_true", help="overwrite existing voices/skills")
+        _ = parser.add_argument("--from-agency", action="store_true", help="treat source as an agency-agents repo (division dirs of .md agents)")
         return parser
 
     @override
     def take_action(self, parsed_args: object) -> int:
         source = str(getattr(parsed_args, "source"))
         force = bool(getattr(parsed_args, "force", False))
+        from_agency = bool(getattr(parsed_args, "from_agency", False))
         try:
             loaded = load_config()
         except _CONFIG_ERRORS as error:
             _ = self.app.stderr.write(f"install: {error}\n")
             return 2
         try:
-            result = _install_pack(source=source, config_dir=loaded.paths.config_dir, force=force)
+            if from_agency:
+                repo_dir = _resolve_source(source, cache_root=Path.home() / ".cache" / "kateto" / "agency")
+                with tempfile.TemporaryDirectory(prefix="kateto-agency-") as tmp:
+                    converted = convert_agency_pack(repo_dir, Path(tmp), force=force)
+                    if not converted:
+                        _ = self.app.stdout.write("install: no agency agents converted\n")
+                        return 0
+                    result = _install_pack(source=tmp, config_dir=loaded.paths.config_dir, force=force)
+            else:
+                result = _install_pack(source=source, config_dir=loaded.paths.config_dir, force=force)
         except (subprocess.CalledProcessError, OSError) as error:
             _ = self.app.stderr.write(f"install: {error}\n")
             return 2
