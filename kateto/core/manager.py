@@ -42,6 +42,7 @@ class PluginManager:
             msg = "event limit must not be negative"
             raise ValueError(msg)
         self._plugins: dict[str, Plugin] = {}
+        self._registered: dict[str, Plugin] = {}
         self._subscribers: dict[str, list[Subscriber]] = {}
         self._contracts: dict[str, type[BaseModel]] = {
             "error": PluginErrorData,
@@ -64,7 +65,12 @@ class PluginManager:
             raise TypeError(msg)
         self._contracts[name] = contract
 
+    def register_plugin(self, plugin: Plugin) -> None:
+        """Record a plugin so it is listed/controllable even while disabled."""
+        self._registered[plugin.name] = plugin
+
     async def enable_plugin(self, plugin: Plugin) -> None:
+        self.register_plugin(plugin)
         existing = self._plugins.get(plugin.name)
         if existing is not None and existing is not plugin:
             msg = f"plugin already registered: {plugin.name}"
@@ -112,6 +118,12 @@ class PluginManager:
 
     def get_plugins(self) -> tuple[Plugin, ...]:
         return tuple(self._plugins.values())
+
+    def get_all_plugins(self) -> tuple[Plugin, ...]:
+        return tuple(self._registered.values())
+
+    def get_plugin(self, name: str) -> Plugin | None:
+        return self._registered.get(name)
 
     def get_events(self) -> tuple[EventEnvelope[BaseModel], ...]:
         return tuple(self._events)

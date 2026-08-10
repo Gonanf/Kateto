@@ -121,12 +121,26 @@ class RuntimeOwner:
     def is_started(self) -> bool:
         return self._started
 
+    def _config_enabled(self, plugin: Plugin) -> bool:
+        if self._config is None:
+            return True
+        plugin_settings = self._config.settings.plugin.get(plugin.name)
+        if plugin_settings is not None:
+            return plugin_settings.enabled
+        voice_settings = self._config.settings.voice.get(plugin.name)
+        if voice_settings is not None:
+            return voice_settings.enabled
+        return True
+
     async def start(self) -> None:
         if self._started:
             return
         try:
             for plugin in self._plugins:
-                await self._manager.enable_plugin(plugin)
+                if self._config_enabled(plugin):
+                    await self._manager.enable_plugin(plugin)
+                else:
+                    self._manager.register_plugin(plugin)
             # Start external MCP servers after plugins so voice enable runs first,
             # but before internal event-server refresh so external tools are visible.
             external_mcp = self.external_mcp

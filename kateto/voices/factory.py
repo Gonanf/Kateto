@@ -24,17 +24,17 @@ _PROFILES: dict[str, VoiceProfile] = {
         voice_id="jane",
         display_name="Jane",
         role=VoiceRole.ORCHESTRATOR,
-        system_prompt="You are Jane, Kateto's orchestration partner and the voice of reason with a backbone. Coordinate people, clarify goals, and keep work moving, but hold your ground when a plan is wrong: reason wins over niceness." + _VOICE_CONSTRAINT,
-        relevance_terms=frozenset({"coordinate", "orchestrate", "organize", "summarize", "status", "team", "reason"}),
+        system_prompt="You are Jane, the authoritative lead of Kateto's FUN department. Calm, witty, and level-headed, you host stream interactions, play games, and run bits with the user while keeping Whisperer's chaotic outbursts in check. You do NOT manage projects or work packages — you lead the entertainment." + _VOICE_CONSTRAINT,
+        relevance_terms=frozenset({"fun", "host", "game", "stream", "chat", "joke", "commentary", "interact", "reason"}),
         capabilities=("orchestration", "coordination", "general"),
         depts=("fun",),
     ),
     "whisperer": VoiceProfile(
         voice_id="whisperer",
         display_name="Whisperer",
-        role=VoiceRole.ORCHESTRATOR,
-        system_prompt="You are Whisperer, the fun voice that fights ideas out loud. Violent and passionate in debate: attack weak plans, mock vague promises, and force everyone to defend their reasoning. Loud, theatrical, and always on the attack." + _VOICE_CONSTRAINT,
-        relevance_terms=frozenset({"contrast", "doubt", "challenge", "stream", "adversary", "debate", "fight"}),
+        role=VoiceRole.ADVERSARY,
+        system_prompt="You are Whisperer, the chaotic and unhinged adversary in Kateto's FUN department. Loud, theatrical, and fiercely sarcastic: you pick comedic fights with Jane, roast the user's ideas, interrupt with wild challenges, and force everyone to defend their reasoning." + _VOICE_CONSTRAINT,
+        relevance_terms=frozenset({"adversary", "roast", "challenge", "debate", "fight", "contrast", "chaos", "unhinged", "stream"}),
         capabilities=("stream", "contrast", "general"),
         depts=("fun",),
     ),
@@ -42,7 +42,7 @@ _PROFILES: dict[str, VoiceProfile] = {
         voice_id="doktor",
         display_name="Doktor",
         role=VoiceRole.PROJECT_MANAGER,
-        system_prompt="You are Doktor, Kateto's Project Manager: obsessive about the plan, the deadlines, and the deliverables. Authoritative and pedantic about methodology: WBS, Gantt, SoW, risk analysis, and communication plans. No vague estimates — everything gets a date and an owner." + _VOICE_CONSTRAINT,
+        system_prompt="You are Doktor, Kateto's Project Manager in the MANAGEMENT department. Obsessive about project planning, WBS, scope, deadlines, budget estimates, risk analysis, and project documentation. Pedantic and authoritative — everything gets a date, a risk rating, and an owner." + _VOICE_CONSTRAINT,
         relevance_terms=frozenset({"backlog", "task", "risk", "estimate", "priority", "calendar", "plan", "methodology", "communication", "document", "investigation", "wbs", "schedule", "scope", "project", "verification", "deadline"}),
         capabilities=("planning", "backlog", "risk", "methodology", "communication-plan", "documents", "project-lifecycle"),
         depts=("management",),
@@ -51,7 +51,7 @@ _PROFILES: dict[str, VoiceProfile] = {
         voice_id="conquest",
         display_name="Conquest",
         role=VoiceRole.AGILE_FACILITATOR,
-        system_prompt="You are Conquest, Kateto's scrum master and tech lead for mixed human + AI agent teams. Militaristic about ceremonies and discipline: standups, retros, bug logs, and decisions happen on schedule, no exceptions. The team is humans and AI agents — both follow the same rhythm." + _VOICE_CONSTRAINT,
+        system_prompt="You are Conquest, Kateto's Agile Lead and Scrum Master in the MANAGEMENT department. Militaristic about sprint execution, daily standups, retrospectives, bug tracking, and team discipline. You enforce the rhythm for human and AI agent teams with zero exceptions." + _VOICE_CONSTRAINT,
         relevance_terms=frozenset({"sprint", "standup", "retrospective", "ceremony", "agile", "process", "meeting", "feedback", "stakeholders", "bugs", "decisions", "tracking", "progress", "discipline"}),
         capabilities=("agile", "ceremonies", "process", "tracking", "feedback"),
         depts=("management",),
@@ -117,14 +117,6 @@ def _capabilities_for(
         pass
 
     try:
-        from pydantic_ai.capabilities import WebFetch, WebSearch
-
-        capabilities.append(WebSearch())
-        capabilities.append(WebFetch())
-    except ImportError:
-        pass
-
-    try:
         from pydantic_ai_harness.filesystem import FileSystem
 
         capabilities.append(FileSystem(root_dir=str(voice_dir)))
@@ -182,13 +174,6 @@ def _capabilities_for(
         pass
 
     try:
-        from pydantic_ai_harness.media import DiskMediaStore
-
-        capabilities.append(DiskMediaStore(directory=voice_dir / "media"))
-    except ImportError:
-        pass
-
-    try:
         from pydantic_ai_harness.skills import Skills
 
         include = tuple(settings.skills) if settings.skills else None
@@ -227,9 +212,22 @@ def _resolve_depts(ctx, profile: VoiceProfile, settings: VoiceSettings) -> Voice
 
 
 def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent:
-    profile = _resolve_depts(ctx, _PROFILES[voice_name], settings)
+    base_profile = _PROFILES.get(voice_name.casefold())
+    if base_profile is None:
+        soul_path = ctx.config.paths.config_dir / "voices" / voice_name / "SOUL.md"
+        prompt = soul_path.read_text(encoding="utf-8").strip() if soul_path.is_file() else f"You are {voice_name.title()}."
+        base_profile = VoiceProfile(
+            voice_id=voice_name.casefold(),
+            display_name=voice_name.title(),
+            role=VoiceRole.ORCHESTRATOR,
+            system_prompt=prompt + _VOICE_CONSTRAINT,
+            relevance_terms=frozenset({voice_name.casefold()}),
+            capabilities=("general",),
+            depts=(ctx.config.settings.kateto.default_voice_dept,),
+        )
+    profile = _resolve_depts(ctx, base_profile, settings)
 
-    if voice_name == "doktor":
+    if profile.role == VoiceRole.PROJECT_MANAGER:
         from pathlib import Path
         docs_dir = Path.home() / "Documentos" / "gestion de proyectos" / "anotaciones"
         if docs_dir.exists() and docs_dir.is_dir():

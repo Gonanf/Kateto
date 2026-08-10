@@ -20,11 +20,7 @@ from kateto.voices.base import VoiceProfile
 
 log = logger
 
-_DEFAULT_PROBABILITIES: dict[str, float] = {
-    "jane": 0.7,
-    "doktor": 0.15,
-    "conquest": 0.1,
-}
+_DEFAULT_PROBABILITIES: dict[str, float] = {}
 
 
 class VoiceManager(Plugin):
@@ -115,7 +111,7 @@ class VoiceManager(Plugin):
         if voice_settings is None:
             msg = f"voice not configured: {voice_name}"
             raise ValueError(msg)
-        for plugin in manager.get_plugins():
+        for plugin in manager.get_all_plugins():
             if plugin.name.casefold() == voice_name.casefold():
                 if not plugin.enabled:
                     await manager.enable_plugin(plugin)

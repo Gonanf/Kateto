@@ -65,6 +65,31 @@ async def test_execute_broadcasts_to_dynamically_named_voice_plugins() -> None:
 
 
 @pytest.mark.asyncio
+async def test_execute_broadcasts_to_voices_when_voice_manager_disabled() -> None:
+    # Given: voice plugins but no voice_manager registered.
+    manager = PluginManager()
+    await manager.enable_plugin(_TestableClassifierExecutor(FixtureClassifier(Classification.EXECUTE)))
+    voices = (DynamicVoicePlugin("voice_orchid"), DynamicVoicePlugin("voice_sable"))
+    for voice in voices:
+        await manager.enable_plugin(voice)
+
+    try:
+        # When: a transcription is classified as executable.
+        await manager.emit("transcription", TranscriptionData(text="open the calendar"), source="fixture")
+        await manager.wait_for_idle()
+
+        # Then: generate is broadcast (no target) so voices receive it directly.
+        generate_events = [event for event in manager.get_events() if event.name == "generate"]
+        assert [(event.target, event.data) for event in generate_events] == [
+            (None, GenerateData(prompt="open the calendar")),
+        ]
+        assert voices[0].prompts == ["open the calendar"]
+        assert voices[1].prompts == ["open the calendar"]
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("category", (Classification.IGNORE_SELF_TALK, Classification.IGNORE_THIRD_PARTY))
 async def test_ignore_classification_does_not_generate(category: Classification) -> None:
     # Given: dynamically named subscribers and a classifier that ignores the transcription.

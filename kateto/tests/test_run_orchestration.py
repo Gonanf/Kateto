@@ -46,8 +46,8 @@ class RecordingCaptureFactory:
 
 
 class DynamicVoice(Plugin):
-    def __init__(self) -> None:
-        super().__init__("doktor", capabilities=("voice",))
+    def __init__(self, name: str = "doktor") -> None:
+        super().__init__(name, capabilities=("voice",))
         self.requests: list[VoiceRequestData] = []
         self.generates: list[GenerateData] = []
 
@@ -187,7 +187,11 @@ async def test_run_owner_tracks_dynamically_enabled_voice_and_delivers_workflow_
         encoding="utf-8",
     )
     dynamic_voice = DynamicVoice()
-    monkeypatch.setattr("kateto.voices.factory.create_voice", lambda *args, **kwargs: dynamic_voice)
+    jane_voice = DynamicVoice("jane")
+    monkeypatch.setattr(
+        "kateto.voices.factory.create_voice",
+        lambda *args, **kwargs: dynamic_voice if kwargs.get("voice_name") == "doktor" else jane_voice,
+    )
     captures = RecordingCaptureFactory()
     assembly = build_runtime_owner(load_config(config_dir=tmp_path), dependencies=_dependencies(captures))
 

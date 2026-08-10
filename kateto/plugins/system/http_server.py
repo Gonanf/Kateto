@@ -5,16 +5,21 @@ import json
 from loguru import logger
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from kateto.core.event import EventEnvelope
 from kateto.core.manager import PluginManager
 
 log = logger
+
+OVERLAY_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "index.html"
+VALID_AVATAR_FILES = ("top.png", "mouth.png")
 
 
 class EventListItem(BaseModel):
@@ -42,10 +47,18 @@ class SendEventRequest(BaseModel):
 
 
 class HttpServer:
-    def __init__(self, manager: PluginManager, *, host: str = "127.0.0.1", port: int = 8080) -> None:
+    def __init__(
+        self,
+        manager: PluginManager,
+        *,
+        host: str = "127.0.0.1",
+        port: int = 8080,
+        config_dir: Path | None = None,
+    ) -> None:
         self._manager = manager
         self._host = host
         self._port = port
+        self._config_dir = config_dir
         self._app = self._build_app()
         self._server: Any = None
         self._observers: list[WebSocket] = []
@@ -100,7 +113,7 @@ class HttpServer:
                     enabled=p.enabled,
                     capabilities=list(p.capabilities),
                 )
-                for p in self._manager.get_plugins()
+                for p in self._manager.get_all_plugins()
             ]
 
         @app.post("/events/send")
@@ -128,19 +141,19 @@ class HttpServer:
 
         @app.post("/plugins/{name}/enable")
         async def enable_plugin(name: str) -> dict[str, str]:
-            for plugin in self._manager.get_plugins():
-                if plugin.name == name:
-                    await self._manager.enable_plugin(plugin)
-                    return {"status": "ok"}
-            return {"error": f"plugin not found: {name}"}
+            plugin = self._manager.get_plugin(name)
+            if plugin is None:
+                return {"error": f"plugin not found: {name}"}
+            await self._manager.enable_plugin(plugin)
+            return {"status": "ok"}
 
         @app.post("/plugins/{name}/disable")
         async def disable_plugin(name: str) -> dict[str, str]:
-            for plugin in self._manager.get_plugins():
-                if plugin.name == name:
-                    await self._manager.disable_plugin(plugin)
-                    return {"status": "ok"}
-            return {"error": f"plugin not found: {name}"}
+            plugin = self._manager.get_plugin(name)
+            if plugin is None:
+                return {"error": f"plugin not found: {name}"}
+            await self._manager.disable_plugin(plugin.name)
+            return {"status": "ok"}
 
         @app.websocket("/events/stream")
         async def event_stream(ws: WebSocket) -> None:
@@ -153,6 +166,41 @@ class HttpServer:
                 pass
             finally:
                 self._observers.remove(ws)
+
+        @app.get("/overlay")
+        async def overlay() -> FileResponse:
+            return FileResponse(OVERLAY_HTML)
+
+        @app.get("/voices/{name}/{file}")
+        async def voice_asset(name: str, file: str) -> FileResponse:
+            if file not in VALID_AVATAR_FILES or self._config_dir is None:
+                raise HTTPException(status_code=404, detail="not found")
+            voices_dir = (self._config_dir / "voices").resolve()
+            path = (voices_dir / name / file).resolve()
+            try:
+                if not path.is_relative_to(voices_dir) or not path.is_file():
+                    raise HTTPException(status_code=404, detail="not found")
+            except ValueError:
+                raise HTTPException(status_code=404, detail="not found")
+            return FileResponse(path)
+
+        @app.websocket("/ws/overlay")
+        async def overlay_stream(ws: WebSocket) -> None:
+            await ws.accept()
+            plugin = self._manager.get_plugin("visual_overlay")
+            register = getattr(plugin, "register_websocket", None)
+            unregister = getattr(plugin, "unregister_websocket", None)
+            if register is None or unregister is None:
+                await ws.close()
+                return
+            await register(ws)
+            try:
+                while True:
+                    await ws.receive_text()
+            except WebSocketDisconnect:
+                pass
+            finally:
+                await unregister(ws)
 
         return app
 

@@ -47,8 +47,6 @@ def required_plugin_settings(config: LoadedConfig, name: str) -> PluginSettings:
     settings = config.settings.plugin.get(name)
     if settings is None:
         raise LiveAssemblyConfigurationError(field=f"plugin.{name}", reason="must be configured")
-    if not settings.enabled:
-        raise LiveAssemblyConfigurationError(field=f"plugin.{name}.enabled", reason="must be true")
     return settings
 
 
@@ -105,5 +103,4 @@ def _scan_voices(ctx: DiscoveryContext) -> list[Plugin]:
     return [
         _factory(ctx, settings, voice_name=name)
         for name, settings in ctx.config.settings.voice.items()
-        if settings.enabled
     ]

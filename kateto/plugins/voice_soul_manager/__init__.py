@@ -49,7 +49,4 @@ class VoiceSOULManager(Plugin):
 
 
 def create_plugins(ctx: DiscoveryContext) -> list[Plugin]:
-    settings = ctx.config.settings.plugin.get("voice_soul_manager")
-    if settings is not None and not settings.enabled:
-        return []
     return [VoiceSOULManager(config_dir=ctx.config.paths.config_dir)]

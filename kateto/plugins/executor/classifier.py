@@ -70,11 +70,12 @@ class ClassifierExecutor(Plugin):
             return
         match classification.category:
             case Classification.EXECUTE:
+                target = "voice_manager" if self._voice_manager_enabled() else None
                 _ = await manager.emit(
                     "generate",
                     GenerateData(prompt=classification.text),
                     source=self.name,
-                    target="voice_manager",
+                    target=target,
                 )
             case Classification.IGNORE_SELF_TALK | Classification.IGNORE_THIRD_PARTY:
                 return
@@ -133,6 +134,15 @@ class ClassifierExecutor(Plugin):
             return False
         workflow = classification.workflow
         return workflow is not None and workflow.casefold() in {"project-initiation", "requirements-gathering"}
+
+    def _voice_manager_enabled(self) -> bool:
+        manager = self.manager
+        if manager is None:
+            return False
+        return any(
+            plugin.enabled and plugin.name == "voice_manager"
+            for plugin in manager.get_all_plugins()
+        )
 
     def _workflow_router_enabled(self) -> bool:
         manager = self.manager

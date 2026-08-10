@@ -33,7 +33,7 @@ def create_plugins(ctx):
         ("audio_output_player", "kateto.plugins.audio_output.player", "AudioOutputPlayer", "audio_output_player"),
     ]:
         settings = ctx.config.settings.plugin.get(settings_key)
-        if settings is None or not settings.enabled:
+        if settings is None:
             continue
         try:
             mod = import_module(module_name)

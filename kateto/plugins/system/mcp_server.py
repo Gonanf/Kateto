@@ -126,6 +126,7 @@ class McpEventServer:
         self._event_tool_names: set[str] = set()
         self._manager.add_event_observer(self._observe_event)
         self._register_memory_tools()
+        self._register_plugin_tools()
         self.refresh_tools()
 
     @property
@@ -148,6 +149,31 @@ class McpEventServer:
         self.fastmcp.add_tool(self._memory_read_tool, name="memory_read")
         self.fastmcp.add_tool(self._memory_append_tool, name="memory_append")
         self.fastmcp.add_tool(self._memory_set_soul_tool, name="memory_set_soul")
+
+    def _register_plugin_tools(self) -> None:
+        self.fastmcp.add_tool(self._list_plugins_tool, name="list_plugins", structured_output=True)
+        self.fastmcp.add_tool(self._enable_plugin_tool, name="enable_plugin", structured_output=True)
+        self.fastmcp.add_tool(self._disable_plugin_tool, name="disable_plugin", structured_output=True)
+
+    async def _list_plugins_tool(self) -> list[dict[str, str | bool]]:
+        return [
+            {"name": plugin.name, "enabled": plugin.enabled}
+            for plugin in self._manager.get_all_plugins()
+        ]
+
+    async def _enable_plugin_tool(self, name: str) -> dict[str, str]:
+        plugin = self._manager.get_plugin(name)
+        if plugin is None:
+            return {"error": f"plugin not found: {name}"}
+        await self._manager.enable_plugin(plugin)
+        return {"status": "ok"}
+
+    async def _disable_plugin_tool(self, name: str) -> dict[str, str]:
+        plugin = self._manager.get_plugin(name)
+        if plugin is None:
+            return {"error": f"plugin not found: {name}"}
+        await self._manager.disable_plugin(plugin.name)
+        return {"status": "ok"}
 
     async def _memory_read_tool(
         self, source: str

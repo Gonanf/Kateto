@@ -13,7 +13,6 @@
 | 2 | Sin tests end-to-end | Media | `kateto/tests/` | [02-no-e2e-tests.md](./bugs/02-no-e2e-tests.md) |
 | 7 | Proyecto no runneable sin configuración externa | Alta | `README.md`, `config/defaults/` | [07-not-runnable.md](./bugs/07-not-runnable.md) |
 | 12 | TODO.md se escribe en voices/shared/ | Informativa | `plugins/executor/todo_list.py` | [12-todo-md-location.md](./bugs/12-todo-md-location.md) |
-| 26 | CLI smoke apunta a scripts/qa eliminado | Media | `kateto/__main__.py`, `script/qa` | [26-smoke-cli-deleted-qa-path.md](./bugs/26-smoke-cli-deleted-qa-path.md) |
 
 
 ## Resueltos (✅)
@@ -21,6 +20,11 @@
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|
 | 28 | Workflow de proyecto nuevo no se inicia y TUI filtra eventos | Alta | `classifier.py`, `tui.py` | [28-workflow-discovery-and-tui-event-filter.md](./bugs/28-workflow-discovery-and-tui-event-filter.md) |
+| 26 | CLI smoke apunta a scripts/qa eliminado | Media | `kateto/cli/commands.py` | [26-smoke-cli-deleted-qa-path.md](./bugs/26-smoke-cli-deleted-qa-path.md) |
+| 53 | Voz falla en generate: list_events revienta con anotaciones UnionType | Alta | `kateto/voices/tools.py` | [53-list-events-uniontype-crash.md](./bugs/53-list-events-uniontype-crash.md) |
+| 54 | KatetoToolset envía herramientas con esquemas de parámetros vacíos | Alta | `kateto/voices/tools.py` | [54-kateto-toolset-empty-schemas.md](./bugs/54-kateto-toolset-empty-schemas.md) |
+| 55 | DiskMediaStore object is not callable en capacidades de VoiceAgent | Alta | `kateto/voices/factory.py` | [55-diskmediastore-not-callable.md](./bugs/55-diskmediastore-not-callable.md) |
+| 56 | WebSearch y WebFetch fallan con UserError en OpenAIChatModel | Alta | `kateto/voices/factory.py` | [56-websearch-webfetch-unsupported-openaichatmodel.md](./bugs/56-websearch-webfetch-unsupported-openaichatmodel.md) |
 | 29 | Workflow inicia sin generar instrucciones para su voz propietaria | Alta | `core/workflow_engine.py` | [29-workflow-no-owner-generation.md](./bugs/29-workflow-no-owner-generation.md) |
 | 30 | Solicitud de nuevo proyecto selecciona un workflow no relacionado | Alta | `plugins/executor/workflow_router.py` | [30-new-project-workflow-selection.md](./bugs/30-new-project-workflow-selection.md) |
 | 31 | Follow-up reemplaza el workflow activo y pierde el contexto de fase | Alta | `core/workflow_engine.py`, `plugins/executor/workflow_router.py` | [31-active-workflow-switch-and-interrupt.md](./bugs/31-active-workflow-switch-and-interrupt.md) |

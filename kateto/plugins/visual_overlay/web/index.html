@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>Kateto Visual Overlay</title>
   <style>
-    body {
+    html, body {
       margin: 0;
       padding: 0;
       background: transparent;
@@ -22,78 +22,48 @@
       align-items: center;
     }
     #avatar {
-      width: 120px;
-      height: 120px;
-      position: relative;
+      height: 180px;
+      width: auto;
+      filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
     }
-    #subtitles {
+    #caption {
+      margin-top: 10px;
+      max-width: 640px;
       background: rgba(0, 0, 0, 0.7);
       padding: 8px 16px;
       border-radius: 8px;
-      max-width: 600px;
       text-align: center;
-      margin-top: 10px;
-      font-size: 1.1rem;
+      font-size: 1.2rem;
+      line-height: 1.4;
+      min-height: 1.4em;
     }
   </style>
 </head>
 <body>
-  <div id="container">
-    <canvas id="avatarCanvas" width="120" height="120"></canvas>
-    <div id="subtitles">...</div>
+  <div id="container" data-signals="{voice_id: 'jane', rms: 0, text: ''}">
+    <img id="avatar"
+         alt=""
+         data-attr:src="$rms > 0.01 ? '/voices/' + $voice_id + '/mouth.png' : '/voices/' + $voice_id + '/top.png'"
+         onerror="this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='">
+    <div id="caption" data-text="$text"></div>
   </div>
 
-  <script>
-    const canvas = document.getElementById("avatarCanvas");
-    const ctx = canvas.getContext("2d");
-    const subtitles = document.getElementById("subtitles");
+  <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.2/bundles/datastar.js"></script>
 
-    let isSpeaking = false;
-    let rms = 0;
-    let bobbingAngle = 0;
+  <!-- Datastar v1.0.2 ships no WebSocket client (fetch/SSE only), so the browser
+       WS feeds the same CDN module's mergePatch() and Datastar renders. -->
+  <script type="module">
+    import { mergePatch } from 'https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.2/bundles/datastar.js'
 
-    const ws = new WebSocket(`ws://${location.host}/ws/overlay`);
-
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/overlay`)
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "subtitle") {
-        subtitles.innerText = data.text;
-      } else if (data.type === "viseme") {
-        rms = data.rms || 0;
-        isSpeaking = rms > 0.01;
-      }
-    };
-
-    function render() {
-      ctx.clearRect(0, 0, 120, 120);
-
-      bobbingAngle += isSpeaking ? 0.1 : 0.02;
-      const bobY = Math.sin(bobbingAngle) * (isSpeaking ? 5 : 2);
-
-      // Draw avatar head
-      ctx.fillStyle = "#4a90e2";
-      ctx.beginPath();
-      ctx.arc(60, 50 + bobY, 40, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Draw eyes
-      ctx.fillStyle = "#ffffff";
-      ctx.beginPath();
-      ctx.arc(45, 42 + bobY, 6, 0, Math.PI * 2);
-      ctx.arc(75, 42 + bobY, 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Draw mouth based on RMS
-      const mouthHeight = Math.min(25, 4 + rms * 60);
-      ctx.fillStyle = "#e74c3c";
-      ctx.beginPath();
-      ctx.ellipse(60, 65 + bobY, 12, mouthHeight / 2, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      requestAnimationFrame(render);
+      const msg = JSON.parse(event.data)
+      const patch = { voice_id: msg.voice_id }
+      if (msg.type === 'subtitle') patch.text = msg.text
+      if (msg.type === 'viseme') patch.rms = msg.rms
+      mergePatch(patch)
     }
-
-    render();
+    // ponytail: no reconnect loop; add ws.onclose -> retry if the overlay must self-heal
   </script>
 </body>
 </html>

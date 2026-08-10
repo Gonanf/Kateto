@@ -245,6 +245,36 @@ async def test_get_plugin_manager_returns_one_shared_singleton() -> None:
 
 
 @pytest.mark.asyncio
+async def test_registered_plugins_are_listed_even_when_disabled() -> None:
+    # Given: a plugin that is registered but never enabled.
+    manager = PluginManager()
+    disabled = LifecyclePlugin()
+    disabled.name = "disabled_plugin"
+    manager.register_plugin(disabled)
+
+    # When: the manager is asked for all plugins.
+    all_plugins = manager.get_all_plugins()
+    active_plugins = manager.get_plugins()
+
+    # Then: the disabled plugin is known but not active.
+    assert disabled in all_plugins
+    assert disabled not in active_plugins
+    assert manager.get_plugin("disabled_plugin") is disabled
+
+    # When: it is enabled and then disabled again.
+    await manager.enable_plugin(disabled)
+    assert disabled in manager.get_plugins()
+    assert disabled.enabled
+    await manager.disable_plugin(disabled.name)
+
+    # Then: it stays known but flagged disabled.
+    assert disabled in manager.get_all_plugins()
+    assert not disabled.enabled
+    assert manager.get_plugin("disabled_plugin") is disabled
+    await manager.close()
+
+
+@pytest.mark.asyncio
 async def test_event_history_is_bounded_and_exposes_plugin_sent_and_received_events() -> None:
     # Given: a manager with a finite history limit and a source/receiver pair.
     manager = PluginManager(event_limit=2)

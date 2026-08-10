@@ -59,7 +59,15 @@ def create_plugins(ctx: DiscoveryContext) -> tuple[Plugin, ...]:
             port = http_settings.port or 8080
             from loguru import logger
             logger.info("HttpServer enabled in config. Instantiating on {}:{}", host, port)
-            ctx.get_shared("http_server", lambda: HttpServer(manager, host=host, port=port))
+            ctx.get_shared(
+                "http_server",
+                lambda: HttpServer(
+                    manager,
+                    host=host,
+                    port=port,
+                    config_dir=ctx.config.paths.config_dir,
+                ),
+            )
         else:
             from loguru import logger
             logger.debug("HttpServer disabled or not configured in settings")

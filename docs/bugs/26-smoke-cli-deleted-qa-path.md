@@ -2,7 +2,8 @@
 id: 26
 title: "CLI smoke apunta a scripts/qa eliminado"
 severity: Media
-status: open
+status: resolved
+resolved: 2026-08-07
 component: kateto/__main__.py / script/qa
 ---
 
@@ -23,8 +24,8 @@ El camino de preflight para jueces y el plan de publicación no pueden demostrar
 
 La documentación y el entrypoint conservan rutas de la estructura anterior (`scripts/qa`), mientras que el árbol fue limpiado a la estructura singular `script/qa` y el acceptance runner ya no está presente.
 
-### Posible solución
+### Solución aplicada
 
-1. Restaurar o reemplazar el runner con un smoke interno mantenido bajo `script/qa`.
-2. Actualizar `kateto/__main__.py`, README y tests para usar una única ruta.
-3. Ejecutar el smoke en configuración temporal y registrar evidencia antes de publicar.
+La migración CLI a openstack/cliff (`kateto/cli/commands.py`) reemplazó el runner eliminado: el comando `smoke` ahora ejecuta la suite de tests core (`test_event_bus`, `test_plugin_manager`, `test_config`, `test_workflow`, `test_storage`) en lugar de apuntar a `scripts/qa/acceptance.py`. Verificado: `uv run kateto smoke --fixture` → exit 0, 44 passed.
+
+**Archivos:** `kateto/cli/commands.py`

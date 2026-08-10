@@ -97,7 +97,7 @@ enabled = true
 
 [plugin.voice_manager]
 enabled = true
-voice_probabilities = { jane = 0.7, doktor = 0.15, conquest = 0.1 }
+voice_probabilities = { jane = 0.7, doktor = 0.15, conquest = 0.1, whisperer = 0.05 }
 
 [plugin.http_server]
 enabled = true

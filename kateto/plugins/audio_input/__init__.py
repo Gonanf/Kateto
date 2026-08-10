@@ -20,7 +20,7 @@ def create_plugins(ctx):
         ("audio_input_meet", "kateto.plugins.audio_input.meet", "MeetAudioInput"),
     ]:
         settings = ctx.config.settings.plugin.get(name)
-        if settings is None or not settings.enabled:
+        if settings is None:
             continue
         try:
             mod = import_module(module_name)

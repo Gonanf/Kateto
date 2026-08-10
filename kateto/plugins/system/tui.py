@@ -13,7 +13,20 @@ from rich.text import Text as RichText
 from textual.app import App, ComposeResult, Screen
 from textual.containers import Grid, Horizontal, Vertical
 from textual.events import Click
-from textual.widgets import Button, Footer, Header, Input, Label, ListItem, ListView, Static, Switch, TabbedContent, TabPane, Tree
+from textual.widgets import (
+    Button,
+    Footer,
+    Header,
+    Input,
+    Label,
+    ListItem,
+    ListView,
+    Static,
+    Switch,
+    TabbedContent,
+    TabPane,
+    Tree,
+)
 
 from kateto.core.event import (
     AudioInputStatusData,
@@ -33,9 +46,18 @@ from kateto.core.event import (
 from kateto.core.config import VoiceSettings, bootstrap_config
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
-from kateto.core.workflow import WorkflowCatalog, WorkflowDefinition, WorkflowDefinitionError, WorkflowPhaseStatus, WorkflowStatus
+from kateto.core.workflow import (
+    WorkflowCatalog,
+    WorkflowDefinition,
+    WorkflowDefinitionError,
+    WorkflowPhaseStatus,
+    WorkflowStatus,
+)
 from kateto.core.workflow_engine import WorkflowSnapshot
-from kateto.plugins.system.tui_runtime import TuiConfigurationRuntime, TuiPluginConfiguration
+from kateto.plugins.system.tui_runtime import (
+    TuiConfigurationRuntime,
+    TuiPluginConfiguration,
+)
 from kateto.voices.base import GenerationRequest, VoiceAgent, VoiceProfile, VoiceRole
 
 
@@ -55,7 +77,11 @@ class _FixtureVoiceProvider:
 
     async def _stream(self, request: GenerationRequest) -> AsyncIterator[str]:
         prompt = next(
-            (message.content for message in reversed(request.messages) if message.role == "user"),
+            (
+                message.content
+                for message in reversed(request.messages)
+                if message.role == "user"
+            ),
             "the current project",
         )
         yield f"{self._voice.title()} fixture response: {self._role_response} I received '{prompt}'."
@@ -66,11 +92,18 @@ class _FixtureVoice(VoiceAgent):
         await super().on_voice_request(data)
         if data.workflow is None or data.phase_id is None or self.manager is None:
             return
-        definition = WorkflowCatalog(config_dir=self._config_dir).load(workflow=data.workflow, voice=self.name)
-        if definition.voice is not None and definition.voice.casefold() != self.name.casefold():
+        definition = WorkflowCatalog(config_dir=self._config_dir).load(
+            workflow=data.workflow, voice=self.name
+        )
+        if (
+            definition.voice is not None
+            and definition.voice.casefold() != self.name.casefold()
+        ):
             return
         phase = next(
-            phase for phase in definition.phases if phase.id.casefold() == data.phase_id.casefold()
+            phase
+            for phase in definition.phases
+            if phase.id.casefold() == data.phase_id.casefold()
         )
         await self.manager.emit(
             "workflow_phase_complete",
@@ -106,6 +139,11 @@ def _fixture_voice(name: str, config_dir: Path) -> VoiceAgent:
             "Make the team's process and next steps visible.",
             "I will facilitate the agile process and make the next ceremony steps visible.",
         ),
+        "whisperer": (
+            VoiceRole.ORCHESTRATOR,
+            "Attack weak plans and challenge decisions out loud.",
+            "I will attack weak plans, mock vague promises, and force everyone to defend their reasoning.",
+        ),
     }
     role, prompt, role_response = profiles[name]
     voice_dir = config_dir / "voices" / name
@@ -136,10 +174,13 @@ class _FixtureRuntime:
         bootstrap_config(config_dir=config_dir)
         self.manager = PluginManager()
         self._workflow_engine = WorkflowEngine(config_dir=config_dir)
-        self._voices = tuple(_fixture_voice(name, config_dir) for name in ("jane", "doktor", "conquest"))
+        self._voices = tuple(
+            _fixture_voice(name, config_dir)
+            for name in ("jane", "doktor", "conquest", "whisperer")
+        )
         self.runtime_plugins = (self._workflow_engine, *self._voices)
         self.mcp_servers = ()
-        self.workflow_voices = ("jane", "doktor", "conquest")
+        self.workflow_voices = ("jane", "doktor", "conquest", "whisperer")
         self.is_started = False
         self.plugin_configurations = ()
 
@@ -157,7 +198,11 @@ class _FixtureRuntime:
     async def start(self) -> None:
         for plugin in self.runtime_plugins:
             await self.manager.enable_plugin(plugin)
-        await self.manager.emit("tui_event", TuiEventData(message="fixture dashboard ready"), source="fixture")
+        await self.manager.emit(
+            "tui_event",
+            TuiEventData(message="fixture dashboard ready"),
+            source="fixture",
+        )
         await self.manager.emit(
             "workflow_run",
             WorkflowRunData(workflow="project-initiation", voice="jane"),
@@ -264,7 +309,9 @@ class KatetoApp(App[None]):
         self.fixture = fixture
         self.config_dir = (Path.cwd() if config_dir is None else config_dir).resolve()
         self._events: deque[EventEnvelope[BaseModel]] = deque(maxlen=1000)
-        self._voice_status: dict[str, str] = {voice: "idle" for voice in runtime.workflow_voices}
+        self._voice_status: dict[str, str] = {
+            voice: "idle" for voice in runtime.workflow_voices
+        }
         self._audio_status: dict[str, str] = {}
         self._selected_plugin: str | None = None
         self._selected_event: str | None = None
@@ -278,7 +325,10 @@ class KatetoApp(App[None]):
 
     @property
     def event_text(self) -> str:
-        return "\n".join(self._format_event(e) for e in self._events) or "waiting for events"
+        return (
+            "\n".join(self._format_event(e) for e in self._events)
+            or "waiting for events"
+        )
 
     @property
     def plugin_text(self) -> str:
@@ -309,14 +359,19 @@ class KatetoApp(App[None]):
                         id="composer-mode",
                     )
                     with Horizontal():
-                        yield Input(placeholder="message or /registered_event", id="composer-input")
+                        yield Input(
+                            placeholder="message or /registered_event",
+                            id="composer-input",
+                        )
                         yield Button("Emit", id="send-event", variant="primary")
             with TabPane("Conversation", id="conversation-tab"):
                 with Vertical(id="conversation-body"):
                     with Vertical(id="conversation-messages"):
                         yield Static("no messages yet", id="conversation-placeholder")
                 with Horizontal(id="conversation-input"):
-                    yield Input(placeholder="Type a prompt for the agent...", id="prompt-input")
+                    yield Input(
+                        placeholder="Type a prompt for the agent...", id="prompt-input"
+                    )
                     yield Button("Send", id="send-prompt", variant="primary")
             with TabPane("Plugins", id="plugins-tab"):
                 with Horizontal(id="plugin-panel"):
@@ -391,7 +446,10 @@ class KatetoApp(App[None]):
             self._select_plugin(button_id.removeprefix("select-"))
             return
         if button_id.startswith("apply-config-"):
-            self.run_worker(self._configure_plugin(button_id.removeprefix("apply-config-")), exclusive=False)
+            self.run_worker(
+                self._configure_plugin(button_id.removeprefix("apply-config-")),
+                exclusive=False,
+            )
             return
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -407,7 +465,8 @@ class KatetoApp(App[None]):
         if value.startswith("/"):
             prefix = value[1:].strip().lower()
             matching = [
-                reg.name for reg in self.manager.get_event_registrations()
+                reg.name
+                for reg in self.manager.get_event_registrations()
                 if prefix in reg.name.lower()
             ]
             autocomplete.clear()
@@ -426,7 +485,8 @@ class KatetoApp(App[None]):
             input_widget = self.query_one("#composer-input", Input)
             prefix = input_widget.value.strip()[1:].lower()
             matching = [
-                reg.name for reg in self.manager.get_event_registrations()
+                reg.name
+                for reg in self.manager.get_event_registrations()
                 if prefix in reg.name.lower()
             ]
             if index < len(matching):
@@ -440,11 +500,13 @@ class KatetoApp(App[None]):
             if 0 <= index < len(events):
                 envelope = events[index]
                 data_json = self._safe_event_json(envelope.data)
-                self.push_screen(EventDetailScreen(
-                    event_name=envelope.name,
-                    source=envelope.source,
-                    data_json=data_json,
-                ))
+                self.push_screen(
+                    EventDetailScreen(
+                        event_name=envelope.name,
+                        source=envelope.source,
+                        data_json=data_json,
+                    )
+                )
 
     async def _submit_composer(self) -> None:
         input_widget = self.query_one("#composer-input", Input)
@@ -454,7 +516,12 @@ class KatetoApp(App[None]):
         if value.startswith("/"):
             name = value[1:].strip()
             contract = next(
-                (item.contract for item in self.manager.get_event_registrations() if item.name == name), None
+                (
+                    item.contract
+                    for item in self.manager.get_event_registrations()
+                    if item.name == name
+                ),
+                None,
             )
             if contract is None:
                 self.notify(f"ERROR: unknown event /{name}", severity="error")
@@ -466,7 +533,11 @@ class KatetoApp(App[None]):
             await self._emit_manual(value)
             input_widget.value = ""
             return
-        registration = next(item for item in self.manager.get_event_registrations() if item.name == self._selected_event)
+        registration = next(
+            item
+            for item in self.manager.get_event_registrations()
+            if item.name == self._selected_event
+        )
         try:
             payload = registration.contract.model_validate_json(value)
         except ValidationError as error:
@@ -501,7 +572,9 @@ class KatetoApp(App[None]):
             placeholder.remove()
         self._hide_typing_indicator(name)
         self._voice_texts.pop(name, None)
-        msg = Static(self._chat_renderable(name, content), classes=f"chat-message chat-{role}")
+        msg = Static(
+            self._chat_renderable(name, content), classes=f"chat-message chat-{role}"
+        )
         messages.mount(msg)
         self.query_one("#conversation-body", Vertical).scroll_end(animate=False)
 
@@ -545,7 +618,9 @@ class KatetoApp(App[None]):
         self._voice_texts[bubble_id] += chunk.text
         existing = messages.query(Static).filter(f"#{bubble_id}")
         if existing:
-            existing.first().update(self._chat_renderable(voice, self._voice_texts[bubble_id]))
+            existing.first().update(
+                self._chat_renderable(voice, self._voice_texts[bubble_id])
+            )
         else:
             msg = Static(
                 self._chat_renderable(voice, self._voice_texts[bubble_id]),
@@ -565,11 +640,15 @@ class KatetoApp(App[None]):
         return renderable
 
     async def _emit_manual(self, message: str) -> None:
-        await self.manager.emit("tui_event", TuiEventData(message=message), source="tui")
+        await self.manager.emit(
+            "tui_event", TuiEventData(message=message), source="tui"
+        )
 
     async def _set_plugin(self, name: str, enabled: bool) -> None:
         if enabled:
-            plugin = next((item for item in self._available_plugins() if item.name == name), None)
+            plugin = next(
+                (item for item in self._available_plugins() if item.name == name), None
+            )
             if plugin is not None:
                 await self.manager.enable_plugin(plugin)
         else:
@@ -596,7 +675,9 @@ class KatetoApp(App[None]):
                 values=current.values,
             ),
         )
-        self.notify(f"CONFIGURED {name}: microphone={microphone or 'default'}, speaker={speaker or 'default'}")
+        self.notify(
+            f"CONFIGURED {name}: microphone={microphone or 'default'}, speaker={speaker or 'default'}"
+        )
         self._refresh_view()
 
     def _record_event(self, envelope: EventEnvelope[BaseModel]) -> None:
@@ -609,11 +690,16 @@ class KatetoApp(App[None]):
             return
         self._record_event(envelope)
         try:
-            self.query_one("#event-list", ListView).append(ListItem(Label(self._format_event(envelope))))
+            self.query_one("#event-list", ListView).append(
+                ListItem(Label(self._format_event(envelope)))
+            )
         except Exception:
             pass
         if isinstance(envelope.data, PluginErrorData):
-            self.notify(f"ERROR [{envelope.data.plugin}]: {envelope.data.message}", severity="error")
+            self.notify(
+                f"ERROR [{envelope.data.plugin}]: {envelope.data.message}",
+                severity="error",
+            )
         self._refresh_light()
         self._schedule_tree_refresh()
         source_voice = envelope.source.split("/")[0]
@@ -691,13 +777,19 @@ class KatetoApp(App[None]):
             section.display = False
             return
         section.display = True
-        self.query_one("#plugin-config", Static).update(self._format_configuration(config))
+        self.query_one("#plugin-config", Static).update(
+            self._format_configuration(config)
+        )
 
     def _refresh_plugin_selection(self) -> None:
         for plugin in self._available_plugins():
             try:
                 label = self.query_one(f"#select-{plugin.name}", Static)
-                label.classes = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
+                label.classes = (
+                    "plugin-name selected"
+                    if plugin.name == self._selected_plugin
+                    else "plugin-name"
+                )
             except Exception:
                 pass
 
@@ -708,11 +800,20 @@ class KatetoApp(App[None]):
 
     def _plugin_row(self, plugin: Plugin) -> Grid:
         audio = self._audio_status.get(plugin.name, "?")
-        selected_class = "plugin-name selected" if plugin.name == self._selected_plugin else "plugin-name"
+        selected_class = (
+            "plugin-name selected"
+            if plugin.name == self._selected_plugin
+            else "plugin-name"
+        )
         return Grid(
             Static(plugin.name, id=f"select-{plugin.name}", classes=selected_class),
             Static(audio, id=f"audio-status-{plugin.name}"),
-            Switch(value=plugin.enabled, animate=False, id=f"switch-{plugin.name}", classes="plugin-switch"),
+            Switch(
+                value=plugin.enabled,
+                animate=False,
+                id=f"switch-{plugin.name}",
+                classes="plugin-switch",
+            ),
             classes="plugin-row",
         )
 
@@ -749,14 +850,18 @@ class KatetoApp(App[None]):
     def _configuration_for(self, name: str) -> TuiPluginConfiguration | None:
         if not isinstance(self.runtime, TuiConfigurationRuntime):
             return None
-        return next((c for c in self.runtime.plugin_configurations if c.plugin == name), None)
+        return next(
+            (c for c in self.runtime.plugin_configurations if c.plugin == name), None
+        )
 
     @staticmethod
     def _format_configuration(configuration: TuiPluginConfiguration) -> str:
         audio = ", ".join(
             value
             for value in (
-                f"microphone={configuration.microphone}" if configuration.microphone else "",
+                f"microphone={configuration.microphone}"
+                if configuration.microphone
+                else "",
                 f"speaker={configuration.speaker}" if configuration.speaker else "",
             )
             if value
@@ -780,21 +885,36 @@ class KatetoApp(App[None]):
                 voice_node.add_leaf(f"└ Catalog error: {error}")
                 continue
             for definition in definitions:
-                snapshot = self.runtime.workflow_engine.snapshot(workflow=definition.name, voice=voice)
+                snapshot = self.runtime.workflow_engine.snapshot(
+                    workflow=definition.name, voice=voice
+                )
                 if snapshot is None:
                     voice_node.add_leaf(f"{definition.name} · ⚪ INACTIVE")
                     continue
                 icon = self._status_icon(snapshot)
-                wf_node = voice_node.add(f"{definition.name} · {icon} {snapshot.status.value.upper()}")
+                wf_node = voice_node.add(
+                    f"{definition.name} · {icon} {snapshot.status.value.upper()}"
+                )
                 phase = next(
-                    (p for p in definition.phases if p.id.casefold() == snapshot.phase_id.casefold()), None
+                    (
+                        p
+                        for p in definition.phases
+                        if p.id.casefold() == snapshot.phase_id.casefold()
+                    ),
+                    None,
                 )
                 if phase:
                     phase_index = next(
-                        i for i, p in enumerate(definition.phases) if p.id.casefold() == snapshot.phase_id.casefold()
+                        i
+                        for i, p in enumerate(definition.phases)
+                        if p.id.casefold() == snapshot.phase_id.casefold()
                     )
-                    wf_node.add_leaf(f"Phase: {phase.name} ({phase_index + 1}/{len(definition.phases)})")
-                    wf_node.add_leaf(f"Task: {phase.instructions[0] if phase.instructions else '—'}")
+                    wf_node.add_leaf(
+                        f"Phase: {phase.name} ({phase_index + 1}/{len(definition.phases)})"
+                    )
+                    wf_node.add_leaf(
+                        f"Task: {phase.instructions[0] if phase.instructions else '—'}"
+                    )
                     completed = snapshot.phase_status is WorkflowPhaseStatus.DONE
                     wf_node.add_leaf(
                         f"Progress: {(len(phase.instructions) if completed else 0)}/{len(phase.instructions)} instructions"
@@ -817,7 +937,9 @@ class KatetoApp(App[None]):
             except WorkflowDefinitionError:
                 continue
             for definition in definitions:
-                workflow_map.setdefault(definition.name.casefold(), {})[voice] = definition
+                workflow_map.setdefault(definition.name.casefold(), {})[voice] = (
+                    definition
+                )
         if not workflow_map:
             tree.root.add_leaf("no workflows discovered")
             return
@@ -828,19 +950,29 @@ class KatetoApp(App[None]):
             first_defn = next(iter(voices.values()))
             wf_node = tree.root.add(first_defn.name)
             for voice in sorted(voices.keys()):
-                snapshot = self.runtime.workflow_engine.snapshot(workflow=first_defn.name, voice=voice)
+                snapshot = self.runtime.workflow_engine.snapshot(
+                    workflow=first_defn.name, voice=voice
+                )
                 if snapshot is None:
                     wf_node.add_leaf(f"{voice} · ⚪ INACTIVE")
                 else:
                     icon = self._status_icon(snapshot)
-                    v_node = wf_node.add(f"{voice} · {icon} {snapshot.status.value.upper()}")
+                    v_node = wf_node.add(
+                        f"{voice} · {icon} {snapshot.status.value.upper()}"
+                    )
                     phase = next(
-                        (p for p in first_defn.phases if p.id.casefold() == snapshot.phase_id.casefold()),
+                        (
+                            p
+                            for p in first_defn.phases
+                            if p.id.casefold() == snapshot.phase_id.casefold()
+                        ),
                         None,
                     )
                     if phase:
                         v_node.add_leaf(f"Phase: {phase.name}")
-                        v_node.add_leaf(f"Task: {phase.instructions[0] if phase.instructions else '—'}")
+                        v_node.add_leaf(
+                            f"Task: {phase.instructions[0] if phase.instructions else '—'}"
+                        )
         tree.root.expand_all()
 
     def _populate_event_tree(self) -> None:
@@ -887,7 +1019,12 @@ class KatetoApp(App[None]):
 
     def _select_event(self, name: str) -> None:
         contract = next(
-            (item.contract for item in self.manager.get_event_registrations() if item.name == name), None
+            (
+                item.contract
+                for item in self.manager.get_event_registrations()
+                if item.name == name
+            ),
+            None,
         )
         if contract is None:
             return
@@ -931,12 +1068,19 @@ class KatetoApp(App[None]):
         return json.dumps(fields, default=str)
 
     def _voice_text(self) -> str:
-        return "\n".join(
-            f"{voice} · {self._voice_status.get(voice, 'idle')}" for voice in self.runtime.workflow_voices
-        ) or "no voices"
+        return (
+            "\n".join(
+                f"{voice} · {self._voice_status.get(voice, 'idle')}"
+                for voice in self.runtime.workflow_voices
+            )
+            or "no voices"
+        )
 
     def _update_voice_status(self, envelope: EventEnvelope[BaseModel]) -> None:
-        if isinstance(envelope.data, VoiceStatusData) and envelope.data.voice in self.runtime.workflow_voices:
+        if (
+            isinstance(envelope.data, VoiceStatusData)
+            and envelope.data.voice in self.runtime.workflow_voices
+        ):
             self._voice_status[envelope.data.voice] = envelope.data.status.value
 
     def _update_audio_status(self, envelope: EventEnvelope[BaseModel]) -> None:
@@ -997,7 +1141,9 @@ class KatetoApp(App[None]):
 def run_tui(*, fixture: bool = False, config_dir: Path | None = None) -> None:
     from kateto.core.config import resolve_config_dir as _resolve_config_dir
 
-    resolved_config_dir = (_resolve_config_dir() if config_dir is None else config_dir).resolve()
+    resolved_config_dir = (
+        _resolve_config_dir() if config_dir is None else config_dir
+    ).resolve()
     if fixture:
         runtime: Any = _FixtureRuntime(resolved_config_dir)
     else:

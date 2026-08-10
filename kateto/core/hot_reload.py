@@ -11,6 +11,7 @@ import watchfiles
 from kateto.core.config import ConfigError, LoadedConfig, load_config
 from kateto.core.discovery import DiscoveryContext, discover_plugins
 from kateto.core.event import PluginErrorData
+from kateto.core.plugin import Plugin
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 
@@ -115,7 +116,22 @@ class HotReloadController:
             elif type(replacement) is not type(active):
                 await self.manager.replace_plugin(active, replacement)
         for plugin in desired.values():
-            await self.manager.enable_plugin(plugin)
+            if self._config_enabled(plugin):
+                await self.manager.enable_plugin(plugin)
+            else:
+                self.manager.register_plugin(plugin)
+
+    def _config_enabled(self, plugin: Plugin) -> bool:
+        config = self._config
+        if config is None:
+            return True
+        plugin_settings = config.settings.plugin.get(plugin.name)
+        if plugin_settings is not None:
+            return plugin_settings.enabled
+        voice_settings = config.settings.voice.get(plugin.name)
+        if voice_settings is not None:
+            return voice_settings.enabled
+        return True
 
     async def _emit_error(self, error: BaseException) -> None:
         await self.manager.emit(
