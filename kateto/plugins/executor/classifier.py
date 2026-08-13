@@ -45,9 +45,14 @@ class ClassifierExecutor(Plugin):
 
     @override
     async def enable(self) -> None:
-        from kateto.providers import ClassifierProvider
+        if self._settings.command:
+            from kateto.providers import LocalClassifierProvider
 
-        classifier = ClassifierProvider(self._settings)
+            classifier = LocalClassifierProvider(self._settings)
+        else:
+            from kateto.providers import ClassifierProvider
+
+            classifier = ClassifierProvider(self._settings)
         self._classifier = await classifier.__aenter__()
 
     @override

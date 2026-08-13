@@ -24,9 +24,14 @@ class WhisperAudioProcessor(Plugin):
 
     @override
     async def enable(self) -> None:
-        from kateto.providers import WhisperProvider
+        if self._settings.command:
+            from kateto.providers import LocalWhisperProvider
 
-        provider = WhisperProvider(self._settings)
+            provider = LocalWhisperProvider(self._settings)
+        else:
+            from kateto.providers import WhisperProvider
+
+            provider = WhisperProvider(self._settings)
         await provider.__aenter__()
         self._provider = provider
 

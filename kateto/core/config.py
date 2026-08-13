@@ -73,6 +73,9 @@ class PluginSettings(_ConfigModel):
     port: int | None = Field(default=None, gt=0, lt=65536)
     dept: str | None = None
     depts: list[str] | None = None
+    # Local (subprocess) backend: when set, `model` is a file path, not a server name.
+    command: str | None = None
+    args: list[str] | None = None
 
     @field_validator("endpoint", "model_endpoint")
     @classmethod

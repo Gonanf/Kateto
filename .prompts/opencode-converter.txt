@@ -1,0 +1,87 @@
+TASK: Add an agency-agents -> Kateto pack converter and wire it into `kateto install`.
+
+CONTEXT (already built, do not re-architect):
+- `kateto/cli/commands.py` has `Install` command + `_install_pack(*, source, config_dir, force)`.
+  `_install_pack` clones-or-pulls a git URL (or uses a local path) and copies
+  `voices/<id>/SOUL.md` and `skills/<name>/SKILL.md` from the pack into
+  `config_dir`. Layout consumed by `create_voice()` (reads `voices/<id>/SOUL.md`
+  as system_prompt) and `_ensure_voice_skills()` in `kateto/voices/factory.py`.
+- A Kateto voice SOUL.md is just the system prompt text (optionally a leading
+  `# comment`). A Kateto skill is `skills/<name>/SKILL.md` with YAML frontmatter
+  (`name:`, then markdown body).
+
+AGENCY-AGENTS SOURCE FORMAT (verified real example, engineering/engineering-code-reviewer.md):
+  ---
+  name: Code Reviewer
+  description: Expert code reviewer who provides constructive, actionable feedback...
+  color: purple
+  emoji: 👁️
+  vibe: Reviews code like a mentor, not a gatekeeper. Every comment teaches something.
+  ---
+
+  # Code Reviewer Agent
+
+  You are **Code Reviewer**, an expert who provides thorough, constructive code reviews...
+  (rest is the agent body / system prompt)
+
+The repo is organized by division dirs: `engineering/`, `design/`, `security/`,
+`marketing/`, etc. Each `.md` follows the same frontmatter + body shape.
+File names are like `engineering-code-reviewer.md` (division-role.md).
+
+WHAT TO BUILD:
+1. New module `kateto/cli/agency_convert.py` with:
+   - `clone_agency_repo(url, cache_dir) -> Path` (reuse the clone-or-pull logic
+     already in `_install_pack`; do NOT duplicate — refactor the clone/pull into a
+     small helper both can call, e.g. `_resolve_source(source, cache_root) -> Path`).
+   - `convert_agency_pack(repo_dir, out_dir, *, divisions=None, force=False)`:
+       For each division dir under repo_dir (default: all dirs that contain
+       `*.md` agent files), for each `*.md`:
+         - parse YAML frontmatter (name, description, the rest)
+         - derive voice_id = lowercased, de-slugified file stem WITHOUT the
+           division prefix (e.g. `engineering-code-reviewer.md` -> `code-reviewer`;
+           `design-ui-designer.md` -> `ui-designer`). Fallback to frontmatter `name`
+           slug if parsing fails.
+         - write `out_dir/voices/<voice_id>/SOUL.md` with the markdown body as the
+           system prompt (prepend nothing; the voice constraint is added later by
+           create_voice). If body is empty, use `description` as fallback prompt.
+         - write `out_dir/skills/<voice_id>/SKILL.md` with frontmatter
+           `name: <voice_id>` and body = the agent description + a one-line note
+           that this skill loads the matching voice. This makes the skill discoverable
+           by _ensure_voice_skills symlinking.
+       Skip files that already exist unless force=True (mirror _install_pack behavior).
+   - Use ONLY stdlib (pathlib, subprocess, re) + PyYAML IF already a dependency;
+     otherwise parse the simple `---` delimited frontmatter with a tiny regex
+     (frontmatter here is flat key: value, no nested structures). Prefer the
+     regex approach to avoid a new dep — check pyproject for pyyaml first.
+2. Extend `Install` in `kateto/cli/commands.py`:
+   - add `--from-agency` flag (store_true). When set, `source` is treated as an
+     agency-agents git URL or local path: resolve it (clone/pull), run
+     `convert_agency_pack` into a temp pack dir, then `_install_pack` that temp
+     dir into config_dir. When not set, current behavior unchanged.
+   - `--force` must propagate to both convert and install.
+3. Keep the CLI registry registration (`register_command("install", Install)`)
+   as is — no new top-level command needed.
+
+CONSTRAINTS:
+- Ponytail: shortest diff, no new abstractions beyond what's listed, no new deps
+  unless pyyaml is already present. Reuse `_install_pack`'s clone logic.
+- The converter must NOT overwrite the 3 built-in voices (jane/doktor/conquest)
+  or whisperer — those names won't collide with agency slugs anyway, but do not
+  hardcode; just respect the skip-if-exists-unless-force rule.
+- Voice ids must be filesystem-safe (slugify: lowercase, non-alnum -> '-',
+  collapse repeats, strip '-').
+
+VERIFY before reporting done:
+- `uv run kateto install --from-agency /tmp/kateto_pack_test` must work on a
+  FAKE pack you create: make `/tmp/kateto_pack_test/engineering/engineering-code-reviewer.md`
+  with the verified frontmatter+body above. After run, assert
+  `~/.config/kateto/voices/code-reviewer/SOUL.md` exists and
+  `~/.config/kateto/skills/code-reviewer/SKILL.md` exists (use a temp XDG_CONFIG_HOME).
+- Run `uv run kateto config check` and `uv run pytest kateto/tests/test_config.py kateto/tests/test_plugin_manager.py -q`
+  to confirm nothing broke.
+- Add a tiny `test_agency_convert.py` (pytest, no fixtures) that builds a temp
+  agency-style dir, runs `convert_agency_pack`, and asserts the two output files
+  exist with expected content. This is the one required check.
+
+Do NOT commit. Report the diff stat and the test result. Use git so changes are
+visible via `git diff --stat HEAD`.

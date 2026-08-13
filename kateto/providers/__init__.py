@@ -1,12 +1,12 @@
 from .agent import AgentResponse, OpenAIAgentProvider, ToolCall, ToolExecutor
 from ._models import WorkflowCandidate
-from .classifier import ClassifierProvider, WorkflowSelection
+from .classifier import ClassifierProvider, LocalClassifierProvider, WorkflowSelection
 from .errors import (
     MalformedUpstreamResponse,
     UnsupportedAudioPayload,
 )
 from .llm import ChatMessage, LlamaCppChatProvider, OpenAIResponsesProvider
-from .whisper import WhisperProvider
+from .whisper import LocalWhisperProvider, WhisperProvider
 from .camb import CambProvider
 from .edgetts import EdgeTTSProvider
 from .zonos import ZonosProvider
@@ -17,7 +17,8 @@ __all__ = [
     "EdgeTTSProvider",
     "ChatMessage",
     "ClassifierProvider",
-    "WorkflowCandidate",
+    "LocalClassifierProvider",
+    "WorkflowSelection",
     "LlamaCppChatProvider",
     "MalformedUpstreamResponse",
     "OpenAIAgentProvider",
@@ -26,6 +27,7 @@ __all__ = [
     "ToolExecutor",
     "UnsupportedAudioPayload",
     "WhisperProvider",
+    "LocalWhisperProvider",
     "WorkflowSelection",
     "ZonosProvider",
 ]

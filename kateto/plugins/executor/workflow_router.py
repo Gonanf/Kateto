@@ -43,7 +43,14 @@ class WorkflowRouter(Plugin):
 
     @override
     async def enable(self) -> None:
-        provider = ClassifierProvider(self._settings)
+        if self._settings.command:
+            from kateto.providers import LocalClassifierProvider
+
+            provider: ClassifierProvider | LocalClassifierProvider = LocalClassifierProvider(self._settings)
+        else:
+            from kateto.providers import ClassifierProvider
+
+            provider = ClassifierProvider(self._settings)
         self._provider = await provider.__aenter__()
 
     @override

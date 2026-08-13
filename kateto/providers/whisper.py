@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 from io import BytesIO
+from pathlib import Path
 from typing import Final
 import wave
 
@@ -9,13 +11,37 @@ from pydantic import ValidationError
 
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioData, TranscriptionData
+from kateto.core.exceptions import ProviderError
 
 from ._http import HttpProvider, configured_endpoint
+from ._local import LocalCommandProvider, _capture, _first_json, _read_whisper_json
 from ._models import WhisperResponse
 from .errors import MalformedUpstreamResponse, UnsupportedAudioPayload
 
 
 WHISPER_INFERENCE_PATH: Final = "/inference"
+
+
+class LocalWhisperProvider(LocalCommandProvider):
+    async def transcribe(self, audio: AudioData) -> TranscriptionData:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
+            handle.write(_wav_bytes(audio))
+            wav_path = Path(handle.name)
+        json_path = wav_path.with_suffix(".json")
+        try:
+            out = await _capture(self._argv("-f", str(wav_path), "-oj"))
+            data = _read_whisper_json([json_path]) or _first_json(out)
+            if data is None or not data.get("text"):
+                raise ProviderError(f"{type(self).__name__} produced no transcription text")
+        finally:
+            wav_path.unlink(missing_ok=True)
+            json_path.unlink(missing_ok=True)
+        return TranscriptionData(
+            text=data["text"],
+            language=data.get("language"),
+            confidence=None,
+            duration_ms=audio.duration_ms if audio.duration_ms > 0 else None,
+        )
 
 
 class WhisperProvider(HttpProvider):
