@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
-from typing import Any, Protocol, assert_never
+from typing import TYPE_CHECKING, Any, Protocol, assert_never
+
+if TYPE_CHECKING:
+    from kateto.plugins.system.turn_gate import Decision, TurnGate
 
 log = logger
 
@@ -36,6 +39,7 @@ from pydantic_ai.messages import (
 from kateto.core.config import VoiceSettings
 from kateto.core.event import (
     EventEnvelope,
+    EventModel,
     GENERATE_REQUEST_MAX_DEPTH,
     GenerateData,
     GenerateRequestData,
@@ -243,6 +247,7 @@ class VoiceAgent(Plugin):
         self._event_messages: deque[ChatMessage] = deque(maxlen=32)
         self._event_message_limit = 2_048
         self._generation_depth = 0
+        self._followup_pending = False
 
     @property
     def role(self) -> VoiceRole:
@@ -438,10 +443,19 @@ class VoiceAgent(Plugin):
         await self._set_status(VoiceStatus.IDLE)
 
     async def on_generate(self, data: GenerateData) -> None:
+        from kateto.plugins.system.turn_gate import Decision
+
         prompt = self._prompt_for(data)
         # ponytail: is_relevant removed — classification plugin handles intent filtering now
         if prompt is None or not prompt.strip():
             return
+        origin = "followup" if self._followup_pending else "external"
+        decision = await self._pass_turn_gate(prompt, data, origin=origin, event="generate")
+        if decision is not Decision.EXECUTE:
+            if decision is Decision.DISCARD:
+                self._followup_pending = False
+            return
+        self._followup_pending = False
         self._interrupted = False
         await self._set_status(VoiceStatus.THINKING)
         generation = asyncio.create_task(
@@ -463,6 +477,8 @@ class VoiceAgent(Plugin):
                 self._generation_task = None
 
     async def on_generate_request(self, data: GenerateRequestData) -> None:
+        from kateto.plugins.system.turn_gate import Decision
+
         manager = self.manager
         if manager is None:
             return
@@ -473,7 +489,13 @@ class VoiceAgent(Plugin):
                 GENERATE_REQUEST_MAX_DEPTH,
             )
             return
+        decision = await self._pass_turn_gate(
+            data.prompt, data, origin="followup", event="generate_request"
+        )
+        if decision is not Decision.EXECUTE:
+            return
         self._generation_depth = data.depth + 1
+        self._followup_pending = True
         try:
             await manager.emit(
                 "generate",
@@ -484,10 +506,17 @@ class VoiceAgent(Plugin):
             )
         except ValueError as error:
             log.warning("[{}] generate_request rejected: {}", self.name, error)
+            gate = self._turn_gate()
+            if gate is not None:
+                gate.release(self.name)
 
     async def on_speak(self, data: SpeakRequestData) -> None:
+        from kateto.plugins.system.turn_gate import Decision
+
         prompt = data.prompt
         if prompt is None or not prompt.strip():
+            return
+        if await self._pass_turn_gate(prompt, data, origin="external", event="speak") is not Decision.EXECUTE:
             return
         self._interrupted = False
         await self._set_status(VoiceStatus.THINKING)
@@ -508,6 +537,29 @@ class VoiceAgent(Plugin):
         finally:
             if self._generation_task is generation:
                 self._generation_task = None
+
+    async def _pass_turn_gate(self, prompt: str, data: EventModel, *, origin: str, event: str) -> Decision:
+        from kateto.plugins.system.turn_gate import Decision, TurnGate
+
+        gate = self._turn_gate()
+        if gate is None:
+            return Decision.EXECUTE
+        decision = gate.decide(voice=self.name, prompt=prompt, origin=origin)
+        if decision is Decision.QUEUE:
+            gate.enqueue(event=event, data=data, target=self.name, front=origin == "external")
+            log.info("[{}] turn queued ({})", self.name, origin)
+        elif decision is Decision.DISCARD:
+            log.info("[{}] turn discarded ({})", self.name, origin)
+        return decision
+
+    def _turn_gate(self) -> TurnGate | None:
+        from kateto.plugins.system.turn_gate import TurnGate
+
+        manager = self.manager
+        if manager is None:
+            return None
+        gate = manager.get_plugin("turn_gate")
+        return gate if isinstance(gate, TurnGate) else None
 
     def _prompt_for(self, data: GenerateData) -> str | None:
         if data.prompt is not None:
