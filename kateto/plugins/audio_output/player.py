@@ -11,6 +11,7 @@ import sounddevice
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, EventEnvelope, InterruptData
 from kateto.core.plugin import EventHandler, Plugin
+from kateto.core.rms import RMSProcessor
 from kateto.voices.base import AudioPipeline, get_pipeline
 
 from .base import AudioOutputDeviceError, AudioOutputFormatError, PCM_S16LE
@@ -80,6 +81,12 @@ class AudioOutputPlayer(Plugin):
         self._mixer_task: asyncio.Task[None] | None = None
         self._active_pipelines: dict[str, AudioPipeline] = {}
         self._pipeline_queues: dict[str, asyncio.Queue[bytes | None]] = {}
+        self._rms_processors: dict[str, RMSProcessor] = {}
+
+    def _rms_for(self, voice_id: str) -> RMSProcessor:
+        if voice_id not in self._rms_processors:
+            self._rms_processors[voice_id] = RMSProcessor()
+        return self._rms_processors[voice_id]
 
     @override
     async def initialize(self) -> None:
@@ -120,7 +127,28 @@ class AudioOutputPlayer(Plugin):
         if not data.samples:
             return
         stream = await self._stream_for(data)
-        _ = await to_thread.run_sync(stream.write, data.samples)
+        # ponytail: chunked write + per-window RMS so the overlay jaw moves
+        # continuously for non-streaming TTS (EdgeTTS/Boson); Zonos path uses the mixer.
+        processor = self._rms_for(data.voice_id or "")
+        window = max(2, int(data.sample_rate * 0.02) * 2)
+        for offset in range(0, len(data.samples), window):
+            chunk = data.samples[offset : offset + window]
+            if not chunk:
+                continue
+            _ = await to_thread.run_sync(stream.write, chunk)
+            if self.manager is not None:
+                await self.manager.emit(
+                    "audio_output",
+                    AudioOutput(
+                        samples=b"",
+                        sample_rate=data.sample_rate,
+                        channels=data.channels,
+                        format=data.format,
+                        voice_id=data.voice_id,
+                        rms=processor.process(chunk),
+                    ),
+                    source=self.name,
+                )
 
     async def _run_mixer(self) -> None:
         try:
@@ -128,6 +156,7 @@ class AudioOutputPlayer(Plugin):
             while self._pipeline_queues:
                 done_voices: list[str] = []
                 pcm_buffers: list[bytes] = []
+                active_voice_pcms: list[tuple[str, bytes]] = []
                 for voice_id, queue in list(self._pipeline_queues.items()):
                     try:
                         pcm = queue.get_nowait()
@@ -138,6 +167,7 @@ class AudioOutputPlayer(Plugin):
                         continue
                     if pcm:
                         pcm_buffers.append(pcm)
+                        active_voice_pcms.append((voice_id, pcm))
                 for vid in done_voices:
                     self._pipeline_queues.pop(vid, None)
                     self._active_pipelines.pop(vid, None)
@@ -154,6 +184,21 @@ class AudioOutputPlayer(Plugin):
                         self._stream = stream
                         self._stream_format = (24_000, 1)
                     _ = await to_thread.run_sync(stream.write, mixed)
+                    if self.manager is not None:
+                        for vid, pcm in active_voice_pcms:
+                            rms = self._rms_for(vid).process(pcm)
+                            await self.manager.emit(
+                                "audio_output",
+                                AudioOutput(
+                                    samples=b"",
+                                    sample_rate=24_000,
+                                    channels=1,
+                                    format=PCM_S16LE,
+                                    voice_id=vid,
+                                    rms=rms,
+                                ),
+                                source=self.name,
+                            )
                 else:
                     await asyncio.sleep(0.005)
         except asyncio.CancelledError:

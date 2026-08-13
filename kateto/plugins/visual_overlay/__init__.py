@@ -9,4 +9,4 @@ def create_plugins(ctx: DiscoveryContext) -> tuple[Plugin, ...]:
     settings = ctx.config.settings.plugin.get("visual_overlay")
     if settings is not None and not settings.enabled:
         return ()
-    return (VisualOverlayPlugin(),)
+    return (VisualOverlayPlugin(settings=settings),)
