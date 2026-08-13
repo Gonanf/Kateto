@@ -267,6 +267,8 @@ def load_config(*, config_dir: Path | None = None, defaults_dir: Path | None = N
         raise ConfigError(f"unable to read config at {paths.config_file}: config must use UTF-8") from error
     except OSError as error:
         raise ConfigError(f"unable to read config at {paths.config_file}: {error}") from error
+    _load_dotenv(paths)
+    _resolve_secret_references(raw_config)
     try:
         settings = KatetoConfig.model_validate(raw_config)
     except ValidationError as error:
@@ -274,7 +276,6 @@ def load_config(*, config_dir: Path | None = None, defaults_dir: Path | None = N
             f"invalid config in {paths.config_file}: {_format_validation_error(error)}",
         ) from error
     _validate_assets(config_dir=paths.config_dir, config_file=paths.config_file, settings=settings)
-    _load_dotenv(paths)
     return LoadedConfig(paths=paths, settings=settings)
 
 
@@ -305,6 +306,32 @@ def _load_dotenv(paths: ConfigPaths) -> None:
     for dotenv_path in (paths.dotenv_file, paths.secrets_dir / ".env"):
         if dotenv_path.is_file():
             load_dotenv(dotenv_path=dotenv_path, override=False)
+
+
+def resolve_secret(value: str | None) -> str | None:
+    """Resolve an `env:NAME` reference to the environment value (or None).
+
+    Kept for callers that read raw config (e.g. `kateto doctor`) so they
+    mirror what load_config() injects into PluginSettings.api_key.
+    """
+    if value is None or not isinstance(value, str) or not value.startswith("env:"):
+        return value
+    name = value.removeprefix("env:")
+    return os.environ.get(name) if name else None
+
+
+def _resolve_secret_references(raw_config: Mapping[str, object]) -> None:
+    plugin_sections = raw_config.get("plugin")
+    if not isinstance(plugin_sections, dict):
+        return
+    for section in plugin_sections.values():
+        if not isinstance(section, dict):
+            continue
+        api_key = section.get("api_key")
+        if not isinstance(api_key, str) or not api_key.startswith("env:"):
+            continue
+        # Missing env var -> clear the key so the empty-key code path applies.
+        section["api_key"] = resolve_secret(api_key)
 
 
 def validate_cli_command(command: Sequence[str], *, settings: CliSettings) -> tuple[str, ...]:

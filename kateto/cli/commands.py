@@ -42,11 +42,28 @@ class Run(Command):
     """Run the event runtime."""
 
     @override
+    def get_parser(self, prog_name: str) -> argparse.ArgumentParser:
+        parser = super().get_parser(prog_name)
+        _ = parser.add_argument("--trace", action="store_true", help="log every bus event to stderr")
+        _ = parser.add_argument("--trace-events", metavar="NAME", action="append", default=[], help="only trace events with this name (repeatable)")
+        _ = parser.add_argument("--trace-voice", metavar="VOICE", action="append", default=[], help="only trace events touching this voice (repeatable)")
+        return parser
+
+    @override
     def take_action(self, parsed_args: object) -> int:
-        del parsed_args
+        trace = bool(getattr(parsed_args, "trace", False))
+        trace_events = tuple(str(event) for event in getattr(parsed_args, "trace_events", ()))
+        trace_voice = tuple(str(voice) for voice in getattr(parsed_args, "trace_voice", ()))
         try:
             loaded = load_config()
-            asyncio.run(run_event_runtime(loaded))
+            asyncio.run(
+                run_event_runtime(
+                    loaded,
+                    trace=trace,
+                    trace_events=trace_events,
+                    trace_voice=trace_voice,
+                )
+            )
         except (*_CONFIG_ERRORS, EventRuntimeConfigurationError) as error:
             _ = self.app.stderr.write(f"run: {error}\n")
             return 2
@@ -172,8 +189,48 @@ class Install(Command):
         return 0
 
 
+class Setup(Command):
+    """Interactively configure models/endpoints (deep-merge, secrets to file)."""
+
+    @override
+    def take_action(self, parsed_args: object) -> int:
+        del parsed_args
+        from kateto.cli.setup_wizard import run_setup
+
+        try:
+            return run_setup()
+        except (KeyboardInterrupt, EOFError):
+            _ = self.app.stderr.write("setup: aborted\n")
+            return 1
+
+
+class Doctor(Command):
+    """Report config, models, servers, VAD and masked API keys."""
+
+    @override
+    def take_action(self, parsed_args: object) -> int:
+        del parsed_args
+        from dotenv import load_dotenv
+
+        from kateto.cli.doctor import doctor_report
+        from kateto.core.config import resolve_config_dir
+
+        config_dir = resolve_config_dir()
+        _ = load_dotenv(dotenv_path=config_dir / ".env", override=False)
+        _ = load_dotenv(dotenv_path=config_dir / "secrets" / ".env", override=False)
+        config_file = config_dir / "config.toml"
+        config_text = config_file.read_text() if config_file.is_file() else None
+        exit_code, results = doctor_report(config_text)
+        for result in results:
+            status = "ok" if result.ok else "FAIL"
+            _ = self.app.stdout.write(f"[{status}] {result.name}: {result.detail}\n")
+        return exit_code
+
+
 register_command("config check", ConfigCheck)
 register_command("run", Run)
 register_command("smoke", Smoke)
 register_command("tui", Tui)
 register_command("install", Install)
+register_command("setup", Setup)
+register_command("doctor", Doctor)
