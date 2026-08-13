@@ -32,7 +32,7 @@ def test_run_dispatches_to_the_event_runtime_without_a_fixture_substitute(monkey
     def load_config_probe() -> str:
         return "configured-live"
 
-    async def run_event_runtime_probe(config: str) -> None:
+    async def run_event_runtime_probe(config: str, **_: object) -> None:
         calls.append(config)
 
     monkeypatch.setattr(cli_commands, "load_config", load_config_probe)

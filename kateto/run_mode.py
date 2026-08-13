@@ -248,9 +248,22 @@ async def run_event_runtime(
     config: LoadedConfig,
     *,
     dependencies: RuntimeDependencies | None = None,
+    trace: bool = False,
+    trace_events: tuple[str, ...] = (),
+    trace_voice: tuple[str, ...] = (),
 ) -> None:
     _configure_logging(config)
     owner = build_runtime_owner(config, dependencies=dependencies)
+    if trace:
+        from kateto.cli.trace import EventTracer, TraceFilters
+
+        tracer = EventTracer(
+            filters=TraceFilters(
+                events=frozenset(event.casefold() for event in trace_events),
+                voices=frozenset(voice.casefold() for voice in trace_voice),
+            )
+        )
+        tracer.attach(owner.manager)
     await owner.start()
     try:
         _ = await asyncio.Event().wait()

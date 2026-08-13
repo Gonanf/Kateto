@@ -17,6 +17,7 @@ log = logger
 EventHandler = Callable[[BaseModel], Awaitable[None]]
 Subscriber = tuple[str, EventHandler]
 EventObserver = Callable[[EventEnvelope[BaseModel]], None]
+DispatchObserver = Callable[[EventEnvelope[BaseModel], tuple[str, ...]], None]
 DEFAULT_EVENT_LIMIT: Final = 1_000
 HISTORY_BYTES_LIMIT: Final = 4_096
 HISTORY_TEXT_LIMIT: Final = 4_096
@@ -53,6 +54,7 @@ class PluginManager:
         self._received_events: dict[str, deque[EventEnvelope[BaseModel]]] = {}
         self._event_limit: int = event_limit
         self._event_observers: list[EventObserver] = []
+        self._dispatch_observers: list[DispatchObserver] = []
         self._dispatch_tasks: set[asyncio.Task[None]] = set()
         self._completed_dispatches = 0
 
@@ -155,6 +157,15 @@ class PluginManager:
         if observer in self._event_observers:
             self._event_observers.remove(observer)
 
+    def add_dispatch_observer(self, observer: DispatchObserver) -> None:
+        """Observe emits after recipients are resolved (post target/capability/dept filtering)."""
+        if observer not in self._dispatch_observers:
+            self._dispatch_observers.append(observer)
+
+    def remove_dispatch_observer(self, observer: DispatchObserver) -> None:
+        if observer in self._dispatch_observers:
+            self._dispatch_observers.remove(observer)
+
     async def interrupt(
         self,
         *,
@@ -218,6 +229,8 @@ class PluginManager:
         if only_once:
             recipients = recipients[:1]
         log.debug("dispatch {} to {}", name, [p.name for p, _ in recipients])
+        for observer in tuple(self._dispatch_observers):
+            observer(envelope, tuple(plugin.name for plugin, _ in recipients))
         for plugin, handler in recipients:
             self._history_for(self._received_events, plugin.name).append(history_envelope)
             task = asyncio.create_task(plugin._enqueue(envelope, handler))
