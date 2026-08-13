@@ -106,6 +106,9 @@ class VoiceSettings(_ConfigModel):
     camb_voice_id: int | None = None
     camb_language: str | None = None
     edge_tts_voice: str | None = None
+    max_tokens: int | None = None
+    retries: int | None = None
+    timeout: float | None = None
 
     @model_validator(mode="after")
     def validate_dept_fields(self) -> Self:

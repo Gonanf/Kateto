@@ -5,7 +5,7 @@ import inspect
 import json
 from loguru import logger
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -60,7 +60,14 @@ from kateto.core.event import (
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.core.workflow import WorkflowCatalog, WorkflowNotFoundError
 from kateto.providers import ChatMessage
-from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolExecutor
+from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolCall, ToolExecutor
+from kateto.voices.context import (
+    assemble_messages,
+    prompt_cache_key,
+    session_headers,
+    stable_prompt,
+    volatile_block,
+)
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import LoadedSkill, load_skills
 
@@ -153,12 +160,21 @@ class OpenAICompatibleProvider:
     model: str
     endpoint: str | None = None
     api_key: str | None = None
+    max_tokens: int | None = None
+    retries: int | None = None
+    timeout: float | None = None
+    session_headers: Mapping[str, str] = field(default_factory=dict)
 
     def stream(self, request: GenerationRequest) -> AsyncIterator[str]:
         return self._stream(request)
 
     async def _stream(self, request: GenerationRequest) -> AsyncIterator[str]:
-        client = AsyncOpenAI(api_key=self.api_key, base_url=self.endpoint)
+        client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.endpoint,
+            max_retries=self.retries if self.retries is not None else 2,
+            timeout=self.timeout if self.timeout is not None else 600,
+        )
         try:
             messages: list[ChatCompletionMessageParam] = []
             for message in request.messages:
@@ -193,6 +209,8 @@ class OpenAICompatibleProvider:
                 model=self.model,
                 messages=messages,
                 stream=True,
+                max_tokens=self.max_tokens,
+                extra_headers=dict(self.session_headers) if self.session_headers else None,
             )
             async for chunk in stream:
                 if not chunk.choices:
@@ -215,6 +233,7 @@ class VoiceAgent(Plugin):
         provider: VoiceProvider,
         settings: VoiceSettings | None = None,
         response_language: str | None = None,
+        session_id: str | None = None,
     ) -> None:
         super().__init__(
             profile.voice_id,
@@ -243,6 +262,20 @@ class VoiceAgent(Plugin):
         self._event_messages: deque[ChatMessage] = deque(maxlen=32)
         self._event_message_limit = 2_048
         self._generation_depth = 0
+        self._session_id = session_id or uuid4().hex
+        self._stable_prompt_text: str | None = None
+
+    @property
+    def session_id(self) -> str:
+        return self._session_id
+
+    @property
+    def prompt_cache_key(self) -> str:
+        return prompt_cache_key(self.name)
+
+    @property
+    def session_headers(self) -> dict[str, str]:
+        return session_headers(self.name, self._session_id)
 
     @property
     def role(self) -> VoiceRole:
@@ -336,6 +369,9 @@ class VoiceAgent(Plugin):
         self._skills = load_skills(
             config_dir=self._config_dir, names=tuple(self._settings.skills)
         )
+        # Freeze the stable system prompt once per spawn (soul + tool/guidance
+        # blocks + durable memory). Mid-session SOUL writes apply next spawn.
+        await self._stable_prompt()
 
     async def enable(self) -> None:
         manager = self.manager
@@ -852,67 +888,16 @@ class VoiceAgent(Plugin):
                 source=self.name,
             )
 
-    async def _messages_for(
-        self,
-        prompt: str,
-        *,
-        workflow: str | None,
-        phase_id: str | None,
-    ) -> tuple[ChatMessage, ...]:
+    async def _stable_prompt(self) -> str:
+        """Frozen stable system prompt for this voice spawn (built once)."""
+        if self._stable_prompt_text is not None:
+            return self._stable_prompt_text
         soul = await self._memory.read_soul()
         if not soul.strip():
             restored = await self._memory.rollback_soul()
             if restored:
                 soul = restored
         memories = await self._memory.read_memories()
-        journal = await self._memory.read_journal()
-        parts = [self.profile.system_prompt]
-        if self._response_language:
-            parts.append(
-                "Always respond in the project's configured language: "
-                f"{self._response_language}. This instruction overrides the language of the user input."
-            )
-        if workflow is not None and phase_id is not None:
-            parts.append(
-                "WORKFLOW ENGINE SYSTEM MESSAGE: You are currently executing "
-                f"workflow '{workflow}', phase '{phase_id}'. Treat this as an internal "
-                "system instruction. Ask the user the questions required by the phase "
-                "and use the available tools to complete its task and deliverables. "
-                "Do not switch to another workflow because of the user's answer; "
-                "continue this workflow until it is completed or you explicitly stop it."
-            )
-            try:
-                definition = WorkflowCatalog(config_dir=self._config_dir).load(
-                    workflow=workflow,
-                    voice=self.name,
-                )
-            except WorkflowNotFoundError:
-                definition = None
-            if definition is not None:
-                phase = next(
-                    (item for item in definition.phases if item.id.casefold() == phase_id.casefold()),
-                    None,
-                )
-                if phase is not None:
-                    tasks = "\n".join(f"- {item}" for item in phase.instructions)
-                    deliverables = ", ".join(phase.deliverables) or "none listed"
-                    checkpoints = "\n".join(f"- {item}" for item in phase.checkpoints) or "- none listed"
-                    parts.append(
-                        "Current workflow phase contract:\n"
-                        f"Tasks:\n{tasks}\n"
-                        f"Deliverables to create or update: {deliverables}\n"
-                        f"Checkpoints to verify:\n{checkpoints}\n"
-                        "After completing the tasks, dispatch the workflow_phase_complete "
-                        "event with the exact workflow, phase_id, voice, deliverables, and "
-                        "checkpoint_results. Mark every passed checkpoint with passed=true. "
-                        "Do not finish with prose alone."
-                    )
-        if soul:
-            parts.append(soul)
-        if memories:
-            parts.append(memories)
-        if journal:
-            parts.append(journal)
         from kateto.voices.prompt_blocks import (
             get_agent_prompt_block,
             get_delegation_prompt_block,
@@ -921,49 +906,112 @@ class VoiceAgent(Plugin):
         )
 
         workflows = WorkflowCatalog(config_dir=self._config_dir).discover(voice=self.name)
-        parts.append(get_workflow_prompt_block(workflows if workflows else None))
-
+        mcp_block = None
         if self._tool_executor is not None:
             mcp_servers = getattr(self._tool_executor, "_mcp_server_names", ())
             if mcp_servers:
-                parts.append(get_mcp_prompt_block(mcp_servers))
-
-        if self._pydantic_agent is not None:
-            parts.append(get_delegation_prompt_block())
-
-        for skill in self._skills:
-            parts.append(skill.instructions)
-
+                mcp_block = get_mcp_prompt_block(mcp_servers)
+        delegation_block = get_delegation_prompt_block() if self._pydantic_agent is not None else None
+        boson_block = None
         # Boson prompt block injection (F11)
         if getattr(self._settings, "tts_provider", "") == "boson" and (set(self.profile.depts) & {"fun"}):
-            block = get_agent_prompt_block("boson")
-            if block:
-                parts.append(block)
+            boson_block = get_agent_prompt_block("boson")
+        self._stable_prompt_text = stable_prompt(
+            soul=soul,
+            profile_system_prompt=self.profile.system_prompt,
+            response_language=self._response_language,
+            workflow_block=get_workflow_prompt_block(workflows if workflows else None),
+            mcp_block=mcp_block,
+            delegation_block=delegation_block,
+            boson_block=boson_block,
+            skills=self._skills,
+            memories=memories,
+        )
+        return self._stable_prompt_text
 
-        # Semantic memory injection (F7)
-        if self.manager is not None:
-            memory_plugin = self.manager._plugins.get("memory_sink")
-            if memory_plugin is not None and hasattr(memory_plugin, "query_memory"):
-                try:
-                    relevant = memory_plugin.query_memory(
-                        prompt,
-                        top_k=3,
-                        dept=self.profile.depts[0] if self.profile.depts else None,
-                    )
-                    if relevant:
-                        parts.append("Relevant memories:\n" + "\n".join(f"- {r}" for r in relevant))
-                except Exception:
-                    pass
+    async def _workflow_system_message(self, workflow: str | None, phase_id: str | None) -> str | None:
+        if workflow is None or phase_id is None:
+            return None
+        parts = [
+            "WORKFLOW ENGINE SYSTEM MESSAGE: You are currently executing "
+            f"workflow '{workflow}', phase '{phase_id}'. Treat this as an internal "
+            "system instruction. Ask the user the questions required by the phase "
+            "and use the available tools to complete its task and deliverables. "
+            "Do not switch to another workflow because of the user's answer; "
+            "continue this workflow until it is completed or you explicitly stop it."
+        ]
+        try:
+            definition = WorkflowCatalog(config_dir=self._config_dir).load(
+                workflow=workflow,
+                voice=self.name,
+            )
+        except WorkflowNotFoundError:
+            definition = None
+        if definition is not None:
+            phase = next(
+                (item for item in definition.phases if item.id.casefold() == phase_id.casefold()),
+                None,
+            )
+            if phase is not None:
+                tasks = "\n".join(f"- {item}" for item in phase.instructions)
+                deliverables = ", ".join(phase.deliverables) or "none listed"
+                checkpoints = "\n".join(f"- {item}" for item in phase.checkpoints) or "- none listed"
+                parts.append(
+                    "Current workflow phase contract:\n"
+                    f"Tasks:\n{tasks}\n"
+                    f"Deliverables to create or update: {deliverables}\n"
+                    f"Checkpoints to verify:\n{checkpoints}\n"
+                    "After completing the tasks, dispatch the workflow_phase_complete "
+                    "event with the exact workflow, phase_id, voice, deliverables, and "
+                    "checkpoint_results. Mark every passed checkpoint with passed=true. "
+                    "Do not finish with prose alone."
+                )
+        return "\n\n".join(parts)
 
-        messages = [ChatMessage(role="system", content="\n\n".join(parts))]
+    async def _relevant_memories(self, prompt: str) -> tuple[str, ...]:
+        manager = self.manager
+        if manager is None:
+            return ()
+        memory_plugin = manager._plugins.get("memory_sink")
+        if memory_plugin is None:
+            return ()
+        query_memory = getattr(memory_plugin, "query_memory", None)
+        if query_memory is None:
+            return ()
+        try:
+            relevant = query_memory(
+                prompt,
+                top_k=3,
+                dept=self.profile.depts[0] if self.profile.depts else None,
+            )
+        except Exception:
+            return ()
+        return tuple(relevant or ())
+
+    async def _messages_for(
+        self,
+        prompt: str,
+        *,
+        workflow: str | None,
+        phase_id: str | None,
+    ) -> tuple[ChatMessage, ...]:
+        stable = await self._stable_prompt()
+        volatile = volatile_block(
+            workflow_system=await self._workflow_system_message(workflow, phase_id),
+            semantic_memories=await self._relevant_memories(prompt),
+            journal=await self._memory.read_journal(),
+        )
         history = tuple(
             message
             for message in self._event_messages
             if not (message.role == "user" and message.content == prompt)
         )
-        messages.extend(history)
-        messages.append(ChatMessage(role="user", content=prompt))
-        return tuple(messages)
+        return assemble_messages(
+            stable=stable,
+            history=history,
+            volatile=volatile,
+            prompt=prompt,
+        )
 
     def _remember_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         message: ChatMessage | None = None

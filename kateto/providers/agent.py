@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -39,10 +39,19 @@ class OpenAIAgentProvider:
         endpoint: str | None = None,
         api_key: str | None = None,
         max_tokens: int = 4096,
+        retries: int | None = None,
+        timeout: float | None = None,
+        session_headers: Mapping[str, str] | None = None,
     ) -> None:
         self._model = model
-        self._client = AsyncOpenAI(api_key=api_key or "sk-no-key-required", base_url=endpoint)
+        self._client = AsyncOpenAI(
+            api_key=api_key or "sk-no-key-required",
+            base_url=endpoint,
+            max_retries=retries if retries is not None else 2,
+            timeout=timeout if timeout is not None else 600,
+        )
         self._max_tokens = max_tokens
+        self._session_headers = dict(session_headers or {})
 
     def _base_kwargs(self, *, stream: bool) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
@@ -51,6 +60,8 @@ class OpenAIAgentProvider:
         }
         if stream:
             kwargs["stream"] = True
+        if self._session_headers:
+            kwargs["extra_headers"] = dict(self._session_headers)
         return kwargs
 
     async def chat_with_tools(
@@ -153,6 +164,9 @@ class HermesProvider(OpenAIAgentProvider):
         endpoint: str | None = None,
         api_key: str | None = None,
         max_tokens: int = 4096,
+        retries: int | None = None,
+        timeout: float | None = None,
+        session_headers: Mapping[str, str] | None = None,
         manage_tools: bool = False,
     ) -> None:
         super().__init__(
@@ -160,6 +174,9 @@ class HermesProvider(OpenAIAgentProvider):
             endpoint=endpoint,
             api_key=api_key,
             max_tokens=max_tokens,
+            retries=retries,
+            timeout=timeout,
+            session_headers=session_headers,
         )
         self._conversation_id = conversation_id
         self._manage_tools = manage_tools

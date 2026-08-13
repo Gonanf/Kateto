@@ -55,24 +55,36 @@ enabled = true
 skills = ["orchestrator"]
 mcp_servers = ["system"]
 stream = false
+max_tokens = 4096
+retries = 2
+timeout = 600
 
 [voice.doktor]
 enabled = true
 skills = ["backlog", "risk-analysis", "planning-poker"]
 mcp_servers = ["system"]
 stream = false
+max_tokens = 4096
+retries = 2
+timeout = 600
 
 [voice.conquest]
 enabled = true
 skills = ["backlog"]
 mcp_servers = ["system"]
 stream = false
+max_tokens = 4096
+retries = 2
+timeout = 600
 
 [voice.whisperer]
 enabled = true
 skills = ["orchestrator"]
 mcp_servers = ["system"]
 stream = false
+max_tokens = 4096
+retries = 2
+timeout = 600
 
 [mcp_servers.system]
 command = "kateto"
