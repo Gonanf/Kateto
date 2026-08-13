@@ -19,6 +19,8 @@ class ToolCall:
 class AgentResponse:
     text: str
     tool_calls: tuple[ToolCall, ...] = ()
+    # finish_reason of the underlying completion ("length" => truncated turn)
+    stop_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +65,7 @@ class OpenAIAgentProvider:
         response = await self._client.chat.completions.create(**kwargs)
         choice = response.choices[0]
         message = choice.message
+        finish_reason = getattr(choice, "finish_reason", None)
         if message.tool_calls:
             tool_calls = tuple(
                 ToolCall(
@@ -72,8 +75,12 @@ class OpenAIAgentProvider:
                 )
                 for tc in message.tool_calls
             )
-            return AgentResponse(text=message.content or "", tool_calls=tool_calls)
-        return AgentResponse(text=message.content or "")
+            return AgentResponse(
+                text=message.content or "",
+                tool_calls=tool_calls,
+                stop_reason=finish_reason,
+            )
+        return AgentResponse(text=message.content or "", stop_reason=finish_reason)
 
     async def chat_with_tools_stream(
         self,
@@ -119,6 +126,7 @@ class OpenAIAgentProvider:
                     )
                     for tc in sorted(tool_calls_buf.values(), key=lambda x: x["id"])
                 ),
+                stop_reason=finish_reason,
             )
 
 

@@ -18,7 +18,66 @@ from openai.types.chat import ChatCompletionToolParam
 from kateto.core.config import CliSettings
 from kateto.core.event import ScheduleRequestData, ScheduleType
 from kateto.core.manager import PluginManager
-from kateto.providers.agent import ToolExecutor
+from kateto.providers.agent import ToolCall, ToolExecutor
+
+# C0 control chars except tab/newline/cr; JSON escapes are already decoded by json.loads.
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def sanitize_string(value: str) -> str:
+    return _CONTROL_CHARS.sub("", value)
+
+
+def turn_is_truncated(stop_reason: str | None, tool_calls: tuple[ToolCall, ...]) -> bool:
+    """Guard: a truncated turn (stop_reason == "length") must not execute its tool calls."""
+    return stop_reason == "length" and bool(tool_calls)
+
+
+# Tools that close the task (e.g. delegation): no follow-up LLM call when the
+# whole batch terminates. Deliberately NOT part of the OpenAI wire schema —
+# servers reject unknown function keys.
+TERMINAL_TOOLS: frozenset[str] = frozenset({"request_generation"})
+
+
+def is_terminal_tool(name: str) -> bool:
+    return name in TERMINAL_TOOLS
+
+
+def preflight_tool_arguments(
+    parameters: dict[str, Any] | None,
+    arguments: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Sanitize strings and validate args against the tool's JSON schema.
+
+    Returns (cleaned_args, None) on success, (None, error_message) on rejection.
+    """
+    parameters = parameters or {}
+    properties: dict[str, Any] = parameters.get("properties") or {}
+    required: list[str] = parameters.get("required") or []
+    for key in required:
+        if key not in arguments:
+            return None, f"missing required argument: {key}"
+    cleaned: dict[str, Any] = {}
+    for key, value in arguments.items():
+        stype = (properties.get(key) or {}).get("type")
+        if stype == "string":
+            if not isinstance(value, str):
+                return None, f"argument '{key}' must be a string, got {type(value).__name__}"
+            value = sanitize_string(value)
+        elif stype == "number":
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return None, f"argument '{key}' must be a number, got {type(value).__name__}"
+        elif stype == "boolean":
+            if not isinstance(value, bool):
+                return None, f"argument '{key}' must be a boolean, got {type(value).__name__}"
+        elif stype == "array":
+            if not isinstance(value, list):
+                return None, f"argument '{key}' must be an array, got {type(value).__name__}"
+        elif stype == "object":
+            if not isinstance(value, dict):
+                return None, f"argument '{key}' must be an object, got {type(value).__name__}"
+        cleaned[key] = value
+    return cleaned, None
 
 
 class VoiceToolExecutor:

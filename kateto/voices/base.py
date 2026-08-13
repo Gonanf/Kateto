@@ -60,7 +60,7 @@ from kateto.core.event import (
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.core.workflow import WorkflowCatalog, WorkflowNotFoundError
 from kateto.providers import ChatMessage
-from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolCall, ToolExecutor
+from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolExecutor
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import LoadedSkill, load_skills
 
@@ -623,6 +623,7 @@ class VoiceAgent(Plugin):
                     sequence = 0
                     previous: str | None = None
                     had_tool_calls = False
+                    turn_terminated = False
                     async for item in provider.chat_with_tools_stream(
                         messages=messages,
                         tools=self._tools,
@@ -643,10 +644,12 @@ class VoiceAgent(Plugin):
                                     await pipeline.token_queue.put(previous)
                                     await self._emit_chunk(previous, sequence, final=True)
                                     previous = None
-                                await self._handle_tool_calls(
+                                turn_terminated = await self._handle_tool_calls(
                                     messages=messages, response=response, executor=executor,
                                 )
                                 had_tool_calls = True
+                                if turn_terminated:
+                                    break
                             case AgentResponse() as response if response.text.strip():
                                 await pipeline.token_queue.put(response.text)
                                 await self._emit_chunk(response.text, sequence, final=True)
@@ -660,7 +663,7 @@ class VoiceAgent(Plugin):
                     if previous is not None:
                         await pipeline.token_queue.put(previous)
                         await self._emit_chunk(previous, sequence, final=True)
-                    if not had_tool_calls:
+                    if not had_tool_calls or turn_terminated:
                         break
                 else:
                     response = await provider.chat_with_tools(
@@ -672,9 +675,11 @@ class VoiceAgent(Plugin):
                             await pipeline.token_queue.put(response.text)
                             await self._emit_chunk(response.text, 0, final=True)
                         break
-                    await self._handle_tool_calls(
+                    turn_terminated = await self._handle_tool_calls(
                         messages=messages, response=response, executor=executor,
                     )
+                    if turn_terminated:
+                        break
         finally:
             await pipeline.token_queue.put(None)
             manager = self.manager
@@ -744,7 +749,24 @@ class VoiceAgent(Plugin):
         messages: list[dict[str, object]],
         response: AgentResponse,
         executor: ToolExecutor,
-    ) -> None:
+    ) -> bool:
+        """Execute the turn's tool calls under the reliability guard.
+
+        Truncated turns (stop_reason == "length") never execute: the model gets
+        a structured error instead. Args are sanitized and validated against
+        the tool's declared schema before invoking. Returns True when the whole
+        batch terminated the turn, so the caller can skip the LLM round-trip.
+        """
+        from kateto.voices.tools import (
+            is_terminal_tool,
+            preflight_tool_arguments,
+            turn_is_truncated,
+        )
+
+        schemas = {
+            tool["function"]["name"]: tool["function"].get("parameters") or {}
+            for tool in self._tools
+        }
         messages.append(
             {
                 "role": "assistant",
@@ -755,33 +777,42 @@ class VoiceAgent(Plugin):
                 ],
             }
         )
+        truncated = turn_is_truncated(response.stop_reason, response.tool_calls)
+        executed: list[str] = []
         for tc in response.tool_calls:
             correlation_id = uuid4().hex
             manager = self.manager
-            if tc.name == "request_generation":
-                tc = ToolCall(
-                    id=tc.id,
-                    name=tc.name,
-                    arguments={**tc.arguments, "depth": self._generation_depth},
+            if truncated:
+                args: dict[str, Any] | None = None
+                error = (
+                    "tool call rejected: response was truncated (stop_reason=length), "
+                    "arguments may be corrupt — regenerate the call"
                 )
-            if manager is not None:
-                envelope = await manager.emit(
-                    "tool_call",
-                    ToolCallData(
-                        tool_name=tc.name,
-                        arguments=tc.arguments,
-                        correlation_id=correlation_id,
-                        voice=self.name,
-                    ),
-                    source=self.name,
-                )
-                self._remember_event(envelope)
-            try:
-                result = await executor.execute(tc.name, tc.arguments)
-                error = None
-            except Exception as e:
+            else:
+                args, problem = preflight_tool_arguments(schemas.get(tc.name), tc.arguments)
+                error = None if problem is None else f"tool arguments rejected: {problem}"
+            if args is None:
                 result = ""
-                error = str(e)
+            else:
+                if tc.name == "request_generation":
+                    args = {**args, "depth": self._generation_depth}
+                if manager is not None:
+                    envelope = await manager.emit(
+                        "tool_call",
+                        ToolCallData(
+                            tool_name=tc.name,
+                            arguments=args,
+                            correlation_id=correlation_id,
+                            voice=self.name,
+                        ),
+                        source=self.name,
+                    )
+                    self._remember_event(envelope)
+                try:
+                    result = await executor.execute(tc.name, args)
+                except Exception as e:
+                    result = ""
+                    error = str(e)
             if manager is not None:
                 envelope = await manager.emit(
                     "tool_result",
@@ -802,6 +833,12 @@ class VoiceAgent(Plugin):
                     "content": result if error is None else f"Error: {error}",
                 }
             )
+            if error is None:
+                executed.append(tc.name)
+        if not executed:
+            return False
+        terminal = {tool["function"]["name"] for tool in self._tools if is_terminal_tool(tool["function"]["name"])}
+        return all(name in terminal for name in executed)
 
     async def _set_status(self, status: VoiceStatus) -> None:
         if self._status is status:
