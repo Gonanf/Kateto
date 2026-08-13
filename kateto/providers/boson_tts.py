@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from typing import Any
 
 import httpx
+
+
+# ponytail: shared client is never closed — process-lifetime reuse is the point
+@lru_cache(maxsize=16)
+def _httpx_client(endpoint: str) -> httpx.AsyncClient:
+    return httpx.AsyncClient()
 
 
 class BosonTTSProvider:
@@ -46,7 +53,7 @@ class BosonTTSProvider:
         if effective_voice:
             payload["voice"] = effective_voice
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(self.endpoint, json=payload, headers=headers, timeout=10.0)
-            resp.raise_for_status()
-            return resp.content
+        client = _httpx_client(self.endpoint)
+        resp = await client.post(self.endpoint, json=payload, headers=headers, timeout=10.0)
+        resp.raise_for_status()
+        return resp.content

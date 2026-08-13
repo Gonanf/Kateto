@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+from functools import lru_cache
 from loguru import logger
 from collections import deque
 from collections.abc import AsyncIterator
@@ -66,6 +67,103 @@ from kateto.voices.skills import LoadedSkill, load_skills
 
 # Data plane: direct channels bypassing the event bus for streaming data
 _PIPELINES: dict[str, AudioPipeline] = {}
+
+PHRASE_DELIMITERS = ".!?\n"
+PHRASE_MAX_TOKENS = 128
+
+
+@dataclass(frozen=True, slots=True)
+class FinalMessage:
+    text: str
+    usage: dict[str, int] | None = None
+    stop_reason: str | None = None
+
+
+@dataclass(slots=True)
+class PhraseSegmenter:
+    delimiters: str = PHRASE_DELIMITERS
+    max_tokens: int = PHRASE_MAX_TOKENS
+    _buffer: str = field(default="", init=False)
+    _count: int = field(default=0, init=False)
+
+    def feed(self, token: str) -> list[str]:
+        self._buffer += token
+        self._count += 1
+        if self._ends_phrase() or self._count >= self.max_tokens:
+            phrase = self._buffer
+            # keep trailing whitespace as the start of the next phrase
+            self._buffer = phrase[len(phrase.rstrip()):]
+            self._count = 0
+            return [phrase]
+        return []
+
+    def flush(self) -> str | None:
+        if not self._buffer:
+            return None
+        phrase = self._buffer
+        self._buffer = ""
+        self._count = 0
+        return phrase
+
+    def _ends_phrase(self) -> bool:
+        text = self._buffer
+        return text[-1:] in self.delimiters or (text[-1:].isspace() and text.rstrip()[-1:] in self.delimiters)
+
+
+class VoiceEventStream:
+    """Dual stream: AsyncIterator of raw text deltas + final_message() Future.
+
+    Iterating yields the underlying provider's deltas unchanged; the
+    accumulated text plus any metadata set via set_meta() resolve the Future
+    returned by final_message() once the stream is exhausted. Downstream
+    token_queue/text_chunk consumers still receive the raw deltas.
+    """
+
+    def __init__(self, tokens: AsyncIterator[str]) -> None:
+        self._tokens = tokens
+        self._text = ""
+        self._usage: dict[str, int] | None = None
+        self._stop_reason: str | None = None
+        self._done = False
+        self._final: asyncio.Future[FinalMessage] | None = None
+
+    def __aiter__(self) -> VoiceEventStream:
+        return self
+
+    async def __anext__(self) -> str:
+        try:
+            token = await self._tokens.__anext__()
+        except StopAsyncIteration:
+            self._done = True
+            self._resolve_if_waited()
+            raise
+        except asyncio.CancelledError:
+            self._done = True
+            self._resolve_if_waited()
+            raise
+        self._text += token
+        return token
+
+    def set_meta(self, *, usage: dict[str, int] | None = None, stop_reason: str | None = None) -> None:
+        if usage is not None:
+            self._usage = usage
+        if stop_reason is not None:
+            self._stop_reason = stop_reason
+
+    def final_message(self) -> asyncio.Future[FinalMessage]:
+        """Future resolving to the final message once the stream ends."""
+        if self._final is None:
+            self._final = asyncio.get_event_loop().create_future()
+            if self._done:
+                self._final.set_result(self._final_message())
+        return self._final
+
+    def _final_message(self) -> FinalMessage:
+        return FinalMessage(text=self._text, usage=self._usage, stop_reason=self._stop_reason)
+
+    def _resolve_if_waited(self) -> None:
+        if self._final is not None and not self._final.done():
+            self._final.set_result(self._final_message())
 
 
 @dataclass
@@ -148,60 +246,73 @@ def _to_pydantic_messages(
     return result
 
 
+@lru_cache(maxsize=16)
+def _openai_client(endpoint: str | None, api_key: str | None) -> AsyncOpenAI:
+    return AsyncOpenAI(api_key=api_key, base_url=endpoint)
+
+
 @dataclass(frozen=True, slots=True)
 class OpenAICompatibleProvider:
     model: str
     endpoint: str | None = None
     api_key: str | None = None
+    last_usage: dict[str, int] | None = field(default=None, init=False)
+    last_stop_reason: str | None = field(default=None, init=False)
 
     def stream(self, request: GenerationRequest) -> AsyncIterator[str]:
         return self._stream(request)
 
     async def _stream(self, request: GenerationRequest) -> AsyncIterator[str]:
-        client = AsyncOpenAI(api_key=self.api_key, base_url=self.endpoint)
-        try:
-            messages: list[ChatCompletionMessageParam] = []
-            for message in request.messages:
-                match message.role:
-                    case "assistant":
-                        messages.append(
-                            ChatCompletionAssistantMessageParam(
-                                role="assistant", content=message.content
-                            )
+        client = _openai_client(self.endpoint, self.api_key)
+        messages: list[ChatCompletionMessageParam] = []
+        for message in request.messages:
+            match message.role:
+                case "assistant":
+                    messages.append(
+                        ChatCompletionAssistantMessageParam(
+                            role="assistant", content=message.content
                         )
-                    case "developer":
-                        messages.append(
-                            ChatCompletionDeveloperMessageParam(
-                                role="developer", content=message.content
-                            )
+                    )
+                case "developer":
+                    messages.append(
+                        ChatCompletionDeveloperMessageParam(
+                            role="developer", content=message.content
                         )
-                    case "system":
-                        messages.append(
-                            ChatCompletionSystemMessageParam(
-                                role="system", content=message.content
-                            )
+                    )
+                case "system":
+                    messages.append(
+                        ChatCompletionSystemMessageParam(
+                            role="system", content=message.content
                         )
-                    case "user":
-                        messages.append(
-                            ChatCompletionUserMessageParam(
-                                role="user", content=message.content
-                            )
+                    )
+                case "user":
+                    messages.append(
+                        ChatCompletionUserMessageParam(
+                            role="user", content=message.content
                         )
-                    case unreachable:
-                        assert_never(unreachable)
-            stream = await client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                stream=True,
-            )
-            async for chunk in stream:
-                if not chunk.choices:
-                    continue
-                content = chunk.choices[0].delta.content
-                if content is not None:
-                    yield content
-        finally:
-            await client.close()
+                    )
+                case unreachable:
+                    assert_never(unreachable)
+        stream = await client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            stream=True,
+        )
+        async for chunk in stream:
+            usage = getattr(chunk, "usage", None)
+            if usage:
+                object.__setattr__(
+                    self,
+                    "last_usage",
+                    {k: v for k, v in usage.model_dump().items() if v is not None},
+                )
+            if not chunk.choices:
+                continue
+            if chunk.choices[0].finish_reason is not None:
+                object.__setattr__(self, "last_stop_reason", str(chunk.choices[0].finish_reason))
+            content = chunk.choices[0].delta.content
+            if content is not None:
+                yield content
 
 
 class VoiceAgent(Plugin):
@@ -551,16 +662,30 @@ class VoiceAgent(Plugin):
         if self._settings.stream:
             log.debug("[{}] stream=true mode, pushing to pipeline", self.name)
             sequence = 0
-            async for token in self._provider.stream(request):
+            segmenter = PhraseSegmenter()
+            stream = VoiceEventStream(self._provider.stream(request))
+            async for token in stream:
                 if not isinstance(token, str) or not token:
                     raise ProviderStreamError(
                         voice=self.name, reason="token must be a non-empty string"
                     )
                 if self._status is not VoiceStatus.TALKING:
                     await self._set_status(VoiceStatus.TALKING)
-                await pipeline.token_queue.put(token)
-                await self._emit_chunk(token, sequence, final=False)
+                for phrase in segmenter.feed(token):
+                    await pipeline.token_queue.put(phrase)
+                    await self._emit_chunk(phrase, sequence, final=False)
+                    sequence += 1
+            tail = segmenter.flush()
+            if tail is not None:
+                await pipeline.token_queue.put(tail)
+                await self._emit_chunk(tail, sequence, final=False)
                 sequence += 1
+            stream.set_meta(
+                usage=getattr(self._provider, "last_usage", None),
+                stop_reason=getattr(self._provider, "last_stop_reason", None),
+            )
+            # ponytail: final_message() not awaited — no bus consumer for usage yet;
+            # it is the seam for tests and future Zonos2 wiring.
             await pipeline.token_queue.put(None)
             await self._emit_chunk("", sequence, final=True)
         else:
@@ -621,7 +746,7 @@ class VoiceAgent(Plugin):
                     break
                 if self._settings.stream:
                     sequence = 0
-                    previous: str | None = None
+                    segmenter = PhraseSegmenter()
                     had_tool_calls = False
                     async for item in provider.chat_with_tools_stream(
                         messages=messages,
@@ -633,16 +758,16 @@ class VoiceAgent(Plugin):
                             case StreamToken(text=token) if token:
                                 if self._status is not VoiceStatus.TALKING:
                                     await self._set_status(VoiceStatus.TALKING)
-                                if previous is not None:
-                                    await pipeline.token_queue.put(previous)
-                                    await self._emit_chunk(previous, sequence, final=False)
+                                for phrase in segmenter.feed(token):
+                                    await pipeline.token_queue.put(phrase)
+                                    await self._emit_chunk(phrase, sequence, final=False)
                                     sequence += 1
-                                previous = token
                             case AgentResponse() as response if response.tool_calls:
-                                if previous is not None:
-                                    await pipeline.token_queue.put(previous)
-                                    await self._emit_chunk(previous, sequence, final=True)
-                                    previous = None
+                                tail = segmenter.flush()
+                                if tail is not None:
+                                    await pipeline.token_queue.put(tail)
+                                    await self._emit_chunk(tail, sequence, final=True)
+                                    sequence += 1
                                 await self._handle_tool_calls(
                                     messages=messages, response=response, executor=executor,
                                 )
@@ -650,16 +775,16 @@ class VoiceAgent(Plugin):
                             case AgentResponse() as response if response.text.strip():
                                 await pipeline.token_queue.put(response.text)
                                 await self._emit_chunk(response.text, sequence, final=True)
-                                previous = None
                                 had_tool_calls = False
                                 break
                             case _:
                                 pass
                     if self._interrupted:
                         break
-                    if previous is not None:
-                        await pipeline.token_queue.put(previous)
-                        await self._emit_chunk(previous, sequence, final=True)
+                    tail = segmenter.flush()
+                    if tail is not None:
+                        await pipeline.token_queue.put(tail)
+                        await self._emit_chunk(tail, sequence, final=True)
                     if not had_tool_calls:
                         break
                 else:
@@ -703,16 +828,24 @@ class VoiceAgent(Plugin):
         try:
             if self._settings.stream:
                 sequence = 0
+                segmenter = PhraseSegmenter()
                 async with agent.run_stream(user_prompt, message_history=history or None) as result:
-                    async for msg in result.stream_text(delta=True):
+                    stream = VoiceEventStream(result.stream_text(delta=True))
+                    async for msg in stream:
                         if self._interrupted:
                             break
                         if isinstance(msg, str) and msg:
                             if self._status is not VoiceStatus.TALKING:
                                 await self._set_status(VoiceStatus.TALKING)
-                            await pipeline.token_queue.put(msg)
-                            await self._emit_chunk(msg, sequence, final=False)
-                            sequence += 1
+                            for phrase in segmenter.feed(msg):
+                                await pipeline.token_queue.put(phrase)
+                                await self._emit_chunk(phrase, sequence, final=False)
+                                sequence += 1
+                    tail = segmenter.flush()
+                    if tail is not None:
+                        await pipeline.token_queue.put(tail)
+                        await self._emit_chunk(tail, sequence, final=False)
+                        sequence += 1
                     await pipeline.token_queue.put(None)
                     raw_output = result.get_output()
                     if inspect.isawaitable(raw_output):
