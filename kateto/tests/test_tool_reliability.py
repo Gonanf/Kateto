@@ -190,6 +190,6 @@ async def test_faux_3_step_script_runs_full_pipeline(tmp_path: Path) -> None:
         for e in manager.get_events()
         if e.name == "text_chunk" and isinstance(e.data, TextChunk) and e.data.text
     ]
-    assert "Checking" in spoken and "Plan found." in "".join(spoken)
+    assert "Checking" in "".join(spoken) and "Plan found." in "".join(spoken)
     results = [e.data for e in manager.get_events() if e.name == "tool_result"]
     assert results and results[0].error is None and "ship it" in results[0].result

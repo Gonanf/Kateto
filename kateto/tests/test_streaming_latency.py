@@ -77,9 +77,9 @@ async def test_voice_event_stream_resolves_after_exhaustion_without_manual_finis
 async def test_openai_client_cache_reuses_client_per_endpoint() -> None:
     # Given: the cached OpenAI client factory.
     # Then: same endpoint+key reuses the client; different endpoint or key does not.
-    assert _openai_client("http://a", "k") is _openai_client("http://a", "k")
-    assert _openai_client("http://a", "k") is not _openai_client("http://b", "k")
-    assert _openai_client("http://a", "k") is not _openai_client("http://a", "other")
+    assert _openai_client("http://a", "k", 2, 600.0) is _openai_client("http://a", "k", 2, 600.0)
+    assert _openai_client("http://a", "k", 2, 600.0) is not _openai_client("http://b", "k", 2, 600.0)
+    assert _openai_client("http://a", "k", 2, 600.0) is not _openai_client("http://a", "other", 2, 600.0)
 
 
 @pytest.mark.asyncio

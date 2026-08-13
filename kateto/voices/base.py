@@ -259,8 +259,13 @@ def _to_pydantic_messages(
 
 
 @lru_cache(maxsize=16)
-def _openai_client(endpoint: str | None, api_key: str | None) -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=api_key, base_url=endpoint)
+def _openai_client(
+    endpoint: str | None,
+    api_key: str | None,
+    retries: int,
+    timeout: float,
+) -> AsyncOpenAI:
+    return AsyncOpenAI(api_key=api_key, base_url=endpoint, max_retries=retries, timeout=timeout)
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,7 +284,12 @@ class OpenAICompatibleProvider:
         return self._stream(request)
 
     async def _stream(self, request: GenerationRequest) -> AsyncIterator[str]:
-        client = _openai_client(self.endpoint, self.api_key)
+        client = _openai_client(
+            self.endpoint,
+            self.api_key,
+            self.retries if self.retries is not None else 2,
+            self.timeout if self.timeout is not None else 600,
+        )
         messages: list[ChatCompletionMessageParam] = []
         for message in request.messages:
             match message.role:
@@ -326,7 +336,7 @@ class OpenAICompatibleProvider:
                 )
             if not chunk.choices:
                 continue
-            if chunk.choices[0].finish_reason is not None:
+            if getattr(chunk.choices[0], "finish_reason", None) is not None:
                 object.__setattr__(self, "last_stop_reason", str(chunk.choices[0].finish_reason))
             content = chunk.choices[0].delta.content
             if content is not None:
