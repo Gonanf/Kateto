@@ -70,7 +70,7 @@ class BlockingFixtureProvider:
             case 1:
                 yield "one"
                 yield " two"
-                yield " three"
+                yield " three."
                 self.blocked.set()
                 try:
                     await asyncio.Event().wait()
