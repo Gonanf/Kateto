@@ -19,7 +19,7 @@ from kateto.core.manager import PluginManager
 log = logger
 
 OVERLAY_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "index.html"
-VALID_AVATAR_FILES = ("top.png", "mouth.png")
+VALID_AVATAR_FILES = ("top.png", "mouth.png", "avatar_head.png", "avatar_jaw.png")
 
 
 class EventListItem(BaseModel):
