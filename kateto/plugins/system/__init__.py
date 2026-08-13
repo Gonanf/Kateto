@@ -17,6 +17,7 @@ from kateto.core.workflow_engine import WorkflowEngine
 from kateto.plugins.system.external_mcp import ExternalMcpManager
 from kateto.plugins.system.http_server import HttpServer
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
+from kateto.plugins.system.turn_gate import TurnGate
 from kateto.plugins.system.voice_manager import VoiceManager
 
 
@@ -77,4 +78,4 @@ def create_plugins(ctx: DiscoveryContext) -> tuple[Plugin, ...]:
         voice_manager_settings if voice_manager_settings is not None else None
     )
     workflow_engine = WorkflowEngine(config_dir=ctx.config.paths.config_dir)
-    return voice_manager, workflow_engine
+    return TurnGate(), voice_manager, workflow_engine
