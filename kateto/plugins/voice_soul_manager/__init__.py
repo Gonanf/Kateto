@@ -13,11 +13,14 @@ if TYPE_CHECKING:
 
 
 class VoiceSOULManager(Plugin):
-    """Centralized manager for per-voice SOUL/JOURNAL maintenance.
+    """Listener for ``voice_idle`` kept for runtime-shape stability.
 
-    Listens for ``voice_idle`` events and, when a voice has been idle, auto-
-    updates its JOURNAL.md (idle timestamp entry) and SOUL.md (last_active
-    marker) subject to a time-based throttle.
+    SOUL.md and JOURNAL.md are read-only at runtime (memory-ledger feature):
+    declarative memories are written to the per-department VoiceMemoryLedger
+    via the refine_memory tool, and the SOUL only changes between sessions via
+    versioned snapshots. The updater calls below are no-ops, so the event
+    subscription and throttle tracker stay in place for future session-boundary
+    work.
     """
 
     def __init__(self, config_dir: Path) -> None:

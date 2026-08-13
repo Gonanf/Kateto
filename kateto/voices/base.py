@@ -61,6 +61,7 @@ from kateto.core.plugin import EventHandler, Plugin
 from kateto.core.workflow import WorkflowCatalog, WorkflowNotFoundError
 from kateto.providers import ChatMessage
 from kateto.providers.agent import AgentResponse, OpenAIAgentProvider, StreamToken, ToolCall, ToolExecutor
+from kateto.voices.ledger import VoiceMemoryLedger
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import LoadedSkill, load_skills
 
@@ -243,6 +244,7 @@ class VoiceAgent(Plugin):
         self._event_messages: deque[ChatMessage] = deque(maxlen=32)
         self._event_message_limit = 2_048
         self._generation_depth = 0
+        self._memory_block: str | None = None
 
     @property
     def role(self) -> VoiceRole:
@@ -872,6 +874,18 @@ class VoiceAgent(Plugin):
                     )
         if soul:
             parts.append(soul)
+        if self._memory_block is None:
+            # <VOICE_MEMORY> is read from the dept ledger once, at session
+            # start (frozen); mid-session writes land on disk only.
+            dept = self.profile.depts[0] if self.profile.depts else ""
+            block = (
+                VoiceMemoryLedger.for_dept(config_dir=self._config_dir, dept=dept).render_block()
+                if dept
+                else ""
+            )
+            self._memory_block = block
+        if self._memory_block:
+            parts.append(self._memory_block)
         if memories:
             parts.append(memories)
         if journal:
