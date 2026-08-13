@@ -312,6 +312,7 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             external_manager=external_mcp,
             mcp_server_names=mcp_servers,
             voice_name=voice_name,
+            dept=profile.depts[0] if profile.depts else ctx.config.settings.kateto.default_voice_dept,
             disable_scheduling_tools=is_hermes,
         )
         voice.setup_agent(agent_provider=agent_provider, tool_executor=executor)

@@ -73,6 +73,7 @@ from kateto.voices.context import (
     stable_prompt,
     volatile_block,
 )
+from kateto.voices.ledger import VoiceMemoryLedger
 from kateto.voices.memory import VoiceMemory
 from kateto.voices.skills import LoadedSkill, load_skills
 
@@ -375,6 +376,7 @@ class VoiceAgent(Plugin):
         self._session_id = session_id or uuid4().hex
         self._stable_prompt_text: str | None = None
         self._followup_pending = False
+        self._memory_block: str | None = None
 
     @property
     def session_id(self) -> str:
@@ -1078,6 +1080,18 @@ class VoiceAgent(Plugin):
             if restored:
                 soul = restored
         memories = await self._memory.read_memories()
+        if self._memory_block is None:
+            # <VOICE_MEMORY> is read from the dept ledger once, at session
+            # start (frozen); mid-session writes land on disk only.
+            dept = self.profile.depts[0] if self.profile.depts else ""
+            block = (
+                VoiceMemoryLedger.for_dept(config_dir=self._config_dir, dept=dept).render_block()
+                if dept
+                else ""
+            )
+            self._memory_block = block
+        if self._memory_block:
+            memories = f"{memories}\n\n{self._memory_block}" if memories else self._memory_block
         from kateto.voices.prompt_blocks import (
             get_agent_prompt_block,
             get_delegation_prompt_block,

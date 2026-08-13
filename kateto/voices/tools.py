@@ -91,6 +91,7 @@ class VoiceToolExecutor:
         external_manager: "ExternalMcpManager | None" = None,
         mcp_server_names: tuple[str, ...] = (),
         voice_name: str = "",
+        dept: str = "",
         disable_scheduling_tools: bool = False,
     ) -> None:
         self._config_dir = config_dir.resolve()
@@ -100,6 +101,7 @@ class VoiceToolExecutor:
         self._external_manager = external_manager
         self._mcp_server_names = mcp_server_names
         self._voice_name = voice_name
+        self._dept = dept
         self._disable_scheduling_tools = disable_scheduling_tools
 
     def set_manager(self, manager: PluginManager) -> None:
@@ -143,6 +145,8 @@ class VoiceToolExecutor:
                 return await self._schedule_event(arguments)
             case "get_current_time":
                 return self._get_current_time()
+            case "refine_memory":
+                return await self._refine_memory(arguments)
             case _:
                 if self._external_manager is not None and self._mcp_server_names:
                     result = await self._external_manager.try_call_tool(
@@ -531,6 +535,22 @@ class VoiceToolExecutor:
     def _get_current_time(self) -> str:
         return datetime.now().isoformat()
 
+    async def _refine_memory(self, args: dict[str, Any]) -> str:
+        from kateto.voices.ledger import VoiceMemoryLedger
+
+        if not self._dept:
+            return json.dumps({"error": "no department configured; cannot refine memory"})
+        ledger = VoiceMemoryLedger.for_dept(config_dir=self._config_dir, dept=self._dept)
+        try:
+            result = await ledger.refine(
+                fact=str(args.get("fact", "")),
+                category=str(args.get("category", "")),
+                evidence=str(args.get("evidence", "")),
+            )
+            return json.dumps(result)
+        except Exception as e:
+            return json.dumps({"error": str(e)})
+
 
 def build_event_tools(manager: PluginManager) -> tuple[ChatCompletionToolParam, ...]:
     tools: list[ChatCompletionToolParam] = []
@@ -878,6 +898,42 @@ BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
             "parameters": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+    ),
+    ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": "refine_memory",
+            "description": (
+                "Add, update, or remove a declarative memory in the shared memory ledger for your "
+                "department (fun = stream memory; work/management = project memory shared with the "
+                "other voices there). The ledger is injected into your system prompt once at session "
+                "start, so changes apply from the next session. Categories: facts (confirmed facts "
+                "about the user/project), relationships (dynamics between voices), action_patterns "
+                "(recurring commands or scripts). To ADD: pass a fact and optional evidence. To "
+                "REPLACE an existing entry: pass the new fact and, in evidence, a short unique "
+                "substring of the existing fact. To REMOVE: pass fact='' and, in evidence, a short "
+                "unique substring of the entry to delete. Hygiene: store declarative facts only, "
+                "never progress logs, PR numbers, or 'fixed X' notes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fact": {
+                        "type": "string",
+                        "description": "The declarative fact to store (empty string to remove)",
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "facts | relationships | action_patterns",
+                    },
+                    "evidence": {
+                        "type": "string",
+                        "description": "Context/source, or the unique substring of an existing fact to replace/remove",
+                    },
+                },
+                "required": ["fact", "category"],
             },
         },
     ),
