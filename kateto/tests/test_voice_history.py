@@ -251,7 +251,9 @@ async def test_voice_provider_request_enforces_project_language(tmp_path: Path) 
         await manager.wait_for_idle()
 
         # Then: every provider path receives the project-language instruction.
-        system_message = provider.requests[0].messages[0].content
+        system_message = next(
+            m.content for m in provider.requests[0].messages if m.role == "system"
+        )
         assert "project's configured language: es" in system_message
         assert "overrides the language of the user input" in system_message
     finally:
@@ -303,14 +305,14 @@ async def test_workflow_request_adds_internal_engine_system_message(tmp_path: Pa
         )
         await manager.wait_for_idle()
 
-        system_message = provider.requests[0].messages[0].content
-        assert "WORKFLOW ENGINE SYSTEM MESSAGE" in system_message
-        assert "Ask the user the questions required by the phase" in system_message
-        assert "use the available tools" in system_message
-        assert "project-initiation" in system_message
-        assert "stakeholders" in system_message
-        assert "stakeholder-registry.md" in system_message
-        assert "All stakeholders documented" in system_message
+        all_context = "\n".join(m.content for m in provider.requests[0].messages)
+        assert "WORKFLOW ENGINE SYSTEM MESSAGE" in all_context
+        assert "Ask the user the questions required by the phase" in all_context
+        assert "use the available tools" in all_context
+        assert "project-initiation" in all_context
+        assert "stakeholders" in all_context
+        assert "stakeholder-registry.md" in all_context
+        assert "All stakeholders documented" in all_context
     finally:
         await manager.close()
 
@@ -380,9 +382,9 @@ async def test_voice_provider_request_lists_available_workflows(tmp_path: Path) 
         await manager.wait_for_idle()
 
         # Then: her provider context names the workflow and its event-driven start mechanism.
-        system_message = provider.requests[0].messages[0].content
-        assert "project-initiation" in system_message
-        assert "workflow_run" in system_message
+        all_context = "\n".join(m.content for m in provider.requests[0].messages)
+        assert "project-initiation" in all_context
+        assert "workflow_run" in all_context
     finally:
         await manager.close()
 

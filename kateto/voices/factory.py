@@ -3,9 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from kateto.core.config import VoiceSettings
 from kateto.voices.base import OpenAICompatibleProvider, VoiceAgent, VoiceProfile, VoiceRole
+from kateto.voices.context import session_headers
 
 
 _VOICE_CONSTRAINT = (
@@ -250,10 +252,19 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
 
         raise _Err(field="plugin.voice_llm", reason="must be configured for voice creation")
 
+    # One session id per spawn: shared by the voice and every provider so all
+    # requests carry stable x-session-id/x-session-affinity headers.
+    session_id = uuid4().hex
+    headers = session_headers(voice_name, session_id)
+
     provider = OpenAICompatibleProvider(
         model=voice_settings.model or "unknown",
         endpoint=voice_settings.endpoint,
         api_key=voice_settings.api_key or "sk-no-key-required",
+        max_tokens=settings.max_tokens,
+        retries=settings.retries,
+        timeout=settings.timeout,
+        session_headers=headers,
     )
     voice = VoiceAgent(
         profile=profile,
@@ -261,6 +272,7 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
         provider=provider,
         settings=settings,
         response_language=ctx.config.settings.kateto.language,
+        session_id=session_id,
     )
 
     if voice_settings.model:
@@ -274,6 +286,10 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
                 model=voice_settings.model,
                 endpoint=voice_settings.endpoint,
                 api_key=voice_settings.api_key,
+                max_tokens=settings.max_tokens or 4096,
+                retries=settings.retries,
+                timeout=settings.timeout,
+                session_headers=headers,
                 manage_tools=False,
             )
             mcp_servers = tuple(s for s in settings.mcp_servers if "cron" not in s.lower() and "schedule" not in s.lower())
@@ -282,6 +298,10 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
                 model=voice_settings.model,
                 endpoint=voice_settings.endpoint,
                 api_key=voice_settings.api_key,
+                max_tokens=settings.max_tokens or 4096,
+                retries=settings.retries,
+                timeout=settings.timeout,
+                session_headers=headers,
             )
             mcp_servers = tuple(settings.mcp_servers)
 
