@@ -1,0 +1,12 @@
+#!/bin/bash
+# pre-commit: bloquea commits con secretos (gitleaks).
+# Skip de emergencia: git commit --no-verify (usar con cabeza, no por costumbre).
+gitleaks protect --staged --redact -v
+status=$?
+if [ $status -ne 0 ]; then
+  echo ""
+  echo "✖ gitleaks detectó posibles secretos en el staged. Commit bloqueado."
+  echo "  Si es un falso positivo documentado: git commit --no-verify"
+  exit 1
+fi
+exit 0
