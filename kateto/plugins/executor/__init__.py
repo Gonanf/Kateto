@@ -1,9 +1,16 @@
 from .classifier import ClassifierExecutor
 from .interrupt import InterruptExecutor
+from .scheduler import SchedulerPlugin
 from .todo_list import TodoListExecutor
 from .workflow_router import WorkflowRouter
 
-__all__ = ["ClassifierExecutor", "InterruptExecutor", "TodoListExecutor", "WorkflowRouter"]
+__all__ = [
+    "ClassifierExecutor",
+    "InterruptExecutor",
+    "SchedulerPlugin",
+    "TodoListExecutor",
+    "WorkflowRouter",
+]
 
 
 def create_plugins(ctx):
@@ -25,4 +32,9 @@ def create_plugins(ctx):
     todo_settings = ctx.config.settings.plugin.get("executor_todo_list")
     if todo_settings is None or todo_settings.enabled:
         plugins.append(TodoListExecutor(config_dir=ctx.config.paths.config_dir))
+    # Scheduler is the autonomy heartbeat: it fires schedule_event jobs and
+    # interval triggers (process-audio) on the bus. Always-on like Interrupt.
+    scheduler_settings = ctx.config.settings.plugin.get("executor_scheduler")
+    if scheduler_settings is None or scheduler_settings.enabled:
+        plugins.append(SchedulerPlugin())
     return plugins

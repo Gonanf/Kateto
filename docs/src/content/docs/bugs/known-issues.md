@@ -15,7 +15,7 @@ description: "Known Issues — índice de bugs"
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|
 | 1 | whisper-server no usa GPU correctamente | Media | `providers/whisper.py` | [01-whisper-gpu.md](./bugs/01-whisper-gpu.md) |
-| 2 | Sin tests end-to-end | Media | `kateto/tests/` | [02-no-e2e-tests.md](./bugs/02-no-e2e-tests.md) |
+| 2 | Sin tests end-to-end | Media | `kateto/tests/` | [02-no-e2e-tests.md](./bugs/02-no-e2e-tests.md) — **parcialmente resuelto 2026-08-25**: e2e de workflows+tool-calling en `test_workflow_e2e.py`, autonomía en `test_autonomy_e2e.py`; el pipeline completo de audio real sigue sin cobertura |
 | 7 | Proyecto no runneable sin configuración externa | Alta | `README.md`, `config/defaults/` | [07-not-runnable.md](./bugs/07-not-runnable.md) |
 | 12 | TODO.md se escribe en voices/shared/ | Informativa | `plugins/executor/todo_list.py` | [12-todo-md-location.md](./bugs/12-todo-md-location.md) |
 
@@ -24,6 +24,7 @@ description: "Known Issues — índice de bugs"
 
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|
+| 61 | SchedulerPlugin nunca se ensambla en el runtime y dispara payloads dict que el bus rechaza | Alta | `plugins/executor/__init__.py`, `plugins/executor/scheduler.py` | [61-scheduler-never-wired-and-dict-payload-crash.md](./bugs/61-scheduler-never-wired-and-dict-payload-crash.md) |
 | 28 | Workflow de proyecto nuevo no se inicia y TUI filtra eventos | Alta | `classifier.py`, `tui.py` | [28-workflow-discovery-and-tui-event-filter.md](./bugs/28-workflow-discovery-and-tui-event-filter.md) |
 | 26 | CLI smoke apunta a scripts/qa eliminado | Media | `kateto/cli/commands.py` | [26-smoke-cli-deleted-qa-path.md](./bugs/26-smoke-cli-deleted-qa-path.md) |
 | 53 | Voz falla en generate: list_events revienta con anotaciones UnionType | Alta | `kateto/voices/tools.py` | [53-list-events-uniontype-crash.md](./bugs/53-list-events-uniontype-crash.md) |

@@ -8,8 +8,10 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, override
 
 from croniter import croniter
+from pydantic import ConfigDict, Field, JsonValue
 
 from kateto.core.event import (
+    EventModel,
     ScheduleCancelData,
     ScheduleRequestData,
     ScheduleResultData,
@@ -20,6 +22,15 @@ from kateto.core.plugin import Plugin
 
 if TYPE_CHECKING:
     from kateto.core.manager import PluginManager
+
+
+class _GenericPayload(EventModel):
+    """Fallback envelope body for scheduled events without a registered contract."""
+
+    model_config = ConfigDict(extra="allow", frozen=False, strict=False)
+
+    values: dict[str, JsonValue] = Field(default_factory=dict)
+
 
 _DURATION_RE = re.compile(r"^(\d+)(s|m|h)$")
 
@@ -218,7 +229,16 @@ class SchedulerPlugin(Plugin):
             import random
 
             payload["_delay_seconds"] = round(random.uniform(0, job.jitter_seconds), 3)
-        await manager.emit(job.event_name, payload, source=self.name, target=target, dept=job.dept)
+        # The bus only accepts Pydantic models: coerce the stored dict through
+        # the registered contract (or a generic fallback) before emitting.
+        contract = manager.get_event_contract(job.event_name)
+        if contract is not None:
+            data = contract.model_validate(payload)
+        else:
+            # ponytail: dict[str, object] → JsonValue is trusted because the
+            # payload came from a JSON tool call; tighten when jobs persist.
+            data = _GenericPayload(values=payload)  # type: ignore[arg-type]
+        await manager.emit(job.event_name, data, source=self.name, target=target, dept=job.dept)
         job.fires += 1
         if job.max_fires is not None and job.fires >= job.max_fires:
             self._jobs.pop(job.job_id, None)
