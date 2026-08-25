@@ -114,13 +114,11 @@ kateto/
 │   │   ├── executor/     # Classifier, Interrupt, TODO, Backlog
 │   │   └── system/       # TUI, MCP server
 │   └── tests/            # 41 files, pytest-asyncio
-├── docs/
-│   ├── known-issues.md   # Bug index (overview table)
-│   ├── bugs/             # Individual bug files
-│   ├── architecture/     # System design docs
-│   ├── plugins/          # Plugin-specific docs
-│   ├── voices/           # Voice architecture docs
-│   └── development/      # TDD, tooling, build week
+├── docs/                  # Sitio de documentación (Starlight/Astro)
+│   ├── src/content/docs/  # Contenido: guides, philosophy, architecture, plugins,
+│   │                      #   voices, runtime, development, bugs, blog
+│   ├── astro.config.mjs   # Config del sitio (plugins Starlight)
+│   └── package.json       # Deps del sitio (bun)
 ├── config/
 │   └── defaults/         # Bootstrap template (config.toml, voices, skills)
 └── script/
@@ -178,7 +176,7 @@ Tests that need config should use explicit `load_config(config_dir=tmp_path, def
 
 ### 1. Create bug file
 
-`docs/bugs/NN-description-breve.md` where NN is the next available ID:
+`docs/src/content/docs/bugs/NN-description-breve.md` (sitio Starlight) where NN is the next available ID:
 
 ```yaml
 ---
@@ -219,7 +217,7 @@ Summary of what was done.
 
 ### 2. Update the index
 
-Add the bug to `docs/known-issues.md`:
+Add the bug to `docs/src/content/docs/bugs/known-issues.md`:
 - If open: add to "Abiertos" table
 - If resolved: add to "Resueltos (✅)" table
 - Tables: `| NN | Title | Severidad | Componente | [file](./bugs/NN-file.md) |`

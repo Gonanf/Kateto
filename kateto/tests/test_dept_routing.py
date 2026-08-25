@@ -175,7 +175,7 @@ async def test_non_voice_plugin_emits_with_dept_unconstrained() -> None:
 
 
 @pytest.mark.asyncio
-async def test_empty_depts_excluded_from_dept_routing() -> None:
+async def test_empty_depts_receive_dept_tagged_events() -> None:
     # Given: a plugin with no department and one with the fun department
     manager = PluginManager()
     nodet = RecordingPlugin("no_department")
@@ -185,8 +185,9 @@ async def test_empty_depts_excluded_from_dept_routing() -> None:
     # When: an event is emitted into the fun department
     await _emit_note(manager, dept="fun")
     await manager.wait_for_idle(timeout=5)
-    # Then: department-less plugins do not receive department-tagged events
-    assert len(nodet.received) == 0
+    # Then: department-less plugins stay unconstrained receivers (f884062) while
+    # out-of-department plugins are excluded
+    assert len(nodet.received) == 1
     assert len(fun.received) == 1
 
 

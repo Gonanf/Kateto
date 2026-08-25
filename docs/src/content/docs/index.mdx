@@ -1,0 +1,41 @@
+---
+title: Kateto Docs
+description: Documentación del equipo de voces event-driven de Kateto.
+template: splash
+hero:
+  title: '🐱 Kateto'
+  tagline: 'Un equipo de voces event-driven para trabajo de proyectos. Cada componente publica y recibe eventos tipados a través del PluginManager.'
+  actions:
+    - text: Cómo usar Kateto
+      link: /guides/como-usar/
+      icon: right-arrow
+    - text: Por qué Kateto
+      link: /philosophy/por-que-kateto/
+      variant: minimal
+    - text: Arquitectura
+      link: /architecture/overview/
+      variant: minimal
+---
+
+## Qué es Kateto
+
+**Kateto** es un **event-driven voice team** para trabajo de proyectos: un equipo de voces (Jane = orchestrator, Doktor = planning, Conquest = ceremonias ágiles) que se comunican por un `PluginManager` que es a la vez **event bus + lifecycle manager**.
+
+En vez de poner la lógica de la aplicación en un pipeline de conversación fijo, cada componente publica y recibe eventos tipados:
+
+- **Jane** coordina el proyecto y delega trabajo.
+- **Doktor** convierte intención en planes, riesgos, backlog y entregables.
+- **Conquest** facilita la ejecución ágil y mantiene el progreso visible.
+
+## Empezar
+
+| Sección | Qué encontrás |
+|---|---|
+| [Cómo usar Kateto](/guides/como-usar/) | Instalación, comandos, config, probar el runtime |
+| [Por qué Kateto](/philosophy/por-que-kateto/) | Filosofía 7P y comparación con LangGraph/TEN/LiveKit |
+| [Arquitectura](/architecture/overview/) | Bus de eventos, PluginManager, sistema de eventos, config |
+| [Plugins](/plugins/overview/) | Audio input/output, procesamiento, executors, sistema |
+| [Voces](/voices/overview/) | VoiceAgent, skills/MCP, workflows, evolución de voces |
+| [Runtime](/runtime/headless/) | Discusiones headless, overlay visual, pipeline de audio |
+| [Desarrollo](/development/tdd/) | TDD, tooling, build week |
+| [Bugs](/bugs/overview/) | Índice de bugs documentados |

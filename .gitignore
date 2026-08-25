@@ -12,3 +12,9 @@ docs/compose/
 # Virtual environments
 .venv
 kateto-wts/
+
+# Starlight docs site (Kateto/docs)
+docs/node_modules/
+docs/dist/
+docs/.astro/
+docs/bun.lock

@@ -19,6 +19,9 @@ from kateto.core.event import (
     WorkflowRunData,
 )
 from kateto.plugins.executor import ClassifierExecutor
+from kateto.plugins.executor.workflow_router import WorkflowRouter
+from kateto.providers._models import WorkflowCandidate
+from kateto.providers.classifier import WorkflowSelection
 from kateto.voices.base import GenerationRequest, VoiceAgent, VoiceProfile, VoiceRole
 
 
@@ -76,6 +79,38 @@ class RecordingVoice(Plugin):
         self.generates.append(data)
 
 
+class _FakeSelector:
+    """Deterministic WorkflowSelector stub for router tests."""
+
+    def __init__(self, selection: WorkflowSelection | None) -> None:
+        self.selection = selection
+        self.calls: list[str] = []
+
+    async def __aenter__(self) -> _FakeSelector:
+        return self
+
+    async def aclose(self) -> None:
+        return None
+
+    async def select_workflow(
+        self,
+        text: str,
+        *,
+        candidates: tuple[WorkflowCandidate, ...],
+    ) -> WorkflowSelection | None:
+        self.calls.append(text)
+        return self.selection
+
+
+class FixtureWorkflowRouter(WorkflowRouter):
+    def __init__(self, selection: WorkflowSelection | None) -> None:
+        super().__init__(settings=PluginSettings())
+        self._fake = _FakeSelector(selection)
+
+    async def enable(self) -> None:
+        self._provider = self._fake
+
+
 class VoiceEnabler(Plugin):
     def __init__(self, voice: RecordingVoice) -> None:
         super().__init__("voice_manager")
@@ -117,34 +152,38 @@ def _write_reference(config_dir: Path, voice: str) -> None:
     reference.write_bytes(b"RIFFfixtureWAVE")
 
 
-@pytest.mark.asyncio
-async def test_classifier_routes_selected_voice_and_workflow() -> None:
-    # Given: a classifier result selecting a concrete voice and workflow.
-    manager = PluginManager()
-    classifier = FixtureClassifierExecutor(
-        ClassificationData(
-            text="plan the sprint",
-            category=Classification.EXECUTE,
-            voice="doktor",
-            workflow="sprint-planning",
-        ),
-    )
-    await manager.enable_plugin(classifier)
-    workflow_path = Path("/tmp/kateto-routing-workflow.py")
-    workflow_path.write_text(
-        "name = 'sprint-planning'\nphases = [{'id': 'plan', 'name': 'plan', 'instructions': ['plan']}]\n",
+def _write_workflow(config_dir: Path, voice: str, name: str, description: str = "wf") -> None:
+    path = config_dir / "voices" / voice / "workflows" / name / "workflow.py"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        f"name = '{name}'\n"
+        f"description = '{description}'\n"
+        f"voice = '{voice}'\n"
+        "phases = [{'id': 'plan', 'name': 'plan', 'instructions': ['plan']}]\n",
         encoding="utf-8",
     )
-    engine = WorkflowEngine(config_dir=workflow_path.parent)
-    await manager.enable_plugin(engine)
+
+
+@pytest.mark.asyncio
+async def test_router_routes_selected_voice_and_workflow(tmp_path: Path) -> None:
+    # Given: a workflow selection choosing doktor's sprint-planning workflow.
+    _write_workflow(tmp_path, "doktor", "sprint-planning")
+    manager = PluginManager()
+    router = FixtureWorkflowRouter(WorkflowSelection(name="sprint-planning", voice="doktor", confidence=0.9))
+    await manager.enable_plugin(router)
+    await manager.enable_plugin(WorkflowEngine(config_dir=tmp_path))
     await manager.enable_plugin(RecordingVoice("doktor"))
 
     try:
-        # When: executable transcription enters the event bus.
-        await manager.emit("transcription", TranscriptionData(text="plan the sprint"), source="fixture")
+        # When: an executable classification enters the event bus.
+        await manager.emit(
+            "classification",
+            ClassificationData(text="plan the sprint", category=Classification.EXECUTE, voice="doktor"),
+            source="fixture",
+        )
         await manager.wait_for_idle()
 
-        # Then: workflow routing is targeted to the workflow owner with the selected voice preserved.
+        # Then: workflow routing is targeted to the workflow engine with the selected voice preserved.
         workflow_events = [event for event in manager.get_events() if event.name == "workflow_run"]
         assert [
             (event.target, event.data.voice, event.data.workflow)
@@ -159,61 +198,54 @@ async def test_classifier_routes_selected_voice_and_workflow() -> None:
 
 @pytest.mark.asyncio
 async def test_existing_project_skips_initiation_workflow() -> None:
-    # Given: the classifier identifies an already-underway project and initiation routing.
+    # Given: an already-underway project and an initiation-workflow selection.
     manager = PluginManager()
-    classifier = FixtureClassifierExecutor(
-        ClassificationData(
-            text="continue the existing project",
-            category=Classification.EXECUTE,
-            voice="jane",
-            workflow="project-initiation",
-            project_state=ProjectState.ALREADY_UNDERWAY,
-        ),
-    )
-    await manager.enable_plugin(classifier)
+    router = FixtureWorkflowRouter(WorkflowSelection(name="project-initiation", voice="jane", confidence=0.9))
+    await manager.enable_plugin(router)
     await manager.enable_plugin(RecordingVoice("jane"))
 
     try:
-        # When: existing-project transcription is classified.
-        await manager.emit("transcription", TranscriptionData(text="continue the existing project"), source="fixture")
+        # When: existing-project classification is routed.
+        await manager.emit(
+            "classification",
+            ClassificationData(
+                text="continue the existing project",
+                category=Classification.EXECUTE,
+                voice="jane",
+                project_state=ProjectState.ALREADY_UNDERWAY,
+            ),
+            source="fixture",
+        )
         await manager.wait_for_idle()
 
-        # Then: no initiation or requirements workflow is dispatched.
+        # Then: no initiation or requirements workflow is dispatched; the turn degrades to plain generation.
         assert not [event for event in manager.get_events() if event.name == "workflow_run"]
-        assert not [event for event in manager.get_events() if event.name == "generate"]
+        generate_events = [event for event in manager.get_events() if event.name == "generate"]
+        assert [event.target for event in generate_events] == ["jane"]
     finally:
         await manager.close()
 
 
 @pytest.mark.asyncio
-async def test_new_project_without_classifier_workflow_starts_project_initiation(tmp_path: Path) -> None:
-    # Given: a new-project classification whose model omitted the available workflow.
-    path = tmp_path / "voices" / "jane" / "workflows" / "project-initiation" / "workflow.py"
-    path.parent.mkdir(parents=True)
-    path.write_text(
-        "name = 'project-initiation'\n"
-        "voice = 'Jane'\n"
-        "phases = [{'id': 'start', 'name': 'start', 'instructions': ['start']}]\n",
-        encoding="utf-8",
-    )
+async def test_new_project_without_selection_starts_project_initiation(tmp_path: Path) -> None:
+    # Given: a new-project classification whose selector omitted the available workflow.
+    _write_workflow(tmp_path, "jane", "project-initiation", "Start a new project")
     manager = PluginManager()
-    classifier = FixtureClassifierExecutor(
-        ClassificationData(
-            text="I started a new project for a customer",
-            category=Classification.EXECUTE,
-            voice="jane",
-            project_state=ProjectState.NEW,
-        ),
-    )
-    await manager.enable_plugin(classifier)
+    router = FixtureWorkflowRouter(None)
+    await manager.enable_plugin(router)
     await manager.enable_plugin(WorkflowEngine(config_dir=tmp_path))
     await manager.enable_plugin(RecordingVoice("jane"))
 
     try:
         # When: the new-project transcription is classified.
         await manager.emit(
-            "transcription",
-            TranscriptionData(text="I started a new project for a customer"),
+            "classification",
+            ClassificationData(
+                text="I started a new project for a customer",
+                category=Classification.EXECUTE,
+                voice="jane",
+                project_state=ProjectState.NEW,
+            ),
             source="fixture",
         )
         await manager.wait_for_idle()
