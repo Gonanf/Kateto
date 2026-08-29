@@ -93,12 +93,14 @@ class VisualOverlayPlugin(Plugin):
             "is_speaking": is_speaking,
             "jawOffsetY": offset_y,
             "jawRotation": rotation,
+            "text": data.text,
             "data": {
                 "rms": rms,
                 "is_speaking": is_speaking,
                 "voice_id": data.voice_id,
                 "jawOffsetY": offset_y,
                 "jawRotation": rotation,
+                "text": data.text,
             },
         }
         await self._broadcast(payload)

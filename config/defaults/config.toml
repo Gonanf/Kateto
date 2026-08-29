@@ -5,6 +5,12 @@ debug = false
 hot_reload = false
 log_level = "INFO"
 
+[compiler.whisper]
+backend = "vulkan"
+
+[compiler.llama]
+backend = "vulkan"
+
 [plugin.audio_input_mic]
 enabled = true
 sample_rate = 16000
@@ -13,10 +19,12 @@ vad_model = "silero"
 
 [plugin.audio_processor_whisper]
 enabled = true
+# backend = "pywhispercpp" # pywhispercpp | server | http | command
 endpoint = "http://127.0.0.1:8090"
 
 [plugin.executor_classifier]
 enabled = true
+# backend = "mmbert" # mmbert | llamacpp | http | command
 model_endpoint = "http://127.0.0.1:8091"
 model = "classifier"
 

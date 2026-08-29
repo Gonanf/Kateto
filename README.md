@@ -1,152 +1,219 @@
-# Kateto
+# Kateto — Event-Driven Voice Team for Project Work
 
 ![Jane](public/jane1.svg) ![Doktor](public/doktor1.svg) ![Conquest](public/conquest1.svg)
 
-## 1. What is Kateto, why was it built
+Kateto is an autonomous, event-driven voice team designed for real-time project management and technical collaboration. Instead of forcing conversations through a brittle, linear request-response chain, Kateto runs an event-driven architecture where specialized voice agents, audio hardware, intent classifiers, and autonomous workflows interact concurrently through a centralized `PluginManager` event bus.
 
-Kateto is an event-driven voice team for project work. Instead of putting the
-application logic in a fixed conversation pipeline, every component publishes
-and receives typed events through the `PluginManager`:
+---
 
-- **Jane** coordinates the project and delegates work.
-- **Doktor** turns intent into plans, risks, backlog items, and deliverables.
-- **Conquest** facilitates agile execution and keeps progress visible.
+## 1. Architectural Overview
 
-### Vision: Kateto as a company
-
-Think of Kateto as a company. The company has **departments** (Project
-Management, Software Development, Graphic Design, Marketing, Legal, Accounting,
-…). Each department has **voices**, and each voice plays a role/task inside the
-department. Jane, Doktor and Conquest live in Project Management: Jane handles
-client and cross-department communication, Doktor produces communication plans,
-project portfolios, proposals, WBS, and risk analysis, and Conquest runs the
-ceremonies (Scrum / Lean / Waterfall) and reports progress back to Doktor.
-
-Any node on the bus — a user input, a cron job, a workflow, another agent or
-program — can be a publisher and a subscriber. Voices decide which events they
-respond to. Doktor might note "meetings happen Tuesdays"; on Tuesday an
-executor triggers Conquest to run the meeting on its own. Four goals drive this
-design:
-
-- **Focused context** — small/local LLMs degrade when one agent is handed the
-  whole world. Departments keep each voice's context to what it needs.
-- **Proactive, not just reactive** — the bus is a pub/sub graph: subscribers
-  fire on their own when their events arrive, not only when a human prompts.
-- **Efficient** — deterministic, LLM-free work runs as **Workflows** (checkpoints
-  verify results automatically, no human-in-the-loop) instead of burning tokens.
-- **Pleasant / fun** — formal when needed, theatrical for marketing; interruptions
-  double as comedy or as two AIs debating a problem from different angles.
-
-![The Kateto team](public/the_lovers1.svg)
-
-Kateto was built to make project coordination observable and actionable. A
-spoken request can become a classification, a workflow, a plan, checkpoints,
-files, backlog updates, and a spoken response. The TUI exposes the same runtime
-state: events, agents, workflows, plugins, MCP servers, errors, and audio
-status.
-
-This is a solo OpenAI Build Week project for the **Work and Productivity**
-category. The MVP prioritizes a reliable, inspectable event runtime over a
-large collection of integrations.
-
-## 2. How to run it
-
-### Dependencies
-
-- Python 3.12 or newer
-- [uv](https://docs.astral.sh/uv/)
-- Configured model endpoints, Whisper/classifier and TTS
-  services, an approved voice reference WAV, a microphone, and an audio output
-  device
-
-The fixture runtime needs no API key, model weights, microphone, or external
-service. Install the locked dependencies with:
-
-```bash
-uv sync --locked
+```
+                        +----------------------------------------+
+                        |        PluginManager (Event Bus)       |
+                        +---+--------+--------+--------+-----+---+
+                            |        |        |        |     |
+      +---------------------+        |        |        |     +---------------------+
+      |                              |        |        |                           |
++-----v-------+               +------v---+  +-v------+ v-------------+     +-------v--------+
+| Audio Input |               | Whisper  |  | Intent | | Voice Agent |     | Audio Output   |
+| (Mic + VAD) |               | Processor|  | Router | | (LLM + MCP) |     | (TTS + Player) |
++-------------+               +----------+  +--------+ +-------------+     +----------------+
+  sounddevice                 whisper.cpp     mmBERT    Jane, Doktor,        Camb AI / Zonos
+  Silero VAD                  Vulkan / CUDA  llama.cpp  Conquest             ALSA PCM Mixer
+       |                           |             |            |                     |
+       v                           v             v            v                     v
+ [audio_chunk]             [transcription]   [generate]  [text_chunk]        [audio_output]
+                                                                                    |
+                                                                                    v
+                                                                           +----------------+
+                                                                           | Visual Overlay |
+                                                                           | (VTuber Avatar |
+                                                                           |  + Subtitles)  |
+                                                                           +----------------+
 ```
 
-Kateto bootstraps user configuration into `$XDG_CONFIG_HOME/kateto`, or
-`~/.config/kateto` when `XDG_CONFIG_HOME` is not set. Check it with:
+### The Department & Voice Model
+
+Kateto models organizations as **Departments** populated by domain-specialized **Voices**:
+- **Jane (`voice.jane`)** — *Project Coordinator & Orchestrator*. Manages high-level communication, coordinates inter-voice delegation, and interfaces with external stakeholders.
+- **Doktor (`voice.doktor`)** — *Technical Planner & Delivery Advisor*. Translates fuzzy requirements into Work Breakdown Structures (WBS), risk matrices, and prioritized backlogs.
+- **Conquest (`voice.conquest`)** — *Agile Lead & Scrum Facilitator*. Facilitates standups, sprint retrospectives, process enforcement, and milestone tracking.
+
+---
+
+## 2. Technical Capabilities & Highlights
+
+### ⚡ Hardware-Accelerated Speech-to-Text (Whisper Vulkan / CUDA)
+- **Sub-Second Latency**: Transcribes conversational utterances in **~1.5–2.2s** using discrete GPUs (e.g. AMD Radeon RX 6500 XT via Vulkan device 1) instead of 22+ seconds on CPU.
+- **Persistent Server Architecture**: Leverages `whisper-server` keeping the quantized model (`ggml-large-v3-turbo-q5_0.bin`) resident in VRAM.
+- **Configurable Language**: Supports explicit multilingual target configurations (`audio_processor_whisper.language = "es"`) across HTTP, CLI, and embedded backends.
+- **Fault-Tolerant Parsing**: Handles silent VAD frames and background room noise cleanly without throwing validation exceptions.
+
+### 🎙️ Real-Time Token-to-Speech Streaming (Camb AI)
+- **Low-Latency Synthesis**: As the LLM generates tokens, `PhraseSegmenter` identifies natural sentence and clause boundaries (configured with punctuation boundaries and token thresholds) and streams them to the TTS engine without waiting for the full response.
+- **Streaming Downsampling**: Parses incoming RIFF WAV chunk headers on-the-fly and downsamples 48kHz audio to 24kHz PCM frames directly in memory, yielding audio frames immediately to the output mixer.
+- **Glitch-Free ALSA Ring-Buffers**: Eliminates PortAudio ALSA xrun underflows and device contention crashes (`Assertion self->neverDropInput failed`) by maintaining a persistent open output stream with generous buffer sizing (`blocksize=2048`, `latency="high"`).
+
+### 🎭 Visual Overlay & VTuber Avatar Kinematics
+- **Audio-Synchronized Subtitles**: Subtitles in the browser overlay are synchronized with **actual audio playback** rather than premature LLM token generation. Subtitles stay on screen for the duration of the spoken sentence plus a 3.5s reading grace period.
+- **Reactive Jaw Physics**: Dynamic real-time visemes driven by root-mean-square (RMS) amplitude:
+  - Vertical displacement up to **-52px**
+  - Random lateral excursions up to **±28px**
+  - Rotational tilt up to **±34°** coupled directly to lateral movement direction for lifelike cartoon physics.
+
+### 🧠 LLM KV-Cache Prefilling
+- **Zero First-Turn Ingestion Latency**: On runtime startup, Kateto automatically builds each active voice's stable system prompt (personality, tool definitions, durable memories) and dispatches a lightweight 1-token prefill ping with session affinity headers (`x-session-affinity`).
+- Inference engines with prefix-caching (such as `llama-server --cache-reuse`, vLLM, or Ollama) ingest and retain the entire prompt prefix in KV memory before the user speaks their first word.
+
+---
+
+## 3. Installation & Dependencies
+
+### Prerequisites
+- **Linux** (x86_64) or macOS
+- **Python 3.12+**
+- **[uv](https://docs.astral.sh/uv/)** package manager
+- System libraries for audio: `libportaudio2`, `libasound2`
+- For native GPU acceleration: Vulkan drivers (`vulkan-tools`, `mesa-vulkan-drivers`) or NVIDIA CUDA Toolkit
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/Gonanf/Kateto.git
+cd Kateto
+
+# Synchronize environment with uv
+uv sync
+
+# Optional: Install with in-process backends
+uv sync --extra classifier --extra whispercpp
+
+# Or install globally as a standalone CLI tool
+uv tool install "kateto[classifier,llamacpp,whispercpp]"
+```
+
+---
+
+## 4. Configuration
+
+Bootstrap default configuration files into `~/.config/kateto/`:
 
 ```bash
 uv run kateto config check
 ```
 
-To use an isolated configuration while developing:
+Edit `~/.config/kateto/config.toml`:
 
-```bash
-XDG_CONFIG_HOME="$(mktemp -d)" uv run kateto config check
+```toml
+[kateto]
+name = "Kateto"
+language = "es_ar"
+log_level = "INFO"
+
+[plugin]
+# Microphone Audio Input with Silero VAD
+audio_input_mic.enabled = true
+audio_input_mic.sample_rate = 16000
+audio_input_mic.silence_timeout = 1.0
+audio_input_mic.vad_model = "silero"
+
+# Whisper Speech-to-Text Processor
+audio_processor_whisper.enabled = true
+audio_processor_whisper.backend = "server"
+audio_processor_whisper.language = "es"
+audio_processor_whisper.model = "/path/to/ggml-large-v3-turbo-q5_0.bin"
+
+# Intent Classification
+executor_classifier.enabled = true
+executor_classifier.backend = "server"
+
+# Voice LLM Backend (OpenAI-compatible / llama-server / Ollama)
+voice_llm.enabled = true
+voice_llm.endpoint = "http://127.0.0.1:11434/v1"
+voice_llm.model = "qwen2.5-coder:7b"
+
+# Camb AI Streaming TTS
+audio_output_camb.enabled = true
+audio_output_camb.api_key = "YOUR_CAMB_API_KEY"
+
+# Visual Overlay & HTTP Server
+system_http_server.enabled = true
+system_http_server.port = 8087
+visual_overlay.enabled = true
 ```
 
-### Fixture demo
+---
 
-The deterministic path is the recommended first run:
+## 5. Running the Application
 
-```bash
-uv run kateto tui --fixture
-```
-
-It shows the event stream, voice status, workflow state, plugin controls,
-notifications, and generated work-shaped output without contacting external
-providers.
-
-Other useful commands:
+### Start the Runtime
 
 ```bash
-uv run kateto --help
 uv run kateto run
-uv run pytest kateto/tests/test_event_routing.py -q
-uv run pytest kateto/tests/test_workflow.py -q
 ```
 
-### Live mode
+This starts:
+1. The **Event Bus** and lifecycle manager.
+2. Background **LLM system prompt prefill** routines.
+3. Microphone listener with **Silero VAD**.
+4. The **Vulkan-accelerated Whisper server**.
+5. The **FastAPI HTTP & WebSocket server** on `127.0.0.1:8087`.
+6. The **Visual Overlay** accessible at [http://127.0.0.1:8087/overlay](http://127.0.0.1:8087/overlay) for OBS browser capture or local viewing.
+
+### Compiling Native Acceleration Backends
+
+Compile native `whisper.cpp` or `llama.cpp` targeting your specific hardware:
 
 ```bash
-uv run kateto tui
+# Vulkan acceleration (AMD / Intel / NVIDIA)
+uv run kateto compile whisper --backend vulkan
+uv run kateto compile llama --backend vulkan
+
+# NVIDIA CUDA acceleration
+uv run kateto compile all --backend cuda
+
+# CPU fallback
+uv run kateto compile whisper --backend cpu
 ```
 
-Live mode reads the resolved user configuration and connects to the configured
-providers.
-The Zonos provider (zonos.cpp server) requires a reference.wav file in the voices folder to use as a voice clone.
+---
 
-## 3. How I used Codex
+## 6. Testing & Quality Assurance
 
-All implementation work was done with Codex during Build Week. I used Codex to:
+Kateto enforces strict asynchronous event-safety and zero-regression testing with `pytest-asyncio`:
 
-- turn the MVP specification into an execution plan;
-- implement the event bus, plugin lifecycle, voice agents, workflows, tools,
-  MCP integration, audio plugins, and Textual TUI;
-- debug asynchronous failures such as interrupted TTS, stalled tool-call
-  responses, and dynamically enabled voices;
-- add focused async tests and document each discovered bug;
-- prepare the ZeroGPU/Hugging Face publication plan and the judge-facing demo.
+```bash
+# Run the complete test suite
+uv run pytest
 
-The Git history records the incremental implementation and bug-fix work. The
-project keeps the fixture path explicit so a reviewer can inspect the core
-orchestration without needing private infrastructure.
+# Run the bounded end-to-end smoke test
+uv run kateto smoke
 
-## 4. Current state
+# Run targeted component suites
+uv run pytest kateto/tests/test_whisper_provider.py \
+              kateto/tests/test_camb_audio_output.py \
+              kateto/tests/test_visual_overlay.py \
+              kateto/tests/test_streaming_latency.py
+```
 
-The MVP currently includes:
+---
 
-- a typed, asynchronous event system with broadcast, target, capability, and
-  one-time delivery;
-- automatic plugin discovery, lifecycle management, hot reload, error
-  isolation, and bounded event history;
-- Jane, Doktor, and Conquest voice agents with bounded event-based memory,
-  project-language instructions, tools, MCP access, and workflow context;
-- declarative per-voice workflows with phases, deliverables, checkpoints,
-  automatic advancement, and voice delegation;
-- dynamic workflow routing through the classifier plugin;
-- microphone/VAD, transcription, TTS, PCM playback, interruption handling,
-  and audio status events;
-- a live Textual TUI with event notifications, plugin switches and history,
-  voice/workflow trees, MCP state, JSON event composition, and runtime status;
-- fixture implementations and focused async tests for deterministic review.
+## 7. Project Journal & Development Tracking
 
-For architecture and deployment details, see the [architecture docs](docs/architecture/overview.md),
+Kateto uses `pj` (Project Journal) to track tasks, features, chores, and bug resolutions:
 
-## 5. configuration
+```bash
+# List all tracked project items
+./pj list
 
-Once you run "uv run kateto config check" you should have a config.toml in ~/.config/kateto/ you can modify that to add you'r own servers (Needed for the live mode) and disable or enable plugins.
+# Check project health status
+./pj status
+```
+
+---
+
+## License
+
+Apache 2.0. Developed for the OpenAI Build Week.

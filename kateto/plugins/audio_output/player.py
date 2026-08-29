@@ -32,16 +32,22 @@ class SoundDeviceOutputStream:
             raise AudioOutputDeviceError(device=self._device, reason=str(error)) from error
 
     def stop(self) -> None:
-        self._stream.stop()
+        try:
+            self._stream.stop()
+        except Exception:
+            pass
 
     def close(self) -> None:
-        self._stream.close()
+        try:
+            self._stream.close()
+        except Exception:
+            pass
 
     def write(self, data: bytes) -> object:
         try:
             return self._stream.write(data)
-        except (sounddevice.PortAudioError, ValueError) as error:
-            raise AudioOutputDeviceError(device=self._device, reason=str(error)) from error
+        except (sounddevice.PortAudioError, ValueError):
+            return None
 
 
 class SoundDeviceOutputFactory:
@@ -58,6 +64,8 @@ class SoundDeviceOutputFactory:
                 samplerate=sample_rate,
                 channels=channels,
                 dtype="int16",
+                latency="high",
+                blocksize=2048,
             )
         except (sounddevice.PortAudioError, ValueError) as error:
             raise AudioOutputDeviceError(device=device, reason=str(error)) from error
@@ -118,6 +126,10 @@ class AudioOutputPlayer(Plugin):
                         self._mixer_task = asyncio.create_task(
                             self._run_mixer(), name="kateto-mixer"
                         )
+                if data.samples:
+                    await pipeline.pcm_queue.put(data.samples)
+                if data.final:
+                    await pipeline.pcm_queue.put(None)
                 return
         _validate_pcm(data)
         if data.final:
@@ -146,6 +158,7 @@ class AudioOutputPlayer(Plugin):
                         format=data.format,
                         voice_id=data.voice_id,
                         rms=processor.process(chunk),
+                        text=data.text,
                     ),
                     source=self.name,
                 )
@@ -153,7 +166,15 @@ class AudioOutputPlayer(Plugin):
     async def _run_mixer(self) -> None:
         try:
             await self._set_playing(True)
-            while self._pipeline_queues:
+            idle_cycles = 0
+            while True:
+                if not self._pipeline_queues:
+                    idle_cycles += 1
+                    if idle_cycles > 200:  # ~1.0s grace period between streaming phrases
+                        break
+                    await asyncio.sleep(0.005)
+                    continue
+                idle_cycles = 0
                 done_voices: list[str] = []
                 pcm_buffers: list[bytes] = []
                 active_voice_pcms: list[tuple[str, bytes]] = []
@@ -173,16 +194,7 @@ class AudioOutputPlayer(Plugin):
                     self._active_pipelines.pop(vid, None)
                 if pcm_buffers:
                     mixed = _mix_pcm(pcm_buffers)
-                    stream = self._stream
-                    if stream is None:
-                        stream = self._factory.create(
-                            device=self._device,
-                            sample_rate=24_000,
-                            channels=1,
-                        )
-                        stream.start()
-                        self._stream = stream
-                        self._stream_format = (24_000, 1)
+                    stream = self._open_or_reopen_stream((24_000, 1))
                     _ = await to_thread.run_sync(stream.write, mixed)
                     if self.manager is not None:
                         for vid, pcm in active_voice_pcms:
@@ -204,7 +216,6 @@ class AudioOutputPlayer(Plugin):
         except asyncio.CancelledError:
             pass
         finally:
-            self._close_stream()
             self._active_pipelines.clear()
             self._pipeline_queues.clear()
             await self._set_playing(False)
@@ -215,6 +226,22 @@ class AudioOutputPlayer(Plugin):
             await handler(envelope.data)
             return
         await super()._enqueue(envelope, handler)
+
+    def _open_or_reopen_stream(self, requested_format: tuple[int, int]) -> SoundDeviceOutputStream:
+        stream = self._stream
+        if stream is None or self._stream_format != requested_format:
+            self._close_stream()
+            sample_rate, channels = requested_format
+            stream = self._factory.create(
+                device=self._device,
+                sample_rate=sample_rate,
+                channels=channels,
+            )
+            stream.start()
+            self._stream = stream
+            self._stream_format = requested_format
+            asyncio.create_task(self._set_playing(True))
+        return stream
 
     async def on_interrupt(self, data: InterruptData) -> None:
         manager = self.manager
@@ -269,15 +296,24 @@ class AudioOutputPlayer(Plugin):
         self._stream = None
         self._stream_format = None
         if stream is not None:
-            stream.stop()
-            stream.close()
+            try:
+                stream.stop()
+            except Exception:
+                pass
+            try:
+                stream.close()
+            except Exception:
+                pass
 
     async def _set_playing(self, playing: bool) -> None:
+        if self.manager is None:
+            self._playing = playing
+            return
         if self._status_emitted and self._playing == playing:
             return
         self._playing = playing
         self._status_emitted = True
-        _ = await self.required_manager.emit(
+        _ = await self.manager.emit(
             "audio_output_status",
             AudioOutputStatusData(
                 status=AudioOutputStatus.PLAYING if playing else AudioOutputStatus.IDLE,

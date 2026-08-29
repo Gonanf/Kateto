@@ -17,7 +17,6 @@ from kateto.cli.registry import register_command
 from kateto.core.config import load_config
 from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
 from kateto.core.exceptions import ConfigError
-from kateto.plugins.system.tui import run_tui
 from kateto.run_mode import run_event_runtime
 
 _CONFIG_ERRORS: tuple[type[Exception], ...] = (ConfigError,)
@@ -74,38 +73,84 @@ class Smoke(Command):
     """Run the bounded smoke test suite."""
 
     @override
-    def get_parser(self, prog_name: str) -> argparse.ArgumentParser:
-        parser = super().get_parser(prog_name)
-        _ = parser.add_argument("--fixture", action="store_true", help="use deterministic fixtures")
-        return parser
-
-    @override
     def take_action(self, parsed_args: object) -> int:
         del parsed_args
-        # ponytail: smoke runs the core test suite instead of the
-        # deleted scripts/qa/acceptance.py.  Add a dedicated e2e
-        # runner when a full bounded smoke is needed.
-        return subprocess.run(            [sys.executable, "-m", "pytest",
-             "kateto/tests/test_event_bus.py", "kateto/tests/test_plugin_manager.py",
-             "kateto/tests/test_config.py", "kateto/tests/test_workflow.py",
-             "kateto/tests/test_storage.py", "-q"],
+        return subprocess.run(
+            [
+                sys.executable, "-m", "pytest",
+                "kateto/tests/test_event_bus.py", "kateto/tests/test_plugin_manager.py",
+                "kateto/tests/test_config.py", "kateto/tests/test_workflow.py",
+                "kateto/tests/test_storage.py", "-q",
+            ],
             check=False,
         ).returncode
 
 
-class Tui(Command):
-    """Run the terminal UI."""
+class Compile(Command):
+    """Install and compile pywhispercpp / llama-cpp-python bindings with chosen acceleration."""
 
     @override
     def get_parser(self, prog_name: str) -> argparse.ArgumentParser:
         parser = super().get_parser(prog_name)
-        _ = parser.add_argument("--fixture", action="store_true", help="use deterministic fixtures")
+        _ = parser.add_argument(
+            "target",
+            choices=["whisper", "llama", "all"],
+            default="all",
+            nargs="?",
+            help="target to install: whisper, llama, or all (default: all)",
+        )
+        _ = parser.add_argument(
+            "--backend",
+            choices=["vulkan", "cuda", "cpu", "metal", "openblas"],
+            default="vulkan",
+            help="hardware acceleration backend (default: vulkan)",
+        )
+        _ = parser.add_argument(
+            "--cmake-args",
+            action="append",
+            default=[],
+            help="extra CMake arguments (repeatable)",
+        )
+        _ = parser.add_argument(
+            "--jobs",
+            type=int,
+            default=1,
+            help="maximum parallel compiler jobs to prevent OOM (default: 1, max: 2)",
+        )
+        _ = parser.add_argument(
+            "--no-prebuilt",
+            action="store_true",
+            help="force source compilation instead of using prebuilt wheels",
+        )
         return parser
 
     @override
     def take_action(self, parsed_args: object) -> int:
-        run_tui(fixture=bool(getattr(parsed_args, "fixture", False)))
-        return 0
+        from kateto.tools.compiler import CompilerOptions, compile_llama, compile_whisper
+
+        target = str(getattr(parsed_args, "target", "all"))
+        backend = str(getattr(parsed_args, "backend", "vulkan"))
+        cmake_args = [str(arg) for arg in getattr(parsed_args, "cmake_args", [])]
+        jobs = int(getattr(parsed_args, "jobs", 1))
+        prefer_prebuilt = not bool(getattr(parsed_args, "no_prebuilt", False))
+
+        opts = CompilerOptions(
+            backend=backend,
+            cmake_args=cmake_args,
+            jobs=jobs,
+            prefer_prebuilt=prefer_prebuilt,
+        )
+
+        code = 0
+        if target in ("whisper", "all"):
+            code = compile_whisper(opts)
+            if code != 0:
+                return code
+        if target in ("llama", "all"):
+            code = compile_llama(opts)
+            if code != 0:
+                return code
+        return code
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,7 +275,7 @@ class Doctor(Command):
 register_command("config check", ConfigCheck)
 register_command("run", Run)
 register_command("smoke", Smoke)
-register_command("tui", Tui)
+register_command("compile", Compile)
 register_command("install", Install)
 register_command("setup", Setup)
 register_command("doctor", Doctor)

@@ -95,6 +95,7 @@ class AudioOutput(EventModel):
     sequence: int = Field(default=0, ge=0)
     final: bool = False
     rms: float | None = Field(default=None, ge=0.0, le=1.0)
+    text: str | None = None
 
 
 class AudioInputStatus(StrEnum):

@@ -81,7 +81,8 @@ from kateto.voices.skills import LoadedSkill, load_skills
 _PIPELINES: dict[str, AudioPipeline] = {}
 
 PHRASE_DELIMITERS = ".!?\n"
-PHRASE_MAX_TOKENS = 128
+PHRASE_MAX_TOKENS = 35
+MIN_CLAUSE_TOKENS = 18
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +96,7 @@ class FinalMessage:
 class PhraseSegmenter:
     delimiters: str = PHRASE_DELIMITERS
     max_tokens: int = PHRASE_MAX_TOKENS
+    min_clause_tokens: int = MIN_CLAUSE_TOKENS
     _buffer: str = field(default="", init=False)
     _count: int = field(default=0, init=False)
 
@@ -119,7 +121,12 @@ class PhraseSegmenter:
 
     def _ends_phrase(self) -> bool:
         text = self._buffer
-        return text[-1:] in self.delimiters or (text[-1:].isspace() and text.rstrip()[-1:] in self.delimiters)
+        last = text[-1:] if not text[-1:].isspace() else text.rstrip()[-1:]
+        if last in self.delimiters:
+            return True
+        if last in ",;:—" and self._count >= self.min_clause_tokens:
+            return True
+        return False
 
 
 class VoiceEventStream:
@@ -279,6 +286,26 @@ class OpenAICompatibleProvider:
     session_headers: Mapping[str, str] = field(default_factory=dict)
     last_usage: dict[str, int] | None = field(default=None, init=False)
     last_stop_reason: str | None = field(default=None, init=False)
+
+    async def prefill(self, system_prompt: str) -> None:
+        client = _openai_client(
+            self.endpoint,
+            self.api_key,
+            self.retries if self.retries is not None else 1,
+            self.timeout if self.timeout is not None else 20,
+        )
+        messages: list[ChatCompletionMessageParam] = [
+            ChatCompletionSystemMessageParam(role="system", content=system_prompt),
+            ChatCompletionUserMessageParam(role="user", content="hello"),
+        ]
+        headers = dict(self.session_headers)
+        await client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            stream=False,
+            max_tokens=1,
+            extra_headers=headers if headers else None,
+        )
 
     def stream(self, request: GenerationRequest) -> AsyncIterator[str]:
         return self._stream(request)
@@ -505,6 +532,23 @@ class VoiceAgent(Plugin):
                 event_tools = build_event_tools(manager)
                 self._tools = (*BUILTIN_TOOLS, *event_tools, *self._extra_tools)
         await self._set_status(VoiceStatus.IDLE)
+
+    async def prefill(self) -> bool:
+        """Prefill the frozen stable system prompt into the LLM KV cache."""
+        prompt = await self._stable_prompt()
+        if not prompt or not prompt.strip():
+            return False
+        if hasattr(self._provider, "prefill"):
+            from loguru import logger as log
+            log.info(f"[{self.name}] Prefilling system prompt into LLM KV cache ({len(prompt)} chars)...")
+            try:
+                await self._provider.prefill(prompt)
+                log.info(f"[{self.name}] System prompt successfully prefilled into LLM KV cache.")
+                return True
+            except Exception as err:
+                log.warning(f"[{self.name}] LLM system prompt prefill failed: {err}")
+                return False
+        return False
 
     async def disable(self) -> None:
         task = self._generation_task
@@ -871,8 +915,16 @@ class VoiceAgent(Plugin):
                                 if turn_terminated:
                                     break
                             case AgentResponse() as response if response.text.strip():
-                                await pipeline.token_queue.put(response.text)
-                                await self._emit_chunk(response.text, sequence, final=True)
+                                if sequence == 0:
+                                    await pipeline.token_queue.put(response.text)
+                                    await self._emit_chunk(response.text, sequence, final=True)
+                                else:
+                                    tail = segmenter.flush()
+                                    if tail is not None:
+                                        await pipeline.token_queue.put(tail)
+                                        await self._emit_chunk(tail, sequence, final=False)
+                                        sequence += 1
+                                    await self._emit_chunk("", sequence, final=True)
                                 had_tool_calls = False
                                 break
                             case _:
@@ -882,7 +934,9 @@ class VoiceAgent(Plugin):
                     tail = segmenter.flush()
                     if tail is not None:
                         await pipeline.token_queue.put(tail)
-                        await self._emit_chunk(tail, sequence, final=True)
+                        await self._emit_chunk(tail, sequence, final=False)
+                        sequence += 1
+                    await self._emit_chunk("", sequence, final=True)
                     if not had_tool_calls or turn_terminated:
                         break
                 else:
@@ -952,8 +1006,10 @@ class VoiceAgent(Plugin):
                         final_text = await raw_output
                     else:
                         final_text = raw_output
-                    if final_text and isinstance(final_text, str):
+                    if sequence == 0 and final_text and isinstance(final_text, str):
                         await self._emit_chunk(final_text, sequence, final=True)
+                    else:
+                        await self._emit_chunk("", sequence, final=True)
             else:
                 result = await agent.run(user_prompt, message_history=history or None)
                 output = result.output
@@ -1288,6 +1344,8 @@ class VoiceAgent(Plugin):
         return text[: self._event_message_limit]
 
     async def _emit_chunk(self, text: str, sequence: int, *, final: bool) -> None:
+        if not text:
+            return
         manager = self.manager
         if manager is not None:
             envelope = await manager.emit(

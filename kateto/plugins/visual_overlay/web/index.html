@@ -74,7 +74,7 @@
   </style>
 </head>
 <body>
-  <div id="container" data-signals="{voice_id: 'jane', rms: 0, jawOffsetY: 0, jawRotation: 0, use_fallback: false, text: ''}">
+  <div id="container" data-signals="{voice_id: 'jane', rms: 0, jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0, use_fallback: false, text: ''}">
     <div id="vtuber-overlay" class="avatar-container">
       <!-- Muppet Cutout Layers (Head fixed z-2, Jaw mobile z-1) -->
       <img id="avatar-head"
@@ -89,8 +89,8 @@
            alt="Avatar Jaw"
            data-show="!$use_fallback"
            data-attr:src="'/voices/' + $voice_id + '/avatar_jaw.png'"
-           data-style-transform="'translateY(' + $jawOffsetY + 'px) rotate(' + $jawRotation + 'deg)'"
-           data-style:transform="'translateY(' + $jawOffsetY + 'px) rotate(' + $jawRotation + 'deg)'"
+           data-style-transform="'translate(' + $jawOffsetX + 'px, ' + $jawOffsetY + 'px) rotate(' + $jawRotation + 'deg)'"
+           data-style:transform="'translate(' + $jawOffsetX + 'px, ' + $jawOffsetY + 'px) rotate(' + $jawRotation + 'deg)'"
            onerror="window.handleCutoutError && window.handleCutoutError()" />
 
       <!-- Fallback Layer (Classic top.png / mouth.png) -->
@@ -113,21 +113,34 @@
     import { mergePatch } from 'https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.2/bundles/datastar.js'
 
     let activeVoice = 'jane';
+    let captionClearTimer = null;
 
     // Global fallback handler when avatar_head.png or avatar_jaw.png is missing (404)
     window.handleCutoutError = () => {
       mergePatch({ use_fallback: true });
     };
 
-    // Pure mapping: rms -> { jawOffsetY, jawRotation }
+    // Pure mapping: rms -> { jawOffsetX, jawOffsetY, jawRotation }
+    // Moves UP (negative translateY), randomly to the sides with enhanced force,
+    // with rotation tilting along with the lateral movement direction
     function computeJawKinematics(rms) {
-      if (typeof rms !== 'number' || rms < 0.05) {
-        return { jawOffsetY: 0, jawRotation: 0 };
+      if (typeof rms !== 'number' || rms < 0.015) {
+        return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
       }
-      const factor = Math.min(1.0, Math.max(0.0, (rms - 0.05) / 0.95));
+      // Punchy response curve with even greater force
+      const factor = Math.min(1.0, Math.max(0.0, Math.pow((rms - 0.015) / 0.985, 0.68)));
+      // Move UP with strong force (up to -52px)
+      const upMovement = -Number((factor * 52.0).toFixed(2));
+      // Random lateral direction (-1.0 to +1.0) with strong side excursion (up to +/- 28px)
+      const sideDir = (Math.random() * 2 - 1);
+      const sideShake = Number((sideDir * factor * 28.0).toFixed(2));
+      // Rotation follows the movement: tilting in the direction of lateral movement with greater rotation (up to +/- 34 deg)
+      const tilt = Number(((sideDir * 0.9 + (Math.random() * 0.2 - 0.1)) * factor * 34.0).toFixed(2));
+
       return {
-        jawOffsetY: Number((factor * 16.0).toFixed(2)),
-        jawRotation: Number((factor * 4.5).toFixed(2))
+        jawOffsetX: sideShake,
+        jawOffsetY: upMovement,
+        jawRotation: tilt,
       };
     }
 
@@ -146,17 +159,36 @@
           patch.use_fallback = false;
         }
 
-        if (msg.type === 'subtitle' || msg.event === 'text_chunk') {
-          const text = msg.text !== undefined ? msg.text : (msg.data && msg.data.text);
-          if (text !== undefined) patch.text = text;
+        let newText = null;
+        if (msg.type === 'viseme' && msg.text) {
+          newText = msg.text;
+        } else if (msg.type === 'subtitle' || msg.event === 'text_chunk') {
+          const t = msg.text !== undefined ? msg.text : (msg.data && msg.data.text);
+          if (t !== undefined) newText = t;
+        }
+
+        if (newText) {
+          patch.text = newText;
+          if (captionClearTimer) {
+            clearTimeout(captionClearTimer);
+            captionClearTimer = null;
+          }
         }
 
         const rawRms = (typeof msg.rms === 'number') ? msg.rms : (msg.data && typeof msg.data.rms === 'number') ? msg.data.rms : null;
         if (rawRms !== null) {
           patch.rms = rawRms;
-          const { jawOffsetY, jawRotation } = computeJawKinematics(rawRms);
+          const { jawOffsetX, jawOffsetY, jawRotation } = computeJawKinematics(rawRms);
+          patch.jawOffsetX = jawOffsetX;
           patch.jawOffsetY = jawOffsetY;
           patch.jawRotation = jawRotation;
+
+          if (rawRms < 0.015 && !captionClearTimer && patch.text !== '') {
+            captionClearTimer = setTimeout(() => {
+              mergePatch({ text: '' });
+              captionClearTimer = null;
+            }, 3500);
+          }
         }
 
         mergePatch(patch);

@@ -67,6 +67,7 @@ class PluginSettings(_ConfigModel):
     callback_queue_capacity: int | None = Field(default=None, gt=0)
     default_voice_id: int | None = None
     default_language: str | None = None
+    language: str | None = None
     voice_probabilities: dict[str, float] | None = None
     conversation_id: str | None = None
     host: str | None = None
@@ -76,6 +77,7 @@ class PluginSettings(_ConfigModel):
     # Local (subprocess) backend: when set, `model` is a file path, not a server name.
     command: str | None = None
     args: list[str] | None = None
+    backend: str | None = None
 
     @field_validator("endpoint", "model_endpoint")
     @classmethod
@@ -176,12 +178,23 @@ class CliSettings(_ConfigModel):
         return value
 
 
+class CompilerTargetSettings(_ConfigModel):
+    backend: str = "vulkan"
+    cmake_args: list[str] = Field(default_factory=list)
+
+
+class CompilerSettings(_ConfigModel):
+    whisper: CompilerTargetSettings = Field(default_factory=CompilerTargetSettings)
+    llama: CompilerTargetSettings = Field(default_factory=CompilerTargetSettings)
+
+
 class KatetoConfig(_ConfigModel):
     kateto: KatetoSettings
     plugin: dict[str, PluginSettings] = Field(default_factory=dict)
     voice: dict[str, VoiceSettings] = Field(default_factory=dict)
     mcp_servers: dict[str, McpServerSettings] = Field(default_factory=dict)
     cli: CliSettings
+    compiler: CompilerSettings = Field(default_factory=CompilerSettings)
 
     @model_validator(mode="after")
     def validate_voice_mcp_servers(self) -> Self:

@@ -154,6 +154,10 @@ class RuntimeOwner:
                 from loguru import logger
                 logger.info("Starting HttpServer from RuntimeOwner...")
                 await http_server.start()
+            from kateto.voices.base import VoiceAgent
+            for plugin in self._plugins:
+                if isinstance(plugin, VoiceAgent) and self._config_enabled(plugin):
+                    asyncio.create_task(plugin.prefill(), name=f"prefill-{plugin.name}")
         except BaseException:  # noqa: BROAD_EXCEPT_OK
             await self.stop()
             raise

@@ -4,7 +4,7 @@
 
 Kateto is an event-driven voice team for project work. Jane orchestrates, Doktor handles planning/backlog, Conquest facilitates agile ceremonies. All communication runs through a PluginManager that is simultaneously the event bus and plugin lifecycle manager — no separate mediator.
 
-**Stack:** Python 3.12+ async/await · uv · pytest-asyncio · Pydantic · Textual 8 · MCP 1.28
+**Stack:** Python 3.12+ async/await · uv · pytest-asyncio · Pydantic · FastAPI · MCP 1.28
 
 ---
 
@@ -12,13 +12,13 @@ Kateto is an event-driven voice team for project work. Jane orchestrates, Doktor
 
 ```
 uv run kateto config check              # validate TOML, bootstrap defaults
-uv run kateto run                        # event runtime (no TUI)
-uv run kateto tui                        # text UI with event stream
-uv run kateto tui --fixture              # TUI with deterministic fixtures
-uv run kateto smoke --fixture            # full bounded smoke test
+uv run kateto run                        # event runtime (HTTP/WS on :8080)
+uv run kateto smoke                      # full bounded smoke test
+uv run kateto compile [whisper|llama]    # compile native backends & bindings (vulkan, cuda, cpu)
+uv run kateto setup                      # interactive setup wizard
 ```
 
---fixture mode is the no-network fallback — supplies transcription, classification, streaming, and PCM via mocks. External servers (whisper.cpp, llama.cpp, Zonos) only needed for live runs.
+Kateto supports in-process backends (pywhispercpp, mmBERT, llama-cpp-python) as well as BYO external servers (whisper-server, llama-server, Zonos).
 
 ## Architecture
 
@@ -31,11 +31,11 @@ uv run kateto smoke --fixture            # full bounded smoke test
 
 **Plugin types:**
 - `audio_input/` — mic capture (sounddevice), silence detection with Silero VAD
-- `audio_processor/` — Whisper transcription
+- `audio_processor/` — Whisper transcription (pywhispercpp, whisper-server, whisper-cli)
 - `audio_output/` — Zonos TTS, PCM playback
 - `connector/` — CLI allowlist, Google Calendar/Meet
-- `executor/` — Classifier (intent), Interrupt, TODO List, Backlog
-- `system/` — TUI (Textual), internal MCP server
+- `executor/` — Classifier (mmBERT, llama.cpp, HTTP), Interrupt, TODO List, Backlog
+- `system/` — HTTP/WS server, internal MCP server
 - `work/` — (future)
 
 Each plugin gets its own `asyncio.Queue`. Streaming plugins process events one-by-one as they arrive. Batch plugins (voice agents) accumulate and process on `generate` trigger.
@@ -149,7 +149,7 @@ uv run pytest kateto/tests/test_event_bus.py kateto/tests/test_plugin_manager.py
 
 - **pytest-asyncio** (strict mode). Async tests must be marked with `@pytest.mark.asyncio` or they won't be collected.
 - **BDD-style comments:** `# Given:`, `# When:`, `# Then:` throughout test files.
-- **Fixture helpers:** `kateto/tests/conversation_support.py` — `make_voices()` creates all 3 voices. `_write_workflow()` in test_workflow.py. `_McpRuntime` in test_tui.py.
+- **Fixture helpers:** `kateto/tests/conversation_support.py` — `make_voices()` creates all 3 voices. `_write_workflow()` in test_workflow.py.
 - **tmp_path** used for config dirs — tests create minimal temp config structures, never touch real user config.
 
 ### Known Pre-existing Failures
@@ -158,8 +158,6 @@ These are NOT caused by your changes:
 
 | Failure | Why |
 |---------|-----|
-| `test_tui_uses_bounded_manager_history_and_applies_audio_configuration` | Tab order hardcoded as 5 but runtime has 6 (Conversation tab added between Events and Plugins) |
-| `test_tui_workspace_tabs_status_history_and_json_composer` | Same tab mismatch |
 | 7 test files with collection error | Missing `kateto.qa` module — external QA scripts, not part of core |
 | `test_cli_connector` | Missing QA scripts |
 | `test_conversation_support` | Missing module dependency |
@@ -238,12 +236,12 @@ All voice/workflow name comparisons use `casefold()` — case-insensitive by des
 
 The `config/defaults/` directory is a bootstrap template. At runtime, ONLY the user config directory (`~/.config/kateto/`) is read. Changes to `config/defaults/` only take effect on first bootstrap of a new config.
 
-### Fixture Mode
+### In-process Backends & Compilation
 
-`--fixture` flag replaces all external services with deterministic mocks. Useful for:
-- Demo without whisper.cpp/llama.cpp/Zonos
-- Tests that need reproducible output
-- TUI screenshots
+Kateto supports running locally without external server processes:
+- Speech-to-text via `pywhispercpp` Python bindings (or native `whisper-server`)
+- Intent classification via `mmBERT` (ONNX) or `llama.cpp` (`llama-cpp-python`)
+- Compile native whisper.cpp or llama.cpp with `uv run kateto compile [whisper|llama] --backend [vulkan|cuda|cpu|metal|openblas]`
 
 ### Workflow Files Are Python
 

@@ -30,7 +30,7 @@ class RealtimeSessionProtocol(Protocol):
 
 
 class SimulatedRealtimeSession:
-    """Mock/Simulated session for testing & offline --fixture mode."""
+    """Mock/Simulated session for testing & offline mode."""
 
     def __init__(self, voice_id: str = "jane") -> None:
         self.voice_id = voice_id

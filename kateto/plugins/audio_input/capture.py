@@ -106,6 +106,8 @@ class SoundDeviceCaptureFactory(CaptureFactory):
                 channels=CHANNELS,
                 dtype="int16",
                 callback=cb,
+                latency="high",
+                blocksize=1024,
             )
         except (sounddevice.PortAudioError, ValueError) as error:
             raise AudioDeviceError(

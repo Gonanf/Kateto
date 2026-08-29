@@ -18,6 +18,8 @@ from kateto.core.event import AudioData, AudioInputStatus, AudioInputStatusData,
 from kateto.core.plugin import Plugin
 from kateto.core.manager import PluginManager
 
+from loguru import logger as log
+
 from .base import (
     PCM_FORMAT,
     AudioDeviceError,
@@ -168,6 +170,7 @@ class AudioInputPlugin(Plugin):
                 speech = await to_thread(self._vad.is_speech, samples)
                 update = self._segmenter.consume(samples, speech=speech)
                 if update.voice_started:
+                    log.info("[mic] Speech detected, recording...")
                     await self._set_recording(True)
                     await self._interrupt_playback()
                 if update.samples is not None:
@@ -188,6 +191,8 @@ class AudioInputPlugin(Plugin):
         )
 
     async def _emit_segment(self, samples: bytes) -> None:
+        dur = duration_ms(samples)
+        log.info("[mic] Captured utterance: {:.2f}s ({:.0f}ms), sending to Whisper...", dur / 1000.0, dur)
         started_at = monotonic()
         await self._require_manager().emit(
             "audio_chunk",
@@ -197,7 +202,7 @@ class AudioInputPlugin(Plugin):
                 channels=1,
                 format=PCM_FORMAT,
                 source=self._payload_source,
-                duration_ms=duration_ms(samples),
+                duration_ms=dur,
             ),
             source=self._event_source,
         )

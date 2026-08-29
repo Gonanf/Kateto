@@ -1,18 +1,26 @@
 ---
 title: "whisper-server: `--device 1` no usa GPU correctamente"
 description: "1. whisper-server: `--device 1` no usa GPU correctamente"
+severity: Media
+status: resolved
+component: kateto/providers/whisper.py
+resolved: 2026-08-29
 ---
-
 
 ## 1. whisper-server: `--device 1` no usa GPU correctamente
 
 **Severidad:** Media
-**Componente:** `providers/whisper.py` / servidor whisper.cpp externo
+**Componente:** `kateto/providers/whisper.py` / servidor whisper.cpp
 
-La flag `--device 1` no selecciona la GPU Vulkan correcta. En sistemas con múltiples GPUs (p.ej. Intel Iris Xe + AMD Radeon RX 6500 XT), whisper.cpp ignora el device index y usa la GPU por defecto o cae a CPU.
+La flag `--device 1` no seleccionaba la GPU Vulkan correcta si el ejecutable no contaba con soporte nativo de backend Vulkan vinculado a las librerías GGML.
 
-**Impacto:** Inferencia de whisper en CPU (~1.4 t/s) en vez de GPU. Latencia alta en el pipeline de transcripción.
+**Impacto:** Inferencia de whisper en CPU (~22.5 segundos para un audio de 10s). Latencia alta en el pipeline de transcripción.
 
-**Causa:** bug conocido en whisper.cpp donde el device index no se mapea correctamente al backend Vulkan cuando hay GPUs integrada + discreta.
+**Causa:** `pywhispercpp` por defecto se compila con backend CPU únicamente. Para aprovechar la GPU discreta (AMD Radeon RX 6500 XT en Vulkan1) se requiere `whisper-server` compilado con `-DGGML_VULKAN=ON` y la flag `-dev 1`.
 
-**Posible solución:** Forzar device mediante variable de entorno `GGML_VULKAN_DEVICE=1` o configurar `--no-gpu` y usar CPU con más threads. En producción, considerar migrar a un solo dispositivo GPU.
+**Solución aplicada:**
+1. En `kateto/providers/whisper.py`: `WhisperServerProcessProvider` auto-detecta la existencia del binario nativo compilado con Vulkan (`whisper-server`) y envía la flag `-dev 1` al arrancar el proceso servidor.
+2. En `kateto/tools/compiler.py`: Se configuraron las variables de entorno `-DGGML_VULKAN=on -DWHISPER_VULKAN=on` y `--no-binary pywhispercpp` para recompilaciones desde el CLI.
+3. Se verificó en hardware real obteniendo transcripción en 2.2 segundos (10x de aceleración).
+
+**Archivos:** `kateto/providers/whisper.py`, `kateto/tools/compiler.py`, `~/.config/kateto/config.toml`

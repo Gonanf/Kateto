@@ -14,7 +14,6 @@ description: "Known Issues — índice de bugs"
 
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|
-| 1 | whisper-server no usa GPU correctamente | Media | `providers/whisper.py` | [01-whisper-gpu.md](./bugs/01-whisper-gpu.md) |
 | 2 | Sin tests end-to-end | Media | `kateto/tests/` | [02-no-e2e-tests.md](./bugs/02-no-e2e-tests.md) — **parcialmente resuelto 2026-08-25**: e2e de workflows+tool-calling en `test_workflow_e2e.py`, autonomía en `test_autonomy_e2e.py`; el pipeline completo de audio real sigue sin cobertura |
 | 7 | Proyecto no runneable sin configuración externa | Alta | `README.md`, `config/defaults/` | [07-not-runnable.md](./bugs/07-not-runnable.md) |
 | 12 | TODO.md se escribe en voices/shared/ | Informativa | `plugins/executor/todo_list.py` | [12-todo-md-location.md](./bugs/12-todo-md-location.md) |
@@ -24,6 +23,7 @@ description: "Known Issues — índice de bugs"
 
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|
+| 1 | whisper-server no usa GPU correctamente | Media | `kateto/providers/whisper.py` | [01-whisper-gpu.md](./bugs/01-whisper-gpu.md) |
 | 61 | SchedulerPlugin nunca se ensambla en el runtime y dispara payloads dict que el bus rechaza | Alta | `plugins/executor/__init__.py`, `plugins/executor/scheduler.py` | [61-scheduler-never-wired-and-dict-payload-crash.md](./bugs/61-scheduler-never-wired-and-dict-payload-crash.md) |
 | 28 | Workflow de proyecto nuevo no se inicia y TUI filtra eventos | Alta | `classifier.py`, `tui.py` | [28-workflow-discovery-and-tui-event-filter.md](./bugs/28-workflow-discovery-and-tui-event-filter.md) |
 | 26 | CLI smoke apunta a scripts/qa eliminado | Media | `kateto/cli/commands.py` | [26-smoke-cli-deleted-qa-path.md](./bugs/26-smoke-cli-deleted-qa-path.md) |
@@ -66,6 +66,11 @@ description: "Known Issues — índice de bugs"
 | 20 | TUI events tab: autocomplete genera JSON multilinea que rompe el Input | Media | `tui.py` | [20-tui-autocomplete-multiline-json.md](./bugs/20-tui-autocomplete-multiline-json.md) |
 | 21 | TUI conversation tab: todas las respuestas de una voz se escriben en la primera burbuja | Media | `tui.py` | [21-tui-conversation-single-bubble.md](./bugs/21-tui-conversation-single-bubble.md) |
 | 22 | config/defaults/voices/ no incluye SOUL.md para jane, doktor, conquest | Media | `config/defaults/voices/` | [22-default-voices-no-soul.md](./bugs/22-default-voices-no-soul.md) |
+| 62 | Camb AI TTS reproduce audio duplicado por re-emisión de la respuesta final acumulada | Media | `voices/base.py`, `plugins/audio_output/camb.py` | [62-cambai-tts-repetition.md](./bugs/62-cambai-tts-repetition.md) |
+| 63 | PortAudio ALSA xrun y crash por aserción self->neverDropInput al abrir y cerrar streams concurrentes | Alta | `plugins/audio_output/player.py`, `plugins/audio_input/capture.py` | [63-portaudio-alsa-assertion-crash.md](./bugs/63-portaudio-alsa-assertion-crash.md) |
+| 64 | Fallo de validación Pydantic en WhisperResponse ante silencios o ruido ambiente sin habla | Media | `providers/_models.py`, `plugins/audio_processor/whisper.py` | [64-whisper-empty-speech-validation.md](./bugs/64-whisper-empty-speech-validation.md) |
+| 65 | Desincronización de subtítulos con el audio TTS por emisión prematura de tokens LLM | Media | `plugins/visual_overlay/visual_overlay_plugin.py`, `web/index.html` | [65-subtitle-desynchronization-tts.md](./bugs/65-subtitle-desynchronization-tts.md) |
+| 66 | AttributeError en WhisperProvider por atributo _settings no inicializado al consultar language | Alta | `providers/whisper.py` | [66-whisper-provider-missing-settings.md](./bugs/66-whisper-provider-missing-settings.md) |
 
 ---
 

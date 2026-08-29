@@ -16,7 +16,7 @@ class ChatMessage(ProviderModel):
 
 
 class WhisperResponse(ProviderModel):
-    text: str = Field(min_length=1)
+    text: str = Field(default="")
     language: str | None = None
     confidence: float | None = Field(default=None, ge=0, le=1)
 
@@ -128,6 +128,7 @@ class CambRequest(ProviderModel):
     language: str = "en-us"
     voice_id: int = 147320
     speech_model: str | None = None
+    output_configuration: dict[str, str] = Field(default_factory=lambda: {"format": "wav"})
 
 
 class ZonosRequest(ProviderModel):

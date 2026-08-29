@@ -55,6 +55,21 @@ class CambAudioOutput(Plugin):
     async def on_text_chunk(self, data: TextChunk) -> None:
         if data.voice_id is None:
             return
+        if not data.text or not data.text.strip():
+            if data.final:
+                await self.required_manager.emit(
+                    "audio_output",
+                    AudioOutput(
+                        samples=b"",
+                        sample_rate=24_000,
+                        channels=1,
+                        format="pcm_s16le",
+                        voice_id=data.voice_id,
+                        final=True,
+                    ),
+                    source=self.name,
+                )
+            return
         self._interrupted = False
         task = asyncio.create_task(self._emit_pcm(data), name=f"kateto-camb-{data.voice_id}")
         self._stream_task = task
@@ -86,7 +101,8 @@ class CambAudioOutput(Plugin):
             voice_id=camb_voice_id,
             language=camb_language,
         ):
-            _ = await self.required_manager.emit("audio_output", output, source=self.name)
+            out = output.model_copy(update={"voice_id": voice_id_str, "text": data.text})
+            _ = await self.required_manager.emit("audio_output", out, source=self.name)
 
     async def _cancel_stream(self) -> None:
         task = self._stream_task

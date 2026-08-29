@@ -97,19 +97,38 @@ def collect_answers(previous: Mapping[str, Any]) -> dict[str, Any]:
     voice_llm = plugin.get("voice_llm", {}) if isinstance(plugin, dict) else {}
     whisper = plugin.get("audio_processor_whisper", {}) if isinstance(plugin, dict) else {}
     zonos = plugin.get("audio_output_zonos", {}) if isinstance(plugin, dict) else {}
+    backend_default = "vulkan"
+    compiler_cfg = previous.get("compiler", {}) if isinstance(previous, dict) else {}
+    if isinstance(compiler_cfg, dict):
+        backend_default = str(compiler_cfg.get("whisper", {}).get("backend", "vulkan"))
+    hardware_backend = _ask("Hardware acceleration for compilation (vulkan, cuda, cpu, metal, openblas)", backend_default)
+
+    whisper_backend = _ask("Whisper backend (pywhispercpp, server, http, command)", str(whisper.get("backend", "pywhispercpp")))
+    classifier_cfg = plugin.get("executor_classifier", {}) if isinstance(plugin, dict) else {}
+    classifier_backend = _ask("Classifier backend (mmbert, llamacpp, http, command)", str(classifier_cfg.get("backend", "mmbert")))
+
     answers: dict[str, Any] = {
+        "compiler": {
+            "whisper": {"backend": hardware_backend},
+            "llama": {"backend": hardware_backend},
+        },
         "plugin": {
             "voice_llm": {
                 "endpoint": _ask("LLM base URL", str(voice_llm.get("endpoint", ""))),
                 "model": _ask("LLM model name", str(voice_llm.get("model", ""))),
             },
             "audio_processor_whisper": {
-                "endpoint": _ask("Whisper ASR URL", str(whisper.get("endpoint", ""))),
+                "backend": whisper_backend,
+                "endpoint": _ask("Whisper ASR URL (blank for in-process pywhispercpp)", str(whisper.get("endpoint", ""))),
+            },
+            "executor_classifier": {
+                "backend": classifier_backend,
+                "model_endpoint": _ask("Classifier URL (blank for in-process mmbert/llamacpp)", str(classifier_cfg.get("model_endpoint", ""))),
             },
             "audio_output_zonos": {
                 "endpoint": _ask("Zonos TTS URL", str(zonos.get("endpoint", ""))),
             },
-        }
+        },
     }
     camb_key = _ask("Camb AI API key (blank to skip)", "")
     answers["plugin"]["audio_output_camb"] = {"api_key": "env:KATETO_CAMB_API_KEY" if camb_key else ""}

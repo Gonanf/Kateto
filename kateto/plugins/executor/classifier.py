@@ -13,7 +13,11 @@ from kateto.core.event import (
 )
 from kateto.core.plugin import Plugin
 
+from loguru import logger
+
 from kateto.core.workflow_engine import WorkflowEngine
+
+log = logger
 
 if TYPE_CHECKING:
     class ClassifierProtocol(Protocol):
@@ -45,14 +49,37 @@ class ClassifierExecutor(Plugin):
 
     @override
     async def enable(self) -> None:
-        if self._settings.command:
+        backend = getattr(self._settings, "backend", None)
+        if backend in ("server", "mmbert_server"):
+            from kateto.providers import MmBertServerProcessProvider
+
+            classifier = MmBertServerProcessProvider(self._settings)
+        elif backend == "mmbert":
+            from kateto.providers import MmBertClassifierProvider
+
+            classifier = MmBertClassifierProvider(self._settings)
+        elif backend == "llamacpp":
+            from kateto.providers import LlamaCppClassifierProvider
+
+            classifier = LlamaCppClassifierProvider(self._settings)
+        elif self._settings.command or backend == "command":
             from kateto.providers import LocalClassifierProvider
 
             classifier = LocalClassifierProvider(self._settings)
-        else:
+        elif self._settings.model_endpoint or self._settings.endpoint or backend == "http":
             from kateto.providers import ClassifierProvider
 
             classifier = ClassifierProvider(self._settings)
+        else:
+            try:
+                import onnxruntime  # noqa: F401
+                from kateto.providers import MmBertClassifierProvider
+
+                classifier = MmBertClassifierProvider(self._settings)
+            except ImportError:
+                from kateto.providers import ClassifierProvider
+
+                classifier = ClassifierProvider(self._settings)
         self._classifier = await classifier.__aenter__()
 
     @override
@@ -69,6 +96,13 @@ class ClassifierExecutor(Plugin):
         agents = self._collect_agent_names()
         workflows = ()  # Workflow classifier disabled
         classification = await classifier.classify(data.text, agents=agents)
+        log.info(
+            "[classifier] Input: {!r} -> Category: {} | Voice: {} | Confidence: {}",
+            data.text,
+            classification.category.value if hasattr(classification.category, "value") else classification.category,
+            classification.voice,
+            classification.confidence,
+        )
         manager = self.required_manager
         _ = await manager.emit("classification", classification, source=self.name)
         if self._workflow_router_enabled():
