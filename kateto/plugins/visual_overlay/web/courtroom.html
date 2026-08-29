@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kateto — Tribunal Bate Debate</title>
+  <style>
+    :root {
+      --wood: #5b3a21;
+      --wood-light: #7a4f2c;
+      --desk: #3a2516;
+      --gold: #d9b36b;
+      --paper: #f3e7c9;
+      --ink: #2a1c10;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background:
+        radial-gradient(ellipse at top, #6b4424 0%, #3a2516 70%),
+        var(--wood);
+      font-family: "Georgia", "Times New Roman", serif;
+      color: var(--paper);
+      overflow: hidden;
+    }
+    #bench {
+      position: absolute; top: 2.5vh; left: 50%; transform: translateX(-50%);
+      text-align: center;
+    }
+    #bench .seal {
+      font-size: 0.95rem; letter-spacing: 0.35em; text-transform: uppercase;
+      color: var(--gold); opacity: 0.85;
+    }
+    #bench .title {
+      font-size: 1.6rem; font-weight: bold; color: var(--paper);
+      text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+    }
+    #judge-row {
+      position: absolute; top: 14vh; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 24px; align-items: flex-end;
+    }
+    #debater-row {
+      position: absolute; bottom: 4vh; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 26px; flex-wrap: wrap; justify-content: center;
+      width: 92vw;
+    }
+    .card {
+      background: linear-gradient(180deg, rgba(243,231,201,0.10), rgba(0,0,0,0.25));
+      border: 1px solid rgba(217,179,107,0.35);
+      border-radius: 14px;
+      padding: 10px 12px 12px;
+      width: 180px;
+      text-align: center;
+      transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+      backdrop-filter: blur(2px);
+    }
+    .card.judge {
+      width: 210px;
+      border-color: var(--gold);
+      box-shadow: 0 0 18px rgba(217,179,107,0.25);
+    }
+    .card.speaking {
+      border-color: #ffe9a8;
+      box-shadow: 0 0 22px rgba(255,221,120,0.65);
+      transform: translateY(-4px);
+    }
+    .avatar {
+      width: 96px; height: 96px; border-radius: 50%;
+      object-fit: cover; margin: 0 auto 6px; display: block;
+      border: 2px solid rgba(217,179,107,0.5);
+      background: #2a1c10;
+    }
+    .card.judge .avatar { width: 104px; height: 104px; }
+    .fallback {
+      width: 96px; height: 96px; border-radius: 50%;
+      margin: 0 auto 6px; display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; font-weight: bold; color: #1c1208;
+      border: 2px solid rgba(217,179,107,0.5);
+    }
+    .card.judge .fallback { width: 104px; height: 104px; }
+    .name { font-weight: bold; font-size: 1.02rem; color: var(--paper); }
+    .role { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); opacity: 0.85; }
+    .caption {
+      margin-top: 6px; min-height: 2.4em; font-size: 0.82rem; line-height: 1.25;
+      color: #efe2c2; font-style: italic;
+    }
+    .tag {
+      position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+      font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
+      background: var(--gold); color: #1c1208; padding: 1px 8px; border-radius: 8px;
+    }
+    #desk {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 9vh;
+      background: linear-gradient(180deg, transparent, rgba(20,12,6,0.85));
+    }
+  </style>
+</head>
+<body>
+  <div id="bench">
+    <div class="seal">Kateto · Tribunal de Voces</div>
+    <div class="title">Bate Debate de Bate de Chocolate</div>
+  </div>
+
+  <div id="judge-row"></div>
+  <div id="debater-row"></div>
+  <div id="desk"></div>
+
+  <script type="module">
+    // Courtroom overlay: listens for {event:"debate"} messages on /ws/overlay.
+    // Each message: {voice_id, role, phase, text, rms, is_speaking}
+    const known = new Map();  // voice_id -> {display_name, role}
+    const cards = new Map();  // voice_id -> element
+
+    const ROLE_LABEL = {
+      orchestrator: "Jueza / Anfitriona",
+      adversary: "Adversaria",
+      project_manager: "Project Manager",
+      agile_facilitator: "Agile Lead",
+      delivery_advisor: "Delivery",
+    };
+
+    function getInitials(name) {
+      return (name || "?").split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+    }
+    function colorFor(id) {
+      const palette = ["#d9b36b", "#c98bd0", "#7fb0d9", "#8fd98f", "#e08f8f"];
+      let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      return palette[h % palette.length];
+    }
+
+    function buildCard(voiceId, role, isJudge) {
+      const card = document.createElement("div");
+      card.className = "card" + (isJudge ? " judge" : "");
+      const av = document.createElement("img");
+      av.className = "avatar";
+      av.alt = voiceId;
+      av.src = `/voices/${voiceId}/avatar_head.png`;
+      av.onerror = () => {
+        const fb = document.createElement("div");
+        fb.className = "fallback";
+        fb.style.background = colorFor(voiceId);
+        fb.textContent = getInitials(voiceId);
+        av.replaceWith(fb);
+      };
+      const name = document.createElement("div");
+      name.className = "name";
+      name.textContent = voiceId;
+      const roleEl = document.createElement("div");
+      roleEl.className = "role";
+      roleEl.textContent = ROLE_LABEL[role] || role || "";
+      const cap = document.createElement("div");
+      cap.className = "caption";
+      if (isJudge) {
+        const tag = document.createElement("div");
+        tag.className = "tag"; tag.textContent = "Jueza";
+        card.appendChild(tag);
+      }
+      card.append(av, name, roleEl, cap);
+      cards.set(voiceId, { card, name, cap });
+      (isJudge ? judgeRow : debaterRow).appendChild(card);
+      return card;
+    }
+
+    const judgeRow = document.getElementById("judge-row");
+    const debaterRow = document.getElementById("debater-row");
+
+    function handleDebate(msg) {
+      const id = msg.voice_id;
+      if (!id) return;
+      const role = msg.role || (known.get(id) && known.get(id).role) || "";
+      const isJudge = role === "orchestrator" || msg.phase === "opening" || msg.phase === "ruling" || msg.phase === "verdict";
+      known.set(id, { role });
+      if (!cards.has(id)) buildCard(id, role, isJudge);
+
+      // clear previous speaking highlight
+      for (const { card } of cards.values()) card.classList.remove("speaking");
+      const entry = cards.get(id);
+      const speaking = msg.is_speaking || (typeof msg.rms === "number" && msg.rms > 0.01);
+      if (speaking) entry.card.classList.add("speaking");
+      if (msg.text) entry.cap.textContent = msg.text;
+      // keep judge visually on top
+      if (isJudge && entry.card.parentElement !== judgeRow) judgeRow.appendChild(entry.card);
+    }
+
+    const wsProto = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${wsProto}://${location.host}/ws/overlay`);
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.event === "debate" || (msg.data && msg.data.event === "debate")) {
+          handleDebate(msg.data ? msg.data : msg);
+        }
+      } catch (e) { /* ignore parse errors */ }
+    };
+    ws.onclose = () => {
+      // simple self-heal reconnect
+      setTimeout(() => location.reload(), 1500);
+    };
+  </script>
+</body>
+</html>

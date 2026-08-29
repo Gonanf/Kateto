@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio  # noqa: ANYIO_OK
+import json
 import shutil
 import subprocess
 import sys
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import override
 
 from cliff.command import Command
+from loguru import logger
 
 from kateto.cli.agency_convert import _resolve_source, convert_agency_pack
 from kateto.cli.registry import register_command
@@ -18,6 +20,8 @@ from kateto.core.config import load_config
 from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
 from kateto.core.exceptions import ConfigError
 from kateto.run_mode import run_event_runtime
+
+from kateto.voices.factory import _PROFILES
 
 _CONFIG_ERRORS: tuple[type[Exception], ...] = (ConfigError,)
 
@@ -272,6 +276,181 @@ class Doctor(Command):
         return exit_code
 
 
+class Debate(Command):
+    """Run the autonomous BATE DEBATE DE BATE DE CHOCOLATE multi-voice trial."""
+
+    @override
+    def get_parser(self, prog_name: str) -> argparse.ArgumentParser:
+        parser = super().get_parser(prog_name)
+        _ = parser.add_argument("--topic", default=None, help="tema del juicio (si no, lo genera el Juez)")
+        _ = parser.add_argument("--judge", default="jane", help="voz jueza (default: jane)")
+        _ = parser.add_argument("--voices", default="whisperer,doktor,conquest",
+                                help="debaters separados por coma (default: whisperer,doktor,conquest)")
+        _ = parser.add_argument("--rounds", type=int, default=1, help="turnos de argumento por debater")
+        _ = parser.add_argument("--infinite", action="store_true", help="modo infinito: reinicia con voces/tema nuevos")
+        _ = parser.add_argument("--max-debates", type=int, default=3, help="max juicios en modo infinito")
+        _ = parser.add_argument("--self-test", "--mock", action="store_true",
+                                help="usa MockProvider (sin red) y corre un juicio completo offline")
+        _ = parser.add_argument("--registry-dir", default=None, help="directorio de registro (default: <config>/bate_debate/registry)")
+        _ = parser.add_argument("--list-voices", action="store_true", help="lista las voces de Kateto y sale")
+        _ = parser.add_argument("--overlay", action="store_true",
+                                help="best-effort: reenvia cada turno al visual overlay por WS (no fatal)")
+        return parser
+
+    @override
+    def take_action(self, parsed_args: object) -> int:
+        args = parsed_args  # type: ignore[assignment]
+        if bool(getattr(args, "list_voices", False)):
+            for vid, prof in _PROFILES.items():
+                _ = self.app.stdout.write(f"{vid:12s} {prof.display_name:12s} {prof.role.value}\n")
+            return 0
+
+        try:
+            from kateto.plugins.bate_debate import run_debate
+            from kateto.plugins.bate_debate.mock import MockProvider
+        except Exception as error:  # noqa: BLE001
+            _ = self.app.stderr.write(f"debate: no se pudo importar el motor: {error}\n")
+            return 2
+
+        judge = str(getattr(args, "judge", "jane")).casefold()
+        debaters = [v.strip().casefold() for v in str(getattr(args, "voices", "")).split(",") if v.strip()]
+        if judge in debaters:
+            debaters = [v for v in debaters if v != judge]
+        if not debaters:
+            debaters = ["whisperer", "doktor", "conquest"]
+
+        registry_dir = Path(getattr(args, "registry_dir")) if getattr(args, "registry_dir") else None
+        if registry_dir is None:
+            try:
+                loaded = load_config()
+                registry_dir = loaded.paths.config_dir / "bate_debate" / "registry"
+            except Exception:  # noqa: BLE001
+                registry_dir = Path.home() / ".config" / "kateto" / "bate_debate" / "registry"
+
+        use_mock = bool(getattr(args, "self_test", False))
+
+        # Optional overlay broadcaster (best-effort, non-fatal).
+        overlay_ws = None
+        if bool(getattr(args, "overlay", False)):
+            overlay_ws = _make_overlay_broadcaster()
+
+        def on_speak(voice_id: str, role: str, phase: str, text: str) -> None:
+            if overlay_ws is not None:
+                try:
+                    overlay_ws(voice_id, role, phase, text)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("overlay broadcast failed: {}", exc)
+
+        async def _run() -> list:
+            if use_mock:
+                factory = lambda vid: MockProvider()  # noqa: E731
+            else:
+                factory = _real_provider_factory()
+            return await run_debate(
+                judge=judge,
+                debaters=debaters,
+                topic=str(getattr(args, "topic")) if getattr(args, "topic") else None,
+                provider_factory=factory,
+                rounds=int(getattr(args, "rounds", 1)),
+                infinite=bool(getattr(args, "infinite", False)),
+                max_debates=int(getattr(args, "max_debates", 3)),
+                registry_dir=registry_dir,
+                on_speak=on_speak,
+            )
+
+        try:
+            records = asyncio.run(_run())
+        except KeyboardInterrupt:
+            _ = self.app.stdout.write("debate: interrumpido por el usuario\n")
+            return 0
+        except Exception as error:  # noqa: BLE001
+            _ = self.app.stderr.write(f"debate: error en el juicio: {error}\n")
+            return 2
+        finally:
+            if overlay_ws is not None:
+                overlay_ws.close() if hasattr(overlay_ws, "close") else None
+
+        for rec in records:
+            _ = self.app.stdout.write(f"Juicio: {rec.topic}\n  registro: {rec.registry_md}\n  jsonl:   {rec.registry_jsonl}\n")
+            _ = self.app.stdout.write(f"  veredicto: {rec.verdict[:160]}\n")
+        return 0
+
+
+def _real_provider_factory():
+    """Build a real OpenAI-compatible provider factory from kateto config / env."""
+    import os
+
+    from kateto.voices.base import OpenAICompatibleProvider
+
+    endpoint = os.environ.get("KATETO_LLM_ENDPOINT", "http://localhost:11434/v1")
+    model = os.environ.get("KATETO_LLM_MODEL", "KatetoTalker")
+    api_key = "sk-no"
+    try:
+        loaded = load_config()
+        vllm = loaded.settings.plugin.get("voice_llm") if loaded.settings.plugin else None
+        if isinstance(vllm, dict):
+            endpoint = vllm.get("endpoint") or endpoint
+            model = vllm.get("model") or model
+            api_key = vllm.get("api_key") or api_key
+    except Exception:  # noqa: BLE001
+        pass
+
+    cache: dict[str, OpenAICompatibleProvider] = {}
+
+    def factory(voice_id: str) -> OpenAICompatibleProvider:
+        if voice_id not in cache:
+            cache[voice_id] = OpenAICompatibleProvider(
+                model=model, endpoint=endpoint, api_key=api_key
+            )
+        return cache[voice_id]
+
+    return factory
+
+
+def _make_overlay_broadcaster():
+    """Best-effort WS broadcaster to a running `kateto run` overlay endpoint."""
+    import asyncio
+    import os
+
+    url = os.environ.get("KATETO_OVERLAY_WS", "ws://localhost:8080/ws/overlay")
+
+    try:
+        import websockets  # type: ignore[import-untyped]
+    except ImportError:
+        logger.warning("overlay: modulo 'websockets' no disponible; se omite el broadcast")
+        return None
+
+    loop = asyncio.new_event_loop()
+
+    async def _connect():
+        return await websockets.connect(url, open_timeout=3, close_timeout=3)
+
+    try:
+        ws = loop.run_until_complete(_connect())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("overlay: no se pudo conectar a {}: {}", url, exc)
+        loop.close()
+        return None
+
+    def send(voice_id, role, phase, text):
+        msg = {
+            "event": "debate",
+            "voice_id": voice_id,
+            "role": role,
+            "phase": phase,
+            "text": text,
+            "rms": 0.0,
+            "is_speaking": True,
+        }
+        try:
+            loop.run_until_complete(ws.send(json.dumps(msg)))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("overlay send failed: {}", exc)
+
+    send.close = lambda: (loop.run_until_complete(ws.close()) if not loop.is_closed() else None, loop.close())  # type: ignore[attr-defined]
+    return send
+
+
 register_command("config check", ConfigCheck)
 register_command("run", Run)
 register_command("smoke", Smoke)
@@ -279,3 +458,4 @@ register_command("compile", Compile)
 register_command("install", Install)
 register_command("setup", Setup)
 register_command("doctor", Doctor)
+register_command("debate", Debate)

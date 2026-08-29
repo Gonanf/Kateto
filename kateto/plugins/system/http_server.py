@@ -19,6 +19,7 @@ from kateto.core.manager import PluginManager
 log = logger
 
 OVERLAY_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "index.html"
+COURTROOM_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "courtroom.html"
 VALID_AVATAR_FILES = ("top.png", "mouth.png", "avatar_head.png", "avatar_jaw.png")
 
 
@@ -170,6 +171,10 @@ class HttpServer:
         @app.get("/overlay")
         async def overlay() -> FileResponse:
             return FileResponse(OVERLAY_HTML)
+
+        @app.get("/courtroom")
+        async def courtroom() -> FileResponse:
+            return FileResponse(COURTROOM_HTML)
 
         @app.get("/voices/{name}/{file}")
         async def voice_asset(name: str, file: str) -> FileResponse:
