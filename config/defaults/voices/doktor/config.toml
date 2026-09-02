@@ -1,0 +1,11 @@
+enabled = true
+dept = "management"
+skills = ["backlog", "risk-analysis", "planning-poker"]
+mcp_servers = ["system"]
+tts_provider = "boson"
+boson_voice = "marcus"
+edge_tts_voice = "es-ES-AlvaroNeural"
+stream = true
+max_tokens = 4096
+retries = 2
+timeout = 600

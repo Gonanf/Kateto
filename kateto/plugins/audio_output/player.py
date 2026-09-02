@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import struct
+import time
 from typing import override
 
 from anyio import to_thread
@@ -25,15 +26,26 @@ class SoundDeviceOutputStream:
         self._stream = stream
         self._device = device
 
+    @property
+    def active(self) -> bool:
+        return getattr(self._stream, "active", False)
+
     def start(self) -> None:
         try:
-            self._stream.start()
+            if not self.active:
+                self._stream.start()
         except (sounddevice.PortAudioError, ValueError) as error:
             raise AudioOutputDeviceError(device=self._device, reason=str(error)) from error
 
     def stop(self) -> None:
         try:
             self._stream.stop()
+        except Exception:
+            pass
+
+    def abort(self) -> None:
+        try:
+            self._stream.abort()
         except Exception:
             pass
 
@@ -45,9 +57,15 @@ class SoundDeviceOutputStream:
 
     def write(self, data: bytes) -> object:
         try:
+            if not self.active:
+                self.start()
             return self._stream.write(data)
         except (sounddevice.PortAudioError, ValueError):
-            return None
+            try:
+                self._stream.stop()
+            except Exception:
+                pass
+            raise
 
 
 class SoundDeviceOutputFactory:
@@ -85,6 +103,10 @@ class AudioOutputPlayer(Plugin):
         self._stream: SoundDeviceOutputStream | None = None
         self._stream_format: tuple[int, int] | None = None
         self._playing: bool = False
+        self._interrupted: bool = False
+        self._interrupted_at: float = 0.0
+        self._current_speaker: str | None = None
+        self._interrupted_voice: str | None = None
         self._status_emitted: bool = False
         self._mixer_task: asyncio.Task[None] | None = None
         self._active_pipelines: dict[str, AudioPipeline] = {}
@@ -115,6 +137,17 @@ class AudioOutputPlayer(Plugin):
         self._pipeline_queues.clear()
         await self._set_playing(False)
 
+    @property
+    @override
+    def is_busy(self) -> bool:
+        if super().is_busy:
+            return True
+        if self._playing:
+            return True
+        if self._active_pipelines or self._pipeline_queues:
+            return True
+        return False
+
     async def on_audio_output(self, data: AudioOutput) -> None:
         if data.voice_id is not None:
             pipeline = get_pipeline(data.voice_id)
@@ -135,33 +168,49 @@ class AudioOutputPlayer(Plugin):
         if data.final:
             self._close_stream()
             await self._set_playing(False)
+            self._interrupted = False
+            self._interrupted_voice = None
+            if not self.is_busy:
+                self._idle_event.set()
             return
         if not data.samples:
             return
+        now = time.monotonic()
+        if self._interrupted:
+            if data.voice_id and data.voice_id == self._interrupted_voice and (now - self._interrupted_at < 2.5):
+                return
+            self._interrupted = False
+            self._interrupted_voice = None
+        self._current_speaker = data.voice_id
         stream = await self._stream_for(data)
         # ponytail: chunked write + per-window RMS so the overlay jaw moves
         # continuously for non-streaming TTS (EdgeTTS/Boson); Zonos path uses the mixer.
         processor = self._rms_for(data.voice_id or "")
         window = max(2, int(data.sample_rate * 0.02) * 2)
         for offset in range(0, len(data.samples), window):
+            if self._interrupted or self._stream is None:
+                break
             chunk = data.samples[offset : offset + window]
             if not chunk:
                 continue
-            _ = await to_thread.run_sync(stream.write, chunk)
-            if self.manager is not None:
-                await self.manager.emit(
-                    "audio_output",
-                    AudioOutput(
-                        samples=b"",
-                        sample_rate=data.sample_rate,
-                        channels=data.channels,
-                        format=data.format,
-                        voice_id=data.voice_id,
-                        rms=processor.process(chunk),
-                        text=data.text,
-                    ),
-                    source=self.name,
-                )
+            try:
+                _ = await to_thread.run_sync(stream.write, chunk)
+            except Exception:
+                self._close_stream(abort=True)
+                stream = await self._stream_for(data)
+                try:
+                    _ = await to_thread.run_sync(stream.write, chunk)
+                except Exception:
+                    break
+            if self._interrupted or self._stream is None:
+                break
+            await self._send_viseme(data.voice_id, processor.process(chunk), data.text)
+
+        if self._interrupted:
+            self._close_stream(abort=True)
+            await self._set_playing(False)
+            self._interrupted = False
+            self._interrupted_voice = None
 
     async def _run_mixer(self) -> None:
         try:
@@ -196,21 +245,9 @@ class AudioOutputPlayer(Plugin):
                     mixed = _mix_pcm(pcm_buffers)
                     stream = self._open_or_reopen_stream((24_000, 1))
                     _ = await to_thread.run_sync(stream.write, mixed)
-                    if self.manager is not None:
-                        for vid, pcm in active_voice_pcms:
-                            rms = self._rms_for(vid).process(pcm)
-                            await self.manager.emit(
-                                "audio_output",
-                                AudioOutput(
-                                    samples=b"",
-                                    sample_rate=24_000,
-                                    channels=1,
-                                    format=PCM_S16LE,
-                                    voice_id=vid,
-                                    rms=rms,
-                                ),
-                                source=self.name,
-                            )
+                    for vid, pcm in active_voice_pcms:
+                        rms = self._rms_for(vid).process(pcm)
+                        await self._send_viseme(vid, rms, None)
                 else:
                     await asyncio.sleep(0.005)
         except asyncio.CancelledError:
@@ -244,6 +281,7 @@ class AudioOutputPlayer(Plugin):
         return stream
 
     async def on_interrupt(self, data: InterruptData) -> None:
+        self._interrupted = True
         manager = self.manager
         target_voices: set[str] | None = None
         if data.dept and manager is not None:
@@ -258,19 +296,30 @@ class AudioOutputPlayer(Plugin):
                     self._active_pipelines.pop(voice_id, None)
                     self._pipeline_queues.pop(voice_id, None)
             if not self._active_pipelines:
-                self._close_stream()
+                self._close_stream(abort=True)
                 if self._mixer_task is not None and not self._mixer_task.done():
                     self._mixer_task.cancel()
                 self._mixer_task = None
                 await self._set_playing(False)
         else:
-            self._close_stream()
+            self._interrupted = True
+            self._interrupted_at = time.monotonic()
+            self._interrupted_voice = self._current_speaker
+            while not self.queue.empty():
+                try:
+                    self.queue.get_nowait()
+                    self.queue.task_done()
+                except Exception:
+                    break
+            # Calling stream.abort() via _close_stream tells PortAudio immediately to clear pending hardware buffers
+            self._close_stream(abort=True)
             if self._mixer_task is not None and not self._mixer_task.done():
                 self._mixer_task.cancel()
             self._mixer_task = None
             self._active_pipelines.clear()
             self._pipeline_queues.clear()
             await self._set_playing(False)
+            self._idle_event.set()
 
     async def _stream_for(self, data: AudioOutput) -> SoundDeviceOutputStream:
         requested_format = (data.sample_rate, data.channels)
@@ -288,14 +337,21 @@ class AudioOutputPlayer(Plugin):
             stream.start()
             self._stream = stream
             self._stream_format = requested_format
-            await self._set_playing(True)
+        else:
+            stream.start()
+        await self._set_playing(True)
         return stream
 
-    def _close_stream(self) -> None:
+    def _close_stream(self, *, abort: bool = False) -> None:
         stream = self._stream
         self._stream = None
         self._stream_format = None
         if stream is not None:
+            if abort and hasattr(stream, "abort"):
+                try:
+                    stream.abort()
+                except Exception:
+                    pass
             try:
                 stream.stop()
             except Exception:
@@ -308,10 +364,18 @@ class AudioOutputPlayer(Plugin):
     async def _set_playing(self, playing: bool) -> None:
         if self.manager is None:
             self._playing = playing
+            if not playing and not self.is_busy:
+                self._idle_event.set()
+            elif playing:
+                self._idle_event.clear()
             return
         if self._status_emitted and self._playing == playing:
             return
         self._playing = playing
+        if not playing and not self.is_busy:
+            self._idle_event.set()
+        elif playing:
+            self._idle_event.clear()
         self._status_emitted = True
         _ = await self.manager.emit(
             "audio_output_status",
@@ -320,6 +384,18 @@ class AudioOutputPlayer(Plugin):
             ),
             source=self.name,
         )
+
+    async def _send_viseme(
+        self, voice_id: str | None, rms: float, text: str | None = None
+    ) -> None:
+        if self.manager is None:
+            return
+        vo = self.manager.get_plugin("visual_overlay")
+        if vo is not None and hasattr(vo, "update_viseme"):
+            try:
+                await vo.update_viseme(voice_id, rms, text)
+            except Exception:
+                pass
 
 
 def _configured_device(settings: PluginSettings) -> str | None:

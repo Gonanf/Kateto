@@ -19,8 +19,21 @@ from kateto.providers import ChatMessage
 from kateto.voices.base import GenerationRequest, OpenAICompatibleProvider
 from kateto.voices.factory import _PROFILES
 
+import os
+from kateto.core.config import load_config
+
 ENDPOINT = "http://localhost:11434/v1"
-MODEL = "KatetoTalker"  # instruction-tuned, emite EOS (el default Kateto es 1-bit y cuelga)
+MODEL = "Kateto"
+try:
+    _cfg = load_config()
+    _vllm = _cfg.settings.plugin.get("voice_llm") if _cfg.settings.plugin else None
+    if _vllm is not None:
+        ENDPOINT = getattr(_vllm, "endpoint", None) or (isinstance(_vllm, dict) and _vllm.get("endpoint")) or ENDPOINT
+        MODEL = getattr(_vllm, "model", None) or (isinstance(_vllm, dict) and _vllm.get("model")) or MODEL
+except Exception:
+    pass
+ENDPOINT = os.environ.get("KATETO_LLM_ENDPOINT") or ENDPOINT
+MODEL = os.environ.get("KATETO_LLM_MODEL") or MODEL
 
 _SPEECH_CONSTRAINT = (
     " You are a voice assistant in a live conversation. Never use symbols, bullet"

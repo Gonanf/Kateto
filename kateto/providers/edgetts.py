@@ -66,14 +66,24 @@ class EdgeTTSProvider:
         assert stdin is not None and stdout is not None
 
         async def _feed() -> None:
-            async for chunk in communicate.stream():
-                if chunk.get("type") == "audio":
-                    audio_data: bytes | None = chunk.get("data")
-                    if audio_data:
-                        stdin.write(audio_data)
-                        await stdin.drain()
-            await stdin.drain()
-            stdin.close()
+            try:
+                async for chunk in communicate.stream():
+                    if chunk.get("type") == "audio":
+                        audio_data: bytes | None = chunk.get("data")
+                        if audio_data:
+                            stdin.write(audio_data)
+                            await stdin.drain()
+            except Exception as exc:
+                log.warning("[edgetts] stream feed error: {}", exc)
+            finally:
+                try:
+                    await stdin.drain()
+                except Exception:
+                    pass
+                try:
+                    stdin.close()
+                except Exception:
+                    pass
 
         feed_task = asyncio.create_task(_feed())
         seq = 0

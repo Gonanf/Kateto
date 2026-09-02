@@ -56,7 +56,7 @@ class OpenAIAgentProvider:
     def _base_kwargs(self, *, stream: bool) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "max_tokens": self._max_tokens,
+            "max_tokens": min(self._max_tokens or 256, 384),
         }
         if stream:
             kwargs["stream"] = True
@@ -73,7 +73,12 @@ class OpenAIAgentProvider:
         kwargs["messages"] = messages
         if tools:
             kwargs["tools"] = list(tools)
-        response = await self._client.chat.completions.create(**kwargs)
+        try:
+            response = await self._client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            from loguru import logger
+            logger.error("[OpenAIAgentProvider] chat_with_tools failed: {} | body={}", exc, getattr(exc, "body", None))
+            raise
         choice = response.choices[0]
         message = choice.message
         finish_reason = getattr(choice, "finish_reason", None)
@@ -102,7 +107,12 @@ class OpenAIAgentProvider:
         kwargs["messages"] = messages
         if tools:
             kwargs["tools"] = list(tools)
-        stream = await self._client.chat.completions.create(**kwargs)
+        try:
+            stream = await self._client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            from loguru import logger
+            logger.error("[OpenAIAgentProvider] chat_with_tools_stream failed: {} | body={}", exc, getattr(exc, "body", None))
+            raise
 
         text_parts: list[str] = []
         tool_calls_buf: dict[int, dict[str, str]] = {}

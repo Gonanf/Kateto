@@ -178,6 +178,19 @@ async def test_http_server_serves_avatar_assets_and_overlay(tmp_path: Path):
             assert "avatar_head.png" in resp_overlay.text
             assert "avatar_jaw.png" in resp_overlay.text
 
+            # 1b. Component and Courtroom routes
+            resp_comp = await client.get("http://127.0.0.1:8996/components/kateto-avatar.js")
+            assert resp_comp.status_code == 200
+            assert "KatetoAvatar" in resp_comp.text
+            assert "KatetoSubtitles" in resp_comp.text
+
+            resp_court = await client.get("http://127.0.0.1:8996/courtroom")
+            assert resp_court.status_code == 200
+            assert "kateto-avatar" in resp_court.text
+            assert "kateto-paper-transcript" in resp_court.text
+
+            assert "caption" in resp_overlay.text
+
             # 2. Valid avatar assets
             for filename, expected_bytes in [
                 ("top.png", b"dummy_top_png"),
@@ -198,3 +211,68 @@ async def test_http_server_serves_avatar_assets_and_overlay(tmp_path: Path):
             assert resp_missing.status_code == 404
     finally:
         await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_visual_overlay_audio_streaming_and_multi_agent_config():
+    import base64
+
+    # Given: settings with custom layout, voices, and audio streaming enabled
+    settings = MagicMock()
+    settings.layout = "multi"
+    settings.voices = ["jane", "doktor", "whisperer"]
+    settings.audio = True
+    settings.get.side_effect = lambda k, default=None: getattr(settings, k, default)
+
+    plugin = VisualOverlayPlugin(settings=settings)
+    assert plugin._layout == "multi"
+    assert plugin._voices == ["jane", "doktor", "whisperer"]
+    assert plugin._stream_audio is True
+
+    # When: audio output with PCM samples is emitted
+    mock_ws = MagicMock()
+    mock_ws.send_json = AsyncMock()
+    await plugin.register_websocket(mock_ws)
+
+    sample_bytes = struct.pack("<50h", *[4000] * 50)
+    audio = AudioOutput(samples=sample_bytes, sample_rate=24000, channels=1, voice_id="doktor", format="pcm_s16le")
+    await plugin.on_audio_output(audio)
+
+    # Then: broadcast payload includes base64 audio and audio format metadata
+    assert mock_ws.send_json.call_count == 1
+    payload = mock_ws.send_json.call_args[0][0]
+    assert payload["event"] == "audio_output"
+    assert payload["voice_id"] == "doktor"
+    assert payload["sample_rate"] == 24000
+    assert payload["format"] == "pcm_s16le"
+    assert payload["audio"] == base64.b64encode(sample_bytes).decode("ascii")
+    assert payload["data"]["audio"] == payload["audio"]
+
+
+@pytest.mark.asyncio
+async def test_visual_overlay_programmatic_layout_event():
+    from kateto.core.event import OverlayLayout
+
+    plugin = VisualOverlayPlugin()
+    mock_ws = MagicMock()
+    mock_ws.send_json = AsyncMock()
+    await plugin.register_websocket(mock_ws)
+
+    # When: emitting an OverlayLayout event for a game (e.g. chess / versus)
+    event = OverlayLayout(
+        layout="sides",
+        positions={"jane": "left", "doktor": "right"},
+        voices=["jane", "doktor"],
+    )
+    await plugin.on_overlay_layout(event)
+
+    # Then: layout update is broadcast to connected websockets
+    assert mock_ws.send_json.call_count == 1
+    payload = mock_ws.send_json.call_args[0][0]
+    assert payload["event"] == "overlay_layout"
+    assert payload["layout"] == "sides"
+    assert payload["positions"]["jane"] == "left"
+    assert payload["positions"]["doktor"] == "right"
+    assert payload["voices"] == ["jane", "doktor"]
+
+

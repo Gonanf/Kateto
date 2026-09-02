@@ -1,0 +1,11 @@
+enabled = true
+dept = "fun"
+skills = ["orchestrator"]
+mcp_servers = ["system"]
+tts_provider = "boson"
+boson_voice = "chloe"
+edge_tts_voice = "es-AR-ElenaNeural"
+stream = true
+max_tokens = 4096
+retries = 2
+timeout = 600

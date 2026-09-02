@@ -7,11 +7,11 @@ import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePath, PureWindowsPath
-from typing import Final, Self
+from typing import Any, Final, Self
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from kateto.core.event import EventModel
 
@@ -39,6 +39,56 @@ class ConfigPaths:
 class _ConfigModel(EventModel):
     ...
 
+
+class _ExtensibleConfigModel(BaseModel):
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if hasattr(self, key):
+            val = getattr(self, key)
+            return val if val is not None else default
+        if self.model_extra and key in self.model_extra:
+            return self.model_extra[key]
+        return default
+
+    def __getattr__(self, name: str) -> Any:
+        if self.model_extra and name in self.model_extra:
+            return self.model_extra[name]
+        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
+
+class PluginConfigRegistry:
+    """Registry allowing plugins to declare custom parameters for themselves or for voices."""
+    _plugin_params: dict[str, dict[str, Any]] = {}
+    _voice_params: dict[str, Any] = {}
+
+    @classmethod
+    def register_plugin_param(cls, plugin_name: str, param_name: str, default: Any = None) -> None:
+        if plugin_name not in cls._plugin_params:
+            cls._plugin_params[plugin_name] = {}
+        cls._plugin_params[plugin_name][param_name] = default
+
+    @classmethod
+    def register_voice_param(cls, param_name: str, default: Any = None) -> None:
+        cls._voice_params[param_name] = default
+
+    @classmethod
+    def get_plugin_defaults(cls, plugin_name: str) -> dict[str, Any]:
+        return dict(cls._plugin_params.get(plugin_name, {}))
+
+    @classmethod
+    def get_voice_defaults(cls) -> dict[str, Any]:
+        return dict(cls._voice_params)
+
+
+def register_plugin_param(plugin_name: str, param_name: str, default: Any = None) -> None:
+    PluginConfigRegistry.register_plugin_param(plugin_name, param_name, default)
+
+
+def register_voice_param(param_name: str, default: Any = None) -> None:
+    PluginConfigRegistry.register_voice_param(param_name, default)
+
+
 class KatetoSettings(_ConfigModel):
     debug: bool = False
     hot_reload: bool = False
@@ -48,7 +98,7 @@ class KatetoSettings(_ConfigModel):
     default_voice_dept: str = "fun"
 
 
-class PluginSettings(_ConfigModel):
+class PluginSettings(_ExtensibleConfigModel):
     enabled: bool = True
     endpoint: str | None = None
     model: str | None = None
@@ -92,7 +142,7 @@ class PluginSettings(_ConfigModel):
         return value
 
 
-class VoiceSettings(_ConfigModel):
+class VoiceSettings(_ExtensibleConfigModel):
     enabled: bool = True
     skills: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(default_factory=list)
@@ -273,6 +323,47 @@ def _copy_missing_defaults(*, source_dir: Path, target_dir: Path) -> None:
             shutil.copy2(source_path, target_path)
 
 
+def _load_voice_folder_configs(config_dir: Path, raw_config: dict[str, Any]) -> None:
+    voices_section = raw_config.setdefault("voice", {})
+    voices_dir = config_dir / "voices"
+    if not voices_dir.is_dir():
+        return
+    for voice_entry in sorted(voices_dir.iterdir()):
+        if not voice_entry.is_dir():
+            continue
+        vname = voice_entry.name.casefold()
+        cfg_file = None
+        for candidate in ("config.toml", "voice.toml"):
+            candidate_path = voice_entry / candidate
+            if candidate_path.is_file():
+                cfg_file = candidate_path
+                break
+        if cfg_file is not None:
+            try:
+                vdata = tomllib.loads(cfg_file.read_text(encoding="utf-8"))
+                if "voice" in vdata and isinstance(vdata["voice"], dict):
+                    if vname in vdata["voice"] and isinstance(vdata["voice"][vname], dict):
+                        vsettings = vdata["voice"][vname]
+                    else:
+                        vsettings = vdata["voice"]
+                else:
+                    vsettings = vdata
+
+                existing = voices_section.get(vname, {})
+                voices_section[vname] = {**existing, **vsettings}
+            except Exception as err:
+                raise ConfigError(f"unable to read voice config at {cfg_file}: {err}") from err
+        elif vname not in voices_section and any((voice_entry / marker).exists() for marker in ("SOUL.md", "soul.md", "workflows")):
+            voices_section[vname] = {"enabled": True}
+
+    voice_defaults = PluginConfigRegistry.get_voice_defaults()
+    for vname, vdata in voices_section.items():
+        if isinstance(vdata, dict):
+            for k, def_val in voice_defaults.items():
+                if k not in vdata and def_val is not None:
+                    vdata[k] = def_val
+
+
 def load_config(*, config_dir: Path | None = None, defaults_dir: Path | None = None) -> LoadedConfig:
     paths = bootstrap_config(config_dir=config_dir, defaults_dir=defaults_dir)
     try:
@@ -283,6 +374,8 @@ def load_config(*, config_dir: Path | None = None, defaults_dir: Path | None = N
         raise ConfigError(f"unable to read config at {paths.config_file}: config must use UTF-8") from error
     except OSError as error:
         raise ConfigError(f"unable to read config at {paths.config_file}: {error}") from error
+
+    _load_voice_folder_configs(paths.config_dir, raw_config)
     _load_dotenv(paths)
     _resolve_secret_references(raw_config)
     try:

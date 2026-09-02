@@ -295,6 +295,8 @@ class Debate(Command):
         _ = parser.add_argument("--list-voices", action="store_true", help="lista las voces de Kateto y sale")
         _ = parser.add_argument("--overlay", action="store_true",
                                 help="best-effort: reenvia cada turno al visual overlay por WS (no fatal)")
+        _ = parser.add_argument("--delay", type=float, default=None,
+                                help="pausa en segundos entre argumentos (default: 3.5s para debates reales, 0.0s en mock)")
         return parser
 
     @override
@@ -319,13 +321,17 @@ class Debate(Command):
         if not debaters:
             debaters = ["whisperer", "doktor", "conquest"]
 
+        cfg_dir = None
         registry_dir = Path(getattr(args, "registry_dir")) if getattr(args, "registry_dir") else None
-        if registry_dir is None:
-            try:
-                loaded = load_config()
-                registry_dir = loaded.paths.config_dir / "bate_debate" / "registry"
-            except Exception:  # noqa: BLE001
-                registry_dir = Path.home() / ".config" / "kateto" / "bate_debate" / "registry"
+        try:
+            loaded = load_config()
+            cfg_dir = loaded.paths.config_dir
+            if registry_dir is None:
+                registry_dir = cfg_dir / "bate_debate" / "registry"
+        except Exception:  # noqa: BLE001
+            cfg_dir = Path.home() / ".config" / "kateto"
+            if registry_dir is None:
+                registry_dir = cfg_dir / "bate_debate" / "registry"
 
         use_mock = bool(getattr(args, "self_test", False))
 
@@ -335,28 +341,62 @@ class Debate(Command):
             overlay_ws = _make_overlay_broadcaster()
 
         def on_speak(voice_id: str, role: str, phase: str, text: str) -> None:
+            prof = _PROFILES.get(voice_id)
+            vname = prof.display_name if prof else voice_id.title()
+            self.app.stdout.write(f"[{vname} • {phase.upper()}]: {text}\n\n")
+            self.app.stdout.flush()
             if overlay_ws is not None:
                 try:
                     overlay_ws(voice_id, role, phase, text)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("overlay broadcast failed: {}", exc)
 
+        raw_delay = getattr(args, "delay", None)
+        if raw_delay is not None:
+            arg_delay = float(raw_delay)
+        else:
+            arg_delay = 0.0 if use_mock else 0.5
+
         async def _run() -> list:
             if use_mock:
                 factory = lambda vid: MockProvider()  # noqa: E731
+                owner = None
+                manager = None
             else:
                 factory = _real_provider_factory()
-            return await run_debate(
-                judge=judge,
-                debaters=debaters,
-                topic=str(getattr(args, "topic")) if getattr(args, "topic") else None,
-                provider_factory=factory,
-                rounds=int(getattr(args, "rounds", 1)),
-                infinite=bool(getattr(args, "infinite", False)),
-                max_debates=int(getattr(args, "max_debates", 3)),
-                registry_dir=registry_dir,
-                on_speak=on_speak,
-            )
+                owner = None
+                manager = None
+                try:
+                    from kateto.run_mode import build_runtime_owner
+                    owner = build_runtime_owner(loaded)
+                    await owner.start()
+                    manager = owner.manager
+                except Exception as exc:
+                    logger.warning("No se pudo iniciar el runtime de eventos para el debate, usando proveedor directo: {}", exc)
+                    owner = None
+                    manager = None
+
+            try:
+                return await run_debate(
+                    judge=judge,
+                    debaters=debaters,
+                    topic=str(getattr(args, "topic")) if getattr(args, "topic") else None,
+                    provider_factory=factory,
+                    manager=manager,
+                    rounds=int(getattr(args, "rounds", 1)),
+                    infinite=bool(getattr(args, "infinite", False)),
+                    max_debates=int(getattr(args, "max_debates", 3)),
+                    registry_dir=registry_dir,
+                    on_speak=on_speak,
+                    delay_between_arguments=arg_delay,
+                    config_dir=cfg_dir,
+                )
+            finally:
+                if owner is not None:
+                    try:
+                        await owner.stop()
+                    except Exception:
+                        pass
 
         try:
             records = asyncio.run(_run())
@@ -382,25 +422,35 @@ def _real_provider_factory():
 
     from kateto.voices.base import OpenAICompatibleProvider
 
-    endpoint = os.environ.get("KATETO_LLM_ENDPOINT", "http://localhost:11434/v1")
-    model = os.environ.get("KATETO_LLM_MODEL", "KatetoTalker")
+    endpoint = "http://localhost:11434/v1"
+    model = "Kateto"
     api_key = "sk-no"
     try:
         loaded = load_config()
         vllm = loaded.settings.plugin.get("voice_llm") if loaded.settings.plugin else None
-        if isinstance(vllm, dict):
-            endpoint = vllm.get("endpoint") or endpoint
-            model = vllm.get("model") or model
-            api_key = vllm.get("api_key") or api_key
+        if vllm is not None:
+            if isinstance(vllm, dict):
+                endpoint = vllm.get("endpoint") or endpoint
+                model = vllm.get("model") or model
+                api_key = vllm.get("api_key") or api_key
+            else:
+                endpoint = getattr(vllm, "endpoint", None) or endpoint
+                model = getattr(vllm, "model", None) or model
+                api_key = getattr(vllm, "api_key", None) or api_key
     except Exception:  # noqa: BLE001
         pass
+
+    endpoint = os.environ.get("KATETO_LLM_ENDPOINT") or endpoint
+    model = os.environ.get("KATETO_LLM_MODEL") or model
+    api_key = os.environ.get("KATETO_LLM_API_KEY") or api_key
+    max_tokens = int(os.environ.get("KATETO_LLM_MAX_TOKENS", "256"))
 
     cache: dict[str, OpenAICompatibleProvider] = {}
 
     def factory(voice_id: str) -> OpenAICompatibleProvider:
         if voice_id not in cache:
             cache[voice_id] = OpenAICompatibleProvider(
-                model=model, endpoint=endpoint, api_key=api_key
+                model=model, endpoint=endpoint, api_key=api_key, max_tokens=max_tokens
             )
         return cache[voice_id]
 
@@ -408,11 +458,35 @@ def _real_provider_factory():
 
 
 def _make_overlay_broadcaster():
-    """Best-effort WS broadcaster to a running `kateto run` overlay endpoint."""
+    """Best-effort WS broadcaster to a running `kateto run` overlay endpoint.
+
+    The broadcaster owns its WebSocket in a dedicated background thread with its
+    own event loop, so `on_speak` can schedule sends safely from whatever loop is
+    currently running the debate (the previous implementation called
+    ``loop.run_until_complete`` from inside an already-running loop, which raised
+    "Cannot run the event loop while another loop is running" and dropped every
+    turn).
+    """
     import asyncio
     import os
+    import threading
 
-    url = os.environ.get("KATETO_OVERLAY_WS", "ws://localhost:8080/ws/overlay")
+    url = os.environ.get("KATETO_OVERLAY_WS")
+    if not url:
+        port = 8080
+        try:
+            import tomllib
+            from kateto.core.config import load_config
+            cfg = load_config()
+            raw = tomllib.loads(cfg.paths.config_file.read_text(encoding="utf-8"))
+            hs = raw.get("http_server") or (raw.get("plugin") or {}).get("http_server") or {}
+            if isinstance(hs, dict):
+                port = int(hs.get("port", 8080))
+            elif hasattr(hs, "port"):
+                port = int(hs.port)
+            url = f"ws://localhost:{port}/ws/overlay"
+        except Exception:  # noqa: BLE001
+            url = "ws://localhost:8080/ws/overlay"
 
     try:
         import websockets  # type: ignore[import-untyped]
@@ -422,33 +496,119 @@ def _make_overlay_broadcaster():
 
     loop = asyncio.new_event_loop()
 
-    async def _connect():
-        return await websockets.connect(url, open_timeout=3, close_timeout=3)
+    class _Broadcaster:
+        def __init__(self) -> None:
+            self._ws = None
+            self._ready = threading.Event()
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+            self._ready.wait(timeout=5)
 
-    try:
-        ws = loop.run_until_complete(_connect())
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("overlay: no se pudo conectar a {}: {}", url, exc)
-        loop.close()
-        return None
+        def _run(self) -> None:
+            asyncio.set_event_loop(loop)
 
-    def send(voice_id, role, phase, text):
-        msg = {
-            "event": "debate",
-            "voice_id": voice_id,
-            "role": role,
-            "phase": phase,
-            "text": text,
-            "rms": 0.0,
-            "is_speaking": True,
-        }
-        try:
-            loop.run_until_complete(ws.send(json.dumps(msg)))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("overlay send failed: {}", exc)
+            async def _connect():
+                self._ws = await websockets.connect(
+                    url,
+                    ping_interval=15,
+                    ping_timeout=15,
+                    open_timeout=4,
+                    close_timeout=4,
+                )
 
-    send.close = lambda: (loop.run_until_complete(ws.close()) if not loop.is_closed() else None, loop.close())  # type: ignore[attr-defined]
-    return send
+            try:
+                loop.run_until_complete(_connect())
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("overlay: no se pudo conectar a {}: {}", url, exc)
+            finally:
+                self._ready.set()
+            try:
+                loop.run_forever()
+            finally:
+                try:
+                    tasks = asyncio.all_tasks(loop)
+                    for t in tasks:
+                        t.cancel()
+                    if tasks:
+                        loop.run_until_complete(
+                            asyncio.gather(*tasks, return_exceptions=True)
+                        )
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                except Exception:
+                    pass
+                finally:
+                    loop.close()
+
+        def _is_open(self) -> bool:
+            if self._ws is None:
+                return False
+            state = getattr(self._ws, "state", None)
+            if state is not None:
+                return getattr(state, "name", "") == "OPEN" or state == 1
+            return not getattr(self._ws, "closed", False)
+
+        def __call__(self, voice_id, role, phase, text):
+            msg = {
+                "event": "debate",
+                "type": "subtitle",
+                "voice_id": voice_id,
+                "role": role,
+                "phase": phase,
+                "text": text,
+                "rms": 0.0,
+                "is_speaking": True,
+                "data": {
+                    "text": text,
+                    "voice_id": voice_id,
+                    "role": role,
+                    "phase": phase,
+                },
+            }
+            fut = asyncio.run_coroutine_threadsafe(self._safe_send(msg), loop)
+            try:
+                fut.result(timeout=6)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("overlay send failed: {}", exc)
+
+        async def _safe_send(self, msg):
+            for attempt in range(2):
+                try:
+                    if not self._is_open():
+                        self._ws = await websockets.connect(
+                            url,
+                            ping_interval=15,
+                            ping_timeout=15,
+                            open_timeout=4,
+                            close_timeout=2,
+                        )
+                    await self._ws.send(json.dumps(msg))
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    self._ws = None
+                    if attempt == 0:
+                        logger.info("overlay send hiccup ({}), reconectando...", exc)
+                    else:
+                        logger.warning("overlay send failed: {}", exc)
+
+        def close(self) -> None:
+            async def _close_ws():
+                if self._ws is not None:
+                    try:
+                        await asyncio.wait_for(self._ws.close(), timeout=1.0)
+                    except Exception:
+                        pass
+                    self._ws = None
+
+            if loop.is_running():
+                try:
+                    fut = asyncio.run_coroutine_threadsafe(_close_ws(), loop)
+                    fut.result(timeout=2)
+                except Exception:
+                    pass
+                loop.call_soon_threadsafe(loop.stop)
+            self._thread.join(timeout=3)
+
+    return _Broadcaster()
 
 
 register_command("config check", ConfigCheck)

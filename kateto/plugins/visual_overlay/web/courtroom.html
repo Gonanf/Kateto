@@ -1,200 +1,427 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Kateto — Tribunal Bate Debate</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Kateto — Bate Debate (Ace Attorney style)</title>
+  <script type="module" src="/components/kateto-avatar.js"></script>
+  <script type="module" src="/components/kateto-transcript.js"></script>
   <style>
     :root {
-      --wood: #5b3a21;
-      --wood-light: #7a4f2c;
-      --desk: #3a2516;
+      --wood-dark: #2a1810;
+      --wood: #4a2e1a;
+      --wood-light: #6b4424;
+      --rope: #8b1a1a;
       --gold: #d9b36b;
       --paper: #f3e7c9;
       --ink: #2a1c10;
+      --objection: #c0392b;
     }
     * { box-sizing: border-box; }
     html, body {
-      margin: 0; padding: 0; height: 100%;
+      margin: 0; padding: 0; height: 100%; overflow: hidden;
       background:
-        radial-gradient(ellipse at top, #6b4424 0%, #3a2516 70%),
-        var(--wood);
+        repeating-linear-gradient(90deg, #3a2415 0px, #4a2e1a 40px, #3a2415 80px),
+        var(--wood-dark);
       font-family: "Georgia", "Times New Roman", serif;
       color: var(--paper);
-      overflow: hidden;
     }
-    #bench {
-      position: absolute; top: 2.5vh; left: 50%; transform: translateX(-50%);
-      text-align: center;
+    /* Back wall: wooden panels + gold trim */
+    #wall {
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 40%),
+        repeating-linear-gradient(90deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0) 6px, rgba(0,0,0,0.25) 12px);
     }
-    #bench .seal {
-      font-size: 0.95rem; letter-spacing: 0.35em; text-transform: uppercase;
-      color: var(--gold); opacity: 0.85;
+    /* Jury box / back bench railing with red velvet ropes */
+    #rail {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 14vh;
+      background: linear-gradient(180deg, transparent, rgba(20,12,6,0.9));
+      border-top: 3px solid var(--gold);
+      z-index: 5;
     }
-    #bench .title {
-      font-size: 1.6rem; font-weight: bold; color: var(--paper);
-      text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+    #rail::before {
+      content: ""; position: absolute; top: 30%; left: 8%; right: 8%; height: 4px;
+      background: var(--rope); border-radius: 2px; opacity: 0.8;
+      box-shadow: 0 18px 0 -1px var(--rope), 0 36px 0 -2px var(--rope);
     }
-    #judge-row {
-      position: absolute; top: 14vh; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 24px; align-items: flex-end;
+
+    /* Judge bench up top */
+    #judge-bench {
+      position: absolute; top: 2vh; left: 50%; transform: translateX(-50%);
+      width: 46vw; height: 22vh;
+      background: linear-gradient(180deg, #5b3a21, #2a1810);
+      border: 3px solid var(--gold); border-radius: 10px 10px 0 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+      box-shadow: 0 0 30px rgba(0,0,0,0.5);
+      z-index: 3;
     }
-    #debater-row {
-      position: absolute; bottom: 4vh; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 26px; flex-wrap: wrap; justify-content: center;
-      width: 92vw;
+    #judge-bench .scales {
+      font-size: 2.2rem; margin-bottom: 4px; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
     }
-    .card {
-      background: linear-gradient(180deg, rgba(243,231,201,0.10), rgba(0,0,0,0.25));
-      border: 1px solid rgba(217,179,107,0.35);
-      border-radius: 14px;
-      padding: 10px 12px 12px;
-      width: 180px;
-      text-align: center;
-      transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
-      backdrop-filter: blur(2px);
+    #judge-bench .label {
+      font-size: 0.8rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--gold);
+      padding-bottom: 6px;
     }
-    .card.judge {
-      width: 210px;
-      border-color: var(--gold);
-      box-shadow: 0 0 18px rgba(217,179,107,0.25);
+
+    /* Judge avatar component */
+    kateto-avatar.judge-pos {
+      position: absolute; top: 12vh; left: 50%; transform: translateX(-50%);
+      width: 250px; height: 250px; max-height: 24vh; max-width: 24vh;
+      display: none;
+      z-index: 4;
     }
-    .card.speaking {
-      border-color: #ffe9a8;
-      box-shadow: 0 0 22px rgba(255,221,120,0.65);
-      transform: translateY(-4px);
+    kateto-avatar.judge-pos.show { display: block; }
+
+    /* Active speaker avatar component (front and center) */
+    kateto-avatar.speaker-pos {
+      position: absolute; bottom: 16vh; left: 50%; transform: translateX(-50%);
+      width: 440px; height: 440px; max-height: 52vh; max-width: 52vh;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      filter: drop-shadow(0 8px 16px rgba(0,0,0,0.65));
+      z-index: 6;
     }
-    .avatar {
-      width: 96px; height: 96px; border-radius: 50%;
-      object-fit: cover; margin: 0 auto 6px; display: block;
-      border: 2px solid rgba(217,179,107,0.5);
-      background: #2a1c10;
+    kateto-avatar.speaker-pos.idle {
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px);
+      pointer-events: none;
     }
-    .card.judge .avatar { width: 104px; height: 104px; }
-    .fallback {
-      width: 96px; height: 96px; border-radius: 50%;
-      margin: 0 auto 6px; display: flex; align-items: center; justify-content: center;
-      font-size: 2rem; font-weight: bold; color: #1c1208;
-      border: 2px solid rgba(217,179,107,0.5);
+
+    /* Side silhouettes of other debaters */
+    kateto-avatar.sideline {
+      position: absolute; bottom: 16vh;
+      width: 230px; height: 230px; max-height: 28vh; max-width: 28vh;
+      opacity: 0.35;
+      filter: grayscale(0.6) drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+      transition: opacity 0.2s ease;
+      z-index: 2;
     }
-    .card.judge .fallback { width: 104px; height: 104px; }
-    .name { font-weight: bold; font-size: 1.02rem; color: var(--paper); }
-    .role { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); opacity: 0.85; }
-    .caption {
-      margin-top: 6px; min-height: 2.4em; font-size: 0.82rem; line-height: 1.25;
-      color: #efe2c2; font-style: italic;
+    kateto-avatar.sideline.left { left: 4vw; }
+    kateto-avatar.sideline.right { right: 4vw; }
+    kateto-avatar.sideline.active { opacity: 0.7; }
+
+    /* Objection! bubble */
+    #objection {
+      position: absolute; top: 38vh; left: 50%; transform: translateX(-50%) scale(0.2) rotate(-8deg);
+      font-family: "Arial Black", "Impact", sans-serif; font-weight: 900;
+      font-size: 5rem; color: #fff; -webkit-text-stroke: 4px var(--objection);
+      text-shadow: 0 0 12px rgba(192,57,43,0.6);
+      opacity: 0; pointer-events: none; transition: none;
+      z-index: 30;
     }
-    .tag {
-      position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
-      font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
-      background: var(--gold); color: #1c1208; padding: 1px 8px; border-radius: 8px;
+    #objection.pop {
+      animation: objpop 1.1s ease-out forwards;
     }
-    #desk {
-      position: absolute; bottom: 0; left: 0; right: 0; height: 9vh;
-      background: linear-gradient(180deg, transparent, rgba(20,12,6,0.85));
+    @keyframes objpop {
+      0%   { opacity: 0; transform: translateX(-50%) scale(0.2) rotate(-8deg); }
+      18%  { opacity: 1; transform: translateX(-50%) scale(1.25) rotate(-8deg); }
+      35%  { transform: translateX(-50%) scale(0.95) rotate(-8deg); }
+      75%  { opacity: 1; transform: translateX(-50%) scale(1.0) rotate(-8deg); }
+      100% { opacity: 0; transform: translateX(-50%) scale(1.1) rotate(-8deg); }
     }
+
+    /* "The court is now in session." banner */
+    #session {
+      position: absolute; top: 46vh; left: 50%; transform: translateX(-50%);
+      font-size: 1.4rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold);
+      text-shadow: 0 2px 6px rgba(0,0,0,0.7); opacity: 0; transition: opacity 0.4s ease;
+      z-index: 30;
+    }
+    #session.show { opacity: 0.9; }
   </style>
 </head>
 <body>
-  <div id="bench">
-    <div class="seal">Kateto · Tribunal de Voces</div>
-    <div class="title">Bate Debate de Bate de Chocolate</div>
+  <div id="wall"></div>
+
+  <div id="judge-bench">
+    <div class="scales">&#9878;</div>
+    <div class="label">The Court</div>
   </div>
 
-  <div id="judge-row"></div>
-  <div id="debater-row"></div>
-  <div id="desk"></div>
+  <!-- Reusable Web Components: <kateto-avatar> -->
+  <kateto-avatar id="judge-avatar" voice="jane" class="judge-pos"></kateto-avatar>
+  <kateto-avatar id="speaker-avatar" voice="doktor" class="speaker-pos idle"></kateto-avatar>
+
+  <kateto-avatar id="side-left" voice="conquest" class="sideline left" style="display: none;"></kateto-avatar>
+  <kateto-avatar id="side-right" voice="whisperer" class="sideline right" style="display: none;"></kateto-avatar>
+
+  <div id="objection">Objection!</div>
+  <div id="session">The court is now in session.</div>
+
+  <!-- Audio control toolbar -->
+  <div id="court-toolbar" style="position: absolute; top: 12px; right: 16px; z-index: 100;">
+    <button id="court-audio-btn" style="background: rgba(42, 24, 16, 0.85); border: 1px solid var(--gold); color: var(--gold); padding: 6px 14px; border-radius: 20px; font-family: inherit; font-size: 0.85rem; cursor: pointer; backdrop-filter: blur(8px); box-shadow: 0 4px 12px rgba(0,0,0,0.5); transition: all 0.2s ease;">
+      🔇 Audio: OFF
+    </button>
+  </div>
+
+  <!-- Legal Stenographer Paper Transcript with Typewriter & Sound Effects -->
+  <kateto-paper-transcript id="paper-transcript"></kateto-paper-transcript>
+
+  <div id="rail"></div>
 
   <script type="module">
-    // Courtroom overlay: listens for {event:"debate"} messages on /ws/overlay.
-    // Each message: {voice_id, role, phase, text, rms, is_speaking}
-    const known = new Map();  // voice_id -> {display_name, role}
-    const cards = new Map();  // voice_id -> element
+    import { KatetoAvatar, BrowserPcmPlayer } from '/components/kateto-avatar.js';
+    import { KatetoPaperTranscript } from '/components/kateto-transcript.js';
 
-    const ROLE_LABEL = {
-      orchestrator: "Jueza / Anfitriona",
-      adversary: "Adversaria",
-      project_manager: "Project Manager",
-      agile_facilitator: "Agile Lead",
-      delivery_advisor: "Delivery",
-    };
+    const urlParams = new URLSearchParams(window.location.search);
+    let isAudioEnabled = (urlParams.get("audio") === "1" || urlParams.get("audio") === "true");
+    const pcmPlayer = new BrowserPcmPlayer({ sampleRate: 24000, enabled: isAudioEnabled });
+    const audioBtn = document.getElementById("court-audio-btn");
 
-    function getInitials(name) {
-      return (name || "?").split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
-    }
-    function colorFor(id) {
-      const palette = ["#d9b36b", "#c98bd0", "#7fb0d9", "#8fd98f", "#e08f8f"];
-      let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-      return palette[h % palette.length];
-    }
-
-    function buildCard(voiceId, role, isJudge) {
-      const card = document.createElement("div");
-      card.className = "card" + (isJudge ? " judge" : "");
-      const av = document.createElement("img");
-      av.className = "avatar";
-      av.alt = voiceId;
-      av.src = `/voices/${voiceId}/avatar_head.png`;
-      av.onerror = () => {
-        const fb = document.createElement("div");
-        fb.className = "fallback";
-        fb.style.background = colorFor(voiceId);
-        fb.textContent = getInitials(voiceId);
-        av.replaceWith(fb);
-      };
-      const name = document.createElement("div");
-      name.className = "name";
-      name.textContent = voiceId;
-      const roleEl = document.createElement("div");
-      roleEl.className = "role";
-      roleEl.textContent = ROLE_LABEL[role] || role || "";
-      const cap = document.createElement("div");
-      cap.className = "caption";
-      if (isJudge) {
-        const tag = document.createElement("div");
-        tag.className = "tag"; tag.textContent = "Jueza";
-        card.appendChild(tag);
+    function updateAudioBtn() {
+      if (audioBtn) {
+        audioBtn.textContent = isAudioEnabled ? "🔊 Audio: ON" : "🔇 Audio: OFF";
+        audioBtn.style.color = isAudioEnabled ? "#4ade80" : "var(--gold)";
+        audioBtn.style.borderColor = isAudioEnabled ? "#4ade80" : "var(--gold)";
       }
-      card.append(av, name, roleEl, cap);
-      cards.set(voiceId, { card, name, cap });
-      (isJudge ? judgeRow : debaterRow).appendChild(card);
-      return card;
     }
 
-    const judgeRow = document.getElementById("judge-row");
-    const debaterRow = document.getElementById("debater-row");
+    if (audioBtn) {
+      audioBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        isAudioEnabled = !isAudioEnabled;
+        if (isAudioEnabled) {
+          pcmPlayer.enable();
+        } else {
+          pcmPlayer.disable();
+        }
+        updateAudioBtn();
+      });
+      updateAudioBtn();
+    }
+
+    const speakerAvatar = document.getElementById("speaker-avatar");
+    const judgeAvatar = document.getElementById("judge-avatar");
+    const sideLeft = document.getElementById("side-left");
+    const sideRight = document.getElementById("side-right");
+    const objectionEl = document.getElementById("objection");
+    const sessionEl = document.getElementById("session");
+    const paperTranscript = document.getElementById("paper-transcript");
+
+    let lastDebaters = [];
+    let sessionShown = false;
+
+    function updateSidelines() {
+      const others = lastDebaters.slice(0, 2);
+      if (others[0]) {
+        sideLeft.setVoice(others[0]);
+        sideLeft.style.display = "block";
+      } else {
+        sideLeft.style.display = "none";
+      }
+      if (others[1]) {
+        sideRight.setVoice(others[1]);
+        sideRight.style.display = "block";
+      } else {
+        sideRight.style.display = "none";
+      }
+    }
+
+    function popObjection() {
+      objectionEl.classList.remove("pop");
+      void objectionEl.offsetWidth;
+      objectionEl.classList.add("pop");
+    }
+
+    function saveCourtroomState(msg) {
+      try {
+        localStorage.setItem("kateto_courtroom_state", JSON.stringify(msg));
+        localStorage.setItem("kateto_courtroom_debaters", JSON.stringify(lastDebaters));
+      } catch (e) {}
+    }
+
+    function activateSpeaker(voice_id, role, phase) {
+      if (!voice_id) return;
+
+      if (role !== "orchestrator" && !lastDebaters.includes(voice_id)) {
+        lastDebaters.push(voice_id);
+        updateSidelines();
+      }
+
+      if (role === "orchestrator") {
+        judgeAvatar.setVoice(voice_id);
+        judgeAvatar.classList.add("show");
+        speakerAvatar.classList.add("idle");
+      } else {
+        judgeAvatar.classList.remove("show");
+        speakerAvatar.setVoice(voice_id);
+        speakerAvatar.classList.remove("idle");
+      }
+
+      if (phase === "objection") {
+        popObjection();
+      }
+      if (phase === "opening" && !sessionShown) {
+        sessionEl.classList.add("show");
+        sessionShown = true;
+        setTimeout(() => sessionEl.classList.remove("show"), 2200);
+      }
+    }
+
+    function applyState(msg) {
+      const { voice_id, role, phase, text } = msg;
+      if (!voice_id) return;
+
+      activateSpeaker(voice_id, role, phase);
+
+      if (paperTranscript && text) {
+        paperTranscript.addTurn({ voice_id, role, phase, text });
+      }
+    }
+
+    async function restoreState() {
+      // 1. Try server REST state first
+      try {
+        const resp = await fetch("/api/courtroom/state");
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.current) {
+            applyState(data.current);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // 2. Fallback to localStorage
+      try {
+        const saved = localStorage.getItem("kateto_courtroom_state");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const savedDebaters = localStorage.getItem("kateto_courtroom_debaters");
+          if (savedDebaters) {
+            lastDebaters = JSON.parse(savedDebaters);
+            updateSidelines();
+          }
+          applyState(parsed);
+        }
+      } catch (e) {}
+    }
+
+    let hasBackendAudio = false;
+    let activeUtterance = null;
+
+    function speakDebateTurn(text, voice_id) {
+      if (hasBackendAudio || typeof window === "undefined" || !window.speechSynthesis) return;
+      try {
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.resume();
+        const utter = new SpeechSynthesisUtterance(text);
+        activeUtterance = utter;
+        const voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          const esVoice = voices.find(v => v.lang && v.lang.startsWith("es"));
+          if (esVoice) utter.voice = esVoice;
+        }
+        utter.rate = 1.05;
+        utter.onend = () => { if (activeUtterance === utter) activeUtterance = null; };
+        utter.onerror = () => { if (activeUtterance === utter) activeUtterance = null; };
+        setTimeout(() => {
+          try {
+            window.speechSynthesis.resume();
+            window.speechSynthesis.speak(utter);
+          } catch (e) {}
+        }, 30);
+      } catch (e) {}
+    }
+
+    const seenTurns = new Set();
 
     function handleDebate(msg) {
-      const id = msg.voice_id;
-      if (!id) return;
-      const role = msg.role || (known.get(id) && known.get(id).role) || "";
-      const isJudge = role === "orchestrator" || msg.phase === "opening" || msg.phase === "ruling" || msg.phase === "verdict";
-      known.set(id, { role });
-      if (!cards.has(id)) buildCard(id, role, isJudge);
+      const { voice_id, role, phase } = msg;
+      const text = (msg.text || (msg.data && msg.data.text) || "").trim();
+      if (!voice_id || !text) return;
 
-      // clear previous speaking highlight
-      for (const { card } of cards.values()) card.classList.remove("speaking");
-      const entry = cards.get(id);
-      const speaking = msg.is_speaking || (typeof msg.rms === "number" && msg.rms > 0.01);
-      if (speaking) entry.card.classList.add("speaking");
-      if (msg.text) entry.cap.textContent = msg.text;
-      // keep judge visually on top
-      if (isJudge && entry.card.parentElement !== judgeRow) judgeRow.appendChild(entry.card);
+      const turnKey = `${voice_id}:${phase}:${text.slice(0, 60)}`;
+      if (seenTurns.has(turnKey)) return;
+      seenTurns.add(turnKey);
+      if (seenTurns.size > 60) {
+        const oldest = seenTurns.values().next().value;
+        seenTurns.delete(oldest);
+      }
+
+      if (phase === "objection") {
+        if (typeof window !== "undefined" && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+        if (speakerAvatar) speakerAvatar.stopSpeaking();
+        if (judgeAvatar) judgeAvatar.stopSpeaking();
+        popObjection();
+      }
+
+      activateSpeaker(voice_id, role, phase);
+
+      // Backend Kateto TTS handles audio output directly (no browser duplicate speech)
+
+      // Write turn on official legal paper transcript with typewriter effect & sound
+      if (paperTranscript) {
+        paperTranscript.addTurn({ voice_id, role, phase, text });
+      }
     }
 
-    const wsProto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${wsProto}://${location.host}/ws/overlay`);
-    ws.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data);
-        if (msg.event === "debate" || (msg.data && msg.data.event === "debate")) {
-          handleDebate(msg.data ? msg.data : msg);
+    function connectWs() {
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${proto}//${location.host}/ws/overlay`);
+
+      ws.onmessage = (ev) => {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        if (!msg) return;
+
+        // Live audio RMS visemes and streaming PCM audio from Kateto backend TTS
+        if (msg.event === "audio_output" || msg.type === "viseme") {
+          const rawRms = (typeof msg.rms === 'number') ? msg.rms : (msg.data && typeof msg.data.rms === 'number') ? msg.data.rms : 0.0;
+          const audioB64 = msg.audio || (msg.data && msg.data.audio);
+
+          if (audioB64 && isAudioEnabled) {
+            const sampleRate = msg.sample_rate || (msg.data && msg.data.sample_rate) || 24000;
+            const channels = msg.channels || (msg.data && msg.data.channels) || 1;
+            pcmPlayer.playChunk(audioB64, sampleRate, channels);
+          }
+
+          if (rawRms > 0.015) {
+            hasBackendAudio = true;
+            if (typeof window !== "undefined" && window.speechSynthesis) {
+              window.speechSynthesis.cancel();
+            }
+          }
+          if (speakerAvatar && !speakerAvatar.classList.contains("idle")) {
+            speakerAvatar.setRms(rawRms);
+          } else if (judgeAvatar && judgeAvatar.classList.contains("show")) {
+            judgeAvatar.setRms(rawRms);
+          }
+          return;
         }
-      } catch (e) { /* ignore parse errors */ }
-    };
-    ws.onclose = () => {
-      // simple self-heal reconnect
-      setTimeout(() => location.reload(), 1500);
-    };
+
+        if (msg.event === "interrupt" || msg.type === "interrupt") {
+          pcmPlayer.stop();
+          if (speakerAvatar) speakerAvatar.setRms(0);
+          if (judgeAvatar) judgeAvatar.setRms(0);
+          return;
+        }
+
+        // Only accept debate events; ignore raw bus subtitle echoes to prevent duplicate turns
+        if (msg.event === "debate") {
+          saveCourtroomState(msg);
+          handleDebate(msg);
+        }
+      };
+
+      ws.onclose = () => {
+        setTimeout(connectWs, 1500);
+      };
+    }
+
+    document.addEventListener("click", () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.resume();
+      }
+    }, { once: true });
+
+    connectWs();
+    restoreState();
   </script>
 </body>
 </html>

@@ -45,3 +45,51 @@ def test_run_dispatches_to_the_event_runtime_without_a_fixture_substitute(monkey
     # Then: only the configured live runner receives control.
     assert result == 0
     assert calls == ["configured-live"]
+
+
+def test_real_provider_factory_reads_plugin_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: a loaded configuration where voice_llm is a PluginSettings instance.
+    from unittest.mock import MagicMock
+    from kateto.core.config import PluginSettings
+
+    fake_config = MagicMock()
+    fake_config.settings.plugin = {
+        "voice_llm": PluginSettings(
+            model="Kateto",
+            endpoint="http://127.0.0.1:11434/v1",
+            api_key="sk-test-key",
+        )
+    }
+    monkeypatch.setattr(cli_commands, "load_config", lambda: fake_config)
+    monkeypatch.delenv("KATETO_LLM_ENDPOINT", raising=False)
+    monkeypatch.delenv("KATETO_LLM_MODEL", raising=False)
+    monkeypatch.delenv("KATETO_LLM_API_KEY", raising=False)
+
+    # When: the provider factory is created.
+    factory = cli_commands._real_provider_factory()
+    provider = factory("jane")
+
+    # Then: it resolves the model, endpoint, and api_key configured in PluginSettings.
+    assert provider.model == "Kateto"
+    assert provider.endpoint == "http://127.0.0.1:11434/v1"
+    assert provider.api_key == "sk-test-key"
+
+
+def test_real_provider_factory_default_model_is_kateto(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: no config and no env vars.
+    from unittest.mock import MagicMock
+
+    fake_config = MagicMock()
+    fake_config.settings.plugin = {}
+    monkeypatch.setattr(cli_commands, "load_config", lambda: fake_config)
+    monkeypatch.delenv("KATETO_LLM_ENDPOINT", raising=False)
+    monkeypatch.delenv("KATETO_LLM_MODEL", raising=False)
+    monkeypatch.delenv("KATETO_LLM_API_KEY", raising=False)
+
+    # When: factory is created.
+    factory = cli_commands._real_provider_factory()
+    provider = factory("jane")
+
+    # Then: model defaults to Kateto, not KatetoTalker.
+    assert provider.model == "Kateto"
+    assert provider.endpoint == "http://localhost:11434/v1"

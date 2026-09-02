@@ -346,28 +346,35 @@ class OpenAICompatibleProvider:
                     )
                 case unreachable:
                     assert_never(unreachable)
-        stream = await client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            stream=True,
-            max_tokens=self.max_tokens,
-            extra_headers=dict(self.session_headers) if self.session_headers else None,
-        )
-        async for chunk in stream:
-            usage = getattr(chunk, "usage", None)
-            if usage:
-                object.__setattr__(
-                    self,
-                    "last_usage",
-                    {k: v for k, v in usage.model_dump().items() if v is not None},
-                )
-            if not chunk.choices:
-                continue
-            if getattr(chunk.choices[0], "finish_reason", None) is not None:
-                object.__setattr__(self, "last_stop_reason", str(chunk.choices[0].finish_reason))
-            content = chunk.choices[0].delta.content
-            if content is not None:
-                yield content
+        try:
+            stream = await client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                stream=True,
+                max_tokens=min(self.max_tokens or 256, 384) if self.max_tokens else 256,
+                extra_headers=dict(self.session_headers) if self.session_headers else None,
+            )
+            async for chunk in stream:
+                usage = getattr(chunk, "usage", None)
+                if usage:
+                    object.__setattr__(
+                        self,
+                        "last_usage",
+                        {k: v for k, v in usage.model_dump().items() if v is not None},
+                    )
+                if not chunk.choices:
+                    continue
+                if getattr(chunk.choices[0], "finish_reason", None) is not None:
+                    object.__setattr__(self, "last_stop_reason", str(chunk.choices[0].finish_reason))
+                content = chunk.choices[0].delta.content
+                if content is not None:
+                    yield content
+        except Exception as exc:
+            body = getattr(exc, "body", None)
+            resp = getattr(exc, "response", None)
+            resp_text = getattr(resp, "text", "") if resp else ""
+            log.error("[OpenAICompatibleProvider] _stream failed: {} | body={} | resp={}", exc, body, resp_text)
+            raise
 
 
 class VoiceAgent(Plugin):
@@ -407,7 +414,7 @@ class VoiceAgent(Plugin):
         self._pydantic_agent: Any | None = None
         self._tools: tuple[ChatCompletionToolParam, ...] = ()
         self._extra_tools: tuple[ChatCompletionToolParam, ...] = ()
-        self._event_messages: deque[ChatMessage] = deque(maxlen=32)
+        self._event_messages: deque[ChatMessage] = deque(maxlen=8)
         self._event_message_limit = 2_048
         self._generation_depth = 0
         self._session_id = session_id or uuid4().hex
@@ -670,9 +677,21 @@ class VoiceAgent(Plugin):
         except asyncio.CancelledError:
             if not self._interrupted:
                 raise
+        except Exception as exc:
+            log.exception("[{}] on_generate failed: {}", self.name, exc)
+            gate = self._turn_gate()
+            if gate is not None:
+                gate.release(self.name)
+            await self._set_status(VoiceStatus.IDLE)
+            raise
         finally:
             if self._generation_task is generation:
                 self._generation_task = None
+            if self._status is not VoiceStatus.IDLE:
+                await self._set_status(VoiceStatus.IDLE)
+                gate = self._turn_gate()
+                if gate is not None:
+                    gate.release(self.name)
 
     async def on_generate_request(self, data: GenerateRequestData) -> None:
         from kateto.plugins.system.turn_gate import Decision
@@ -732,9 +751,20 @@ class VoiceAgent(Plugin):
         except asyncio.CancelledError:
             if not self._interrupted:
                 raise
+        except Exception:
+            gate = self._turn_gate()
+            if gate is not None:
+                gate.release(self.name)
+            await self._set_status(VoiceStatus.IDLE)
+            raise
         finally:
             if self._generation_task is generation:
                 self._generation_task = None
+            if self._status is not VoiceStatus.IDLE:
+                await self._set_status(VoiceStatus.IDLE)
+                gate = self._turn_gate()
+                if gate is not None:
+                    gate.release(self.name)
 
     async def _pass_turn_gate(self, prompt: str, data: EventModel, *, origin: str, event: str) -> Decision:
         from kateto.plugins.system.turn_gate import Decision, TurnGate
@@ -977,13 +1007,22 @@ class VoiceAgent(Plugin):
             return
         pipeline = self._get_or_create_pipeline()
         messages = await self._messages_for(prompt, workflow=workflow, phase_id=phase_id)
-        history = _to_pydantic_messages(messages[:-1])
+        # For pydantic_agent message_history, skip system messages (agent already has its system prompt)
+        # and only pass actual dialogue turns (user / assistant):
+        dialogue_messages = tuple(m for m in messages[:-1] if m.role in ("assistant", "user"))[-6:]
+        history = _to_pydantic_messages(dialogue_messages)
         user_prompt = messages[-1].content if messages else prompt
+        from pydantic_ai.settings import ModelSettings
+        m_settings = ModelSettings(max_tokens=min(self._settings.max_tokens or 256, 384))
         try:
             if self._settings.stream:
                 sequence = 0
                 segmenter = PhraseSegmenter()
-                async with agent.run_stream(user_prompt, message_history=history or None) as result:
+                async with agent.run_stream(
+                    user_prompt,
+                    message_history=history or None,
+                    model_settings=m_settings,
+                ) as result:
                     stream = VoiceEventStream(result.stream_text(delta=True))
                     async for msg in stream:
                         if self._interrupted:
@@ -1011,13 +1050,25 @@ class VoiceAgent(Plugin):
                     else:
                         await self._emit_chunk("", sequence, final=True)
             else:
-                result = await agent.run(user_prompt, message_history=history or None)
+                result = await agent.run(
+                    user_prompt,
+                    message_history=history or None,
+                    model_settings=m_settings,
+                )
                 output = result.output
                 if output and isinstance(output, str):
                     await pipeline.token_queue.put(output)
                     await self._emit_chunk(output, 0, final=True)
                 await pipeline.token_queue.put(None)
         except asyncio.CancelledError:
+            await pipeline.token_queue.put(None)
+            if not self._interrupted:
+                raise
+        except Exception as exc:
+            body = getattr(exc, "body", None)
+            resp = getattr(exc, "response", None)
+            resp_text = getattr(resp, "text", "") if resp else ""
+            log.error("[_pydantic_agent_loop] FAILED: {} | body={} | resp={}", repr(exc), body, resp_text)
             await pipeline.token_queue.put(None)
             raise
         finally:
@@ -1172,10 +1223,10 @@ class VoiceAgent(Plugin):
             if mcp_servers:
                 mcp_block = get_mcp_prompt_block(mcp_servers)
         delegation_block = get_delegation_prompt_block() if self._pydantic_agent is not None else None
-        boson_block = None
-        # Boson prompt block injection (F11)
-        if getattr(self._settings, "tts_provider", "") == "boson" and (set(self.profile.depts) & {"fun"}):
-            boson_block = get_agent_prompt_block("boson")
+        tts_block = None
+        current_tts = getattr(self._settings, "tts_provider", None) or (self._settings.get("tts_provider") if hasattr(self._settings, "get") else None)
+        if current_tts:
+            tts_block = get_agent_prompt_block(str(current_tts))
         self._stable_prompt_text = stable_prompt(
             soul=soul,
             profile_system_prompt=self.profile.system_prompt,
@@ -1183,7 +1234,7 @@ class VoiceAgent(Plugin):
             workflow_block=get_workflow_prompt_block(workflows if workflows else None),
             mcp_block=mcp_block,
             delegation_block=delegation_block,
-            boson_block=boson_block,
+            boson_block=tts_block,
             skills=self._skills,
             memories=memories,
         )
@@ -1261,9 +1312,11 @@ class VoiceAgent(Plugin):
             semantic_memories=await self._relevant_memories(prompt),
             journal=await self._memory.read_journal(),
         )
+        # Bounded recent history prevents local LLM 8192-token context overflow
+        recent_events = list(self._event_messages)[-8:]
         history = tuple(
             message
-            for message in self._event_messages
+            for message in recent_events
             if not (message.role == "user" and message.content == prompt)
         )
         return assemble_messages(
@@ -1344,7 +1397,7 @@ class VoiceAgent(Plugin):
         return text[: self._event_message_limit]
 
     async def _emit_chunk(self, text: str, sequence: int, *, final: bool) -> None:
-        if not text:
+        if not text and not final:
             return
         manager = self.manager
         if manager is not None:

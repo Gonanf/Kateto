@@ -344,11 +344,14 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
                 executor,
                 cli_allowlist=ctx.config.settings.cli.allowlist,
             )
+            from pydantic_ai.settings import ModelSettings
+
             pydantic_agent = Agent(
                 model=model,
                 system_prompt=profile.system_prompt,
                 toolsets=[kateto_toolset.toolset],
                 capabilities=capabilities,
+                model_settings=ModelSettings(max_tokens=min(settings.max_tokens or 256, 384)),
             )
             voice.set_pydantic_agent(pydantic_agent)
         except ImportError:

@@ -7,14 +7,33 @@ wheels/
 *.egg-info
 #Why this? Because it can contain personal data from my pc
 .omo/evidence/
+.omo/notepads/
+.omo/plans/
+.omo/run-continuation/
 .sisyphus/
 docs/compose/
 # Virtual environments
 .venv
 kateto-wts/
 
+# Logs & scratch
+*.log
+log.txt
+
+# Caches & agent state
+.pytest_cache/
+.ruff_cache/
+.gemini/
+.claude/
+.cursor/
+
 # Starlight docs site (Kateto/docs)
 docs/node_modules/
 docs/dist/
 docs/.astro/
 docs/bun.lock
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
+

@@ -2,201 +2,660 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Kateto Visual Overlay</title>
+  <script type="module" src="/components/kateto-avatar.js"></script>
   <style>
+    * { box-sizing: border-box; }
     html, body {
       margin: 0;
       padding: 0;
+      width: 100%;
+      height: 100%;
       background: transparent;
       overflow: hidden;
-      font-family: sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: white;
+      user-select: none;
     }
-    #container {
+
+    /* Floating Toolbar (OBS / Stream friendly: auto-hides or hides via ?controls=0) */
+    #toolbar {
       position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
+      top: 14px;
+      right: 16px;
+      display: flex;
+      gap: 10px;
+      z-index: 100;
+      opacity: 0.92;
+      transition: opacity 0.4s ease;
+    }
+    #toolbar.fade {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .tool-btn {
+      background: rgba(15, 23, 42, 0.84);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #e2e8f0;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    .tool-btn:hover {
+      background: rgba(30, 41, 59, 0.95);
+      border-color: rgba(255, 255, 255, 0.35);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .tool-btn.active {
+      background: rgba(37, 99, 235, 0.85);
+      border-color: rgba(147, 197, 253, 0.6);
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(59, 130, 246, 0.45);
+    }
+
+    /* Stage Container (Full viewport) */
+    #stage {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    #vtuber-overlay {
+      position: absolute;
+      inset: 0;
+    }
+
+    /* Agent Card: smooth positioning transition for game moves and side shifts */
+    .agent-card {
+      position: absolute;
       display: flex;
       flex-direction: column;
       align-items: center;
+      transition:
+        top 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        left 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        right 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        bottom 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+        opacity 0.25s ease,
+        filter 0.25s ease;
+      opacity: 0.72;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
     }
-    .avatar-container {
-      position: relative;
-      width: 256px;
-      height: 256px;
-      filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
-      overflow: visible;
+    .agent-card.speaking {
+      opacity: 1.0;
+      transform: scale(1.06) !important;
+      filter: drop-shadow(0 8px 24px rgba(59, 130, 246, 0.6));
     }
-    .layer-head {
+    .agent-card.hidden {
+      display: none !important;
+    }
+
+    .agent-card kateto-avatar {
+      width: 220px;
+      height: 220px;
+      max-width: 28vw;
+      max-height: 28vw;
+    }
+
+    /* Name Tag */
+    .agent-tag {
+      margin-top: 6px;
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #f8fafc;
+      padding: 4px 14px;
+      border-radius: 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: capitalize;
+      transition: all 0.2s ease;
+    }
+    .agent-card.speaking .agent-tag {
+      background: rgba(37, 99, 235, 0.9);
+      border-color: rgba(147, 197, 253, 0.7);
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+      color: #ffffff;
+    }
+
+    /* Subtitle Banner at bottom */
+    #caption-bar {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      z-index: 2;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(840px, 92vw);
+      min-height: 48px;
+      background: rgba(10, 15, 26, 0.86);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      z-index: 50;
+    }
+    #caption-bar.empty {
+      opacity: 0;
+      transform: translateX(-50%) translateY(12px);
       pointer-events: none;
     }
-    .layer-jaw {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      z-index: 1;
-      transform-origin: 50% 65%;
-      will-change: transform;
-      transition: transform 0.03s ease-out;
-      pointer-events: none;
+    #caption-badge {
+      font-weight: 700;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      white-space: nowrap;
+      letter-spacing: 0.04em;
     }
-    .avatar-fallback {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      z-index: 2;
-    }
-    #caption {
-      margin-top: 10px;
-      max-width: 640px;
-      background: rgba(0, 0, 0, 0.7);
-      padding: 8px 16px;
-      border-radius: 8px;
-      text-align: center;
-      font-size: 1.2rem;
+    #caption-text {
+      font-size: 1.15rem;
       line-height: 1.4;
-      min-height: 1.4em;
+      text-align: center;
+      color: #f1f5f9;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
     }
   </style>
 </head>
 <body>
-  <div id="container" data-signals="{voice_id: 'jane', rms: 0, jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0, use_fallback: false, text: ''}">
-    <div id="vtuber-overlay" class="avatar-container">
-      <!-- Muppet Cutout Layers (Head fixed z-2, Jaw mobile z-1) -->
-      <img id="avatar-head"
-           class="layer-head"
-           alt="Avatar Head"
-           data-show="!$use_fallback"
-           data-attr:src="'/voices/' + $voice_id + '/avatar_head.png'"
-           onerror="window.handleCutoutError && window.handleCutoutError()" />
 
-      <img id="avatar-jaw"
-           class="layer-jaw"
-           alt="Avatar Jaw"
-           data-show="!$use_fallback"
-           data-attr:src="'/voices/' + $voice_id + '/avatar_jaw.png'"
-           data-style-transform="'translate(' + $jawOffsetX + 'px, ' + $jawOffsetY + 'px) rotate(' + $jawRotation + 'deg)'"
-           data-style:transform="'translate(' + $jawOffsetX + 'px, ' + $jawOffsetY + 'px) rotate(' + $jawRotation + 'deg)'"
-           onerror="window.handleCutoutError && window.handleCutoutError()" />
-
-      <!-- Fallback Layer (Classic top.png / mouth.png) -->
-      <img id="avatar-fallback"
-           class="avatar-fallback"
-           alt="Avatar Classic"
-           data-show="$use_fallback"
-           data-attr:src="$rms > 0.01 ? '/voices/' + $voice_id + '/mouth.png' : '/voices/' + $voice_id + '/top.png'"
-           onerror="this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='" />
-    </div>
-
-    <div id="caption" data-text="$text"></div>
+  <!-- Floating Stream Controls -->
+  <div id="toolbar">
+    <button id="mode-btn" class="tool-btn" title="Alternar presets de layout (Row, Sides/Chess, Corners, Single)">
+      👥 Layout: Row
+    </button>
+    <button id="audio-btn" class="tool-btn" title="Habilitar/Deshabilitar reproducción de audio TTS en el navegador">
+      🔇 Audio: OFF
+    </button>
   </div>
 
-  <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.2/bundles/datastar.js"></script>
+  <!-- Main Stage & VTuber Overlay Container -->
+  <div id="stage">
+    <div id="vtuber-overlay" class="overlay-container">
+      <div id="agents-holder">
+        <!-- Agent cards dynamically rendered with avatar_head.png and avatar_jaw.png -->
+      </div>
+    </div>
+    <div id="caption-bar" class="empty">
+      <span id="caption-badge">Kateto</span>
+      <span id="caption-text"></span>
+    </div>
+  </div>
 
-  <!-- Datastar v1.0.2 ships no WebSocket client (fetch/SSE only), so the browser
-       WS feeds the same CDN module's mergePatch() and Datastar renders. -->
   <script type="module">
-    import { mergePatch } from 'https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.2/bundles/datastar.js'
+    import { BrowserPcmPlayer, VOICE_NAMES } from '/components/kateto-avatar.js';
 
-    let activeVoice = 'jane';
-    let captionClearTimer = null;
+    // Parse URL parameters
+    const params = new URLSearchParams(window.location.search);
+    let currentLayout = (params.get('layout') || params.get('mode') || 'row').toLowerCase();
+    
+    // Strict voice filter: if specified in URL (e.g. ?voices=jane or ?voices=doktor),
+    // this window will ONLY ever show those voices and never bleed or add others!
+    let rawVoicesParam = params.get('voices');
+    let hasVoiceFilter = Boolean(rawVoicesParam && rawVoicesParam.trim().length > 0);
+    let currentVoices = hasVoiceFilter
+      ? rawVoicesParam.split(',').map(v => v.trim().toLowerCase()).filter(Boolean)
+      : null;
 
-    // Global fallback handler when avatar_head.png or avatar_jaw.png is missing (404)
-    window.handleCutoutError = () => {
-      mergePatch({ use_fallback: true });
-    };
+    let audioParam = params.get('audio');
+    let isAudioEnabled = (audioParam === '1' || audioParam === 'true');
+    const showControls = params.get('controls') !== '0';
 
-    // Pure mapping: rms -> { jawOffsetX, jawOffsetY, jawRotation }
-    // Moves UP (negative translateY), randomly to the sides with enhanced force,
-    // with rotation tilting along with the lateral movement direction
-    function computeJawKinematics(rms) {
-      if (typeof rms !== 'number' || rms < 0.015) {
-        return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
+    // Parse custom position overrides from URL:
+    // e.g. ?pos_jane=left&pos_doktor=right OR ?positions={"jane":"left","doktor":"right"}
+    let customPositions = {};
+    if (params.get('positions')) {
+      try {
+        customPositions = JSON.parse(params.get('positions'));
+      } catch (e) {
+        console.warn("Failed to parse ?positions JSON:", e);
       }
-      // Punchy response curve with even greater force
-      const factor = Math.min(1.0, Math.max(0.0, Math.pow((rms - 0.015) / 0.985, 0.68)));
-      // Move UP with strong force (up to -52px)
-      const upMovement = -Number((factor * 52.0).toFixed(2));
-      // Random lateral direction (-1.0 to +1.0) with strong side excursion (up to +/- 28px)
-      const sideDir = (Math.random() * 2 - 1);
-      const sideShake = Number((sideDir * factor * 28.0).toFixed(2));
-      // Rotation follows the movement: tilting in the direction of lateral movement with greater rotation (up to +/- 34 deg)
-      const tilt = Number(((sideDir * 0.9 + (Math.random() * 0.2 - 0.1)) * factor * 34.0).toFixed(2));
+    }
+    for (const [key, value] of params.entries()) {
+      if (key.startsWith('pos_')) {
+        const vid = key.replace('pos_', '').toLowerCase();
+        customPositions[vid] = value;
+      }
+    }
 
-      return {
-        jawOffsetX: sideShake,
-        jawOffsetY: upMovement,
-        jawRotation: tilt,
+    const toolbar = document.getElementById('toolbar');
+    const modeBtn = document.getElementById('mode-btn');
+    const audioBtn = document.getElementById('audio-btn');
+    const agentsHolder = document.getElementById('agents-holder');
+    const captionBar = document.getElementById('caption-bar');
+    const captionBadge = document.getElementById('caption-badge');
+    const captionText = document.getElementById('caption-text');
+
+    if (!showControls) {
+      toolbar.style.display = 'none';
+    }
+
+    // Web Audio PCM Player
+    const pcmPlayer = new BrowserPcmPlayer({ sampleRate: 24000, enabled: isAudioEnabled });
+
+    function updateAudioButton() {
+      if (isAudioEnabled) {
+        audioBtn.textContent = '🔊 Audio: ON';
+        audioBtn.classList.add('active');
+      } else {
+        audioBtn.textContent = '🔇 Audio: OFF';
+        audioBtn.classList.remove('active');
+      }
+    }
+
+    audioBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      isAudioEnabled = !isAudioEnabled;
+      if (isAudioEnabled) {
+        pcmPlayer.enable();
+      } else {
+        pcmPlayer.disable();
+      }
+      updateAudioButton();
+    });
+    updateAudioButton();
+
+    document.addEventListener('click', () => {
+      if (isAudioEnabled) {
+        pcmPlayer.enable();
+      }
+    }, { once: true });
+
+    // Toolbar auto-fade
+    let idleTimer = null;
+    function resetIdleTimer() {
+      if (!showControls) return;
+      toolbar.classList.remove('fade');
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        toolbar.classList.add('fade');
+      }, 3500);
+    }
+    window.addEventListener('mousemove', resetIdleTimer);
+    resetIdleTimer();
+
+    // Layout Presets list for cycling
+    const LAYOUT_PRESETS = ['row', 'sides', 'corners', 'top-bottom', 'single'];
+    let layoutMode = currentLayout || 'row';
+
+    function updateModeButton() {
+      const labelMap = {
+        'row': '👥 Layout: Row',
+        'sides': '♟️ Layout: Sides (Chess)',
+        'versus': '⚔️ Layout: Sides (Versus)',
+        'chess': '♟️ Layout: Sides (Chess)',
+        'corners': '📐 Layout: Corners',
+        'top-bottom': '↕️ Layout: Top-Bottom',
+        'single': '👤 Layout: Single',
+        'custom': '🎯 Layout: Custom',
+      };
+      modeBtn.textContent = labelMap[layoutMode] || `👥 Layout: ${layoutMode}`;
+      recalculatePositions();
+    }
+
+    modeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const curIdx = LAYOUT_PRESETS.indexOf(layoutMode);
+      layoutMode = LAYOUT_PRESETS[(curIdx + 1) % LAYOUT_PRESETS.length];
+      updateModeButton();
+    });
+
+    // Voice List
+    let defaultVoices = ['jane', 'doktor', 'conquest', 'whisperer'];
+    let activeVoiceList = currentVoices || defaultVoices;
+
+    // Agent Card Elements Cache
+    const agentCards = new Map();
+    let activeSpeakerId = null;
+
+    function renderAgentCards(voices) {
+      agentsHolder.innerHTML = '';
+      agentCards.clear();
+
+      voices.forEach(voiceId => {
+        const card = document.createElement('div');
+        card.className = 'agent-card';
+        card.id = `card-${voiceId}`;
+
+        const avatar = document.createElement('kateto-avatar');
+        avatar.setAttribute('voice', voiceId);
+
+        const tag = document.createElement('div');
+        tag.className = 'agent-tag';
+        tag.textContent = VOICE_NAMES[voiceId] || (voiceId.charAt(0).toUpperCase() + voiceId.slice(1));
+
+        card.appendChild(avatar);
+        card.appendChild(tag);
+        agentsHolder.appendChild(card);
+
+        agentCards.set(voiceId, { card, avatar, tag, speakingTimer: null });
+      });
+
+      recalculatePositions();
+    }
+
+    // Position Parser & Anchor Calculator
+    function parseAnchor(pos) {
+      if (!pos) return null;
+      const p = String(pos).trim().toLowerCase();
+
+      const anchors = {
+        'left': { left: '5%', top: '50%', transform: 'translateY(-50%)' },
+        'right': { right: '5%', top: '50%', transform: 'translateY(-50%)' },
+        'top': { top: '8%', left: '50%', transform: 'translateX(-50%)' },
+        'bottom': { bottom: '16%', left: '50%', transform: 'translateX(-50%)' },
+        'center': { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' },
+        'top-left': { top: '8%', left: '6%', transform: 'none' },
+        'top-right': { top: '8%', right: '6%', transform: 'none' },
+        'bottom-left': { bottom: '16%', left: '6%', transform: 'none' },
+        'bottom-right': { bottom: '16%', right: '6%', transform: 'none' },
+      };
+
+      if (anchors[p]) return anchors[p];
+
+      // Coordinate format e.g. "15%,50%" or "x:20%,y:80%" or "100px,200px"
+      const match = p.match(/(?:x:)?\s*([0-9.]+(?:%|px|vw))\s*,\s*(?:y:)?\s*([0-9.]+(?:%|px|vh))/);
+      if (match) {
+        return { left: match[1], top: match[2], transform: 'translate(-50%, -50%)' };
+      }
+
+      return null;
+    }
+
+    function applyCardStyles(card, styleObj) {
+      card.style.top = '';
+      card.style.bottom = '';
+      card.style.left = '';
+      card.style.right = '';
+      card.style.transform = '';
+
+      for (const [k, v] of Object.entries(styleObj)) {
+        card.style[k] = v;
+      }
+    }
+
+    function recalculatePositions() {
+      const count = activeVoiceList.length;
+      if (count === 0) return;
+
+      activeVoiceList.forEach((voiceId, idx) => {
+        const item = agentCards.get(voiceId);
+        if (!item) return;
+        const card = item.card;
+
+        // Custom position override takes highest priority
+        const customPos = customPositions[voiceId];
+        const parsedCustom = parseAnchor(customPos);
+        if (parsedCustom) {
+          card.classList.remove('hidden');
+          applyCardStyles(card, parsedCustom);
+          return;
+        }
+
+        // Layout Presets
+        if (layoutMode === 'single') {
+          if (!activeSpeakerId) activeSpeakerId = activeVoiceList[0];
+          if (voiceId === activeSpeakerId) {
+            card.classList.remove('hidden');
+            applyCardStyles(card, {
+              bottom: '16%',
+              left: '50%',
+              transform: 'translateX(-50%) scale(1.15)',
+            });
+          } else {
+            card.classList.add('hidden');
+          }
+          return;
+        }
+
+        card.classList.remove('hidden');
+
+        if (layoutMode === 'sides' || layoutMode === 'versus' || layoutMode === 'chess') {
+          // Opposite sides of screen (perfect for Chess, board games, or debates)
+          if (idx % 2 === 0) {
+            // Left side (Player 1 / White)
+            const yOffset = count > 2 ? `${30 + Math.floor(idx / 2) * 35}%` : '50%';
+            applyCardStyles(card, {
+              left: '6%',
+              top: yOffset,
+              transform: 'translateY(-50%)',
+            });
+          } else {
+            // Right side (Player 2 / Black)
+            const yOffset = count > 2 ? `${30 + Math.floor(idx / 2) * 35}%` : '50%';
+            applyCardStyles(card, {
+              right: '6%',
+              top: yOffset,
+              transform: 'translateY(-50%)',
+            });
+          }
+        } else if (layoutMode === 'top-bottom') {
+          if (idx === 0) {
+            applyCardStyles(card, { top: '8%', left: '50%', transform: 'translateX(-50%)' });
+          } else if (idx === 1) {
+            applyCardStyles(card, { bottom: '16%', left: '50%', transform: 'translateX(-50%)' });
+          } else if (idx === 2) {
+            applyCardStyles(card, { top: '50%', left: '8%', transform: 'translateY(-50%)' });
+          } else {
+            applyCardStyles(card, { top: '50%', right: '8%', transform: 'translateY(-50%)' });
+          }
+        } else if (layoutMode === 'corners') {
+          if (count === 2) {
+            // Diagonal opposition: Player 1 at bottom-left, Player 2 at top-right
+            const twoCorners = [
+              { bottom: '18%', left: '6%', transform: 'none' },
+              { top: '8%', right: '6%', transform: 'none' },
+            ];
+            applyCardStyles(card, twoCorners[idx % 2]);
+          } else {
+            const cornerMap = [
+              { top: '8%', left: '6%', transform: 'none' },
+              { top: '8%', right: '6%', transform: 'none' },
+              { bottom: '18%', left: '6%', transform: 'none' },
+              { bottom: '18%', right: '6%', transform: 'none' },
+            ];
+            applyCardStyles(card, cornerMap[idx % 4]);
+          }
+        } else {
+          // Default: 'row' (centered bottom row)
+          const totalWidth = 86; // % of screen
+          const step = count > 1 ? totalWidth / (count - 1) : 0;
+          const leftPct = count > 1 ? (7 + idx * step) : 50;
+          applyCardStyles(card, {
+            bottom: '16%',
+            left: `${leftPct}%`,
+            transform: 'translateX(-50%)',
+          });
+        }
+      });
+    }
+
+    renderAgentCards(activeVoiceList);
+    updateModeButton();
+    window.addEventListener('resize', recalculatePositions);
+
+    // Caption handler
+    let captionClearTimer = null;
+    function setCaption(voiceId, text) {
+      if (!text || !text.trim()) return;
+      captionBadge.textContent = VOICE_NAMES[voiceId] || voiceId;
+      captionText.textContent = text.trim();
+      captionBar.classList.remove('empty');
+
+      if (captionClearTimer) clearTimeout(captionClearTimer);
+      captionClearTimer = setTimeout(() => {
+        captionBar.classList.add('empty');
+        captionClearTimer = null;
+      }, 5000);
+    }
+
+    function onSpeakerActivity(voiceId, rms) {
+      const vid = (voiceId || '').toLowerCase();
+      if (!vid) return;
+
+      // STRICT FILTER: If window is opened with ?voices=jane, ignore any other voices completely!
+      if (hasVoiceFilter && !currentVoices.includes(vid)) {
+        return;
+      }
+
+      let agent = agentCards.get(vid);
+
+      // Only add dynamically if there is NO explicit voices filter
+      if (!agent && !hasVoiceFilter) {
+        activeVoiceList.push(vid);
+        renderAgentCards(activeVoiceList);
+        agent = agentCards.get(vid);
+      }
+
+      if (!agent) return;
+
+      if (activeSpeakerId !== vid) {
+        activeSpeakerId = vid;
+        if (layoutMode === 'single') {
+          recalculatePositions();
+        }
+      }
+
+      if (typeof rms === 'number') {
+        agent.avatar.setRms(rms);
+        if (rms > 0.015) {
+          agent.card.classList.add('speaking');
+          if (agent.speakingTimer) clearTimeout(agent.speakingTimer);
+          agent.speakingTimer = setTimeout(() => {
+            agent.card.classList.remove('speaking');
+            agent.avatar.setRms(0);
+          }, 350);
+        }
+      }
+    }
+
+    // Connect WebSocket
+    function connectWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${proto}//${location.host}/ws/overlay`);
+
+      ws.onmessage = (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+        if (!msg) return;
+
+        // Dynamic Layout & Position Events (e.g. emitted from games, chess, scripts)
+        if (msg.event === 'overlay_layout' || msg.type === 'layout') {
+          if (msg.layout) {
+            layoutMode = msg.layout.toLowerCase();
+          }
+          if (msg.positions && typeof msg.positions === 'object') {
+            Object.assign(customPositions, msg.positions);
+          }
+          if (Array.isArray(msg.voices) && !hasVoiceFilter) {
+            activeVoiceList = msg.voices.map(v => v.toLowerCase());
+            renderAgentCards(activeVoiceList);
+          }
+          updateModeButton();
+          return;
+        }
+
+        // Live Audio Output (Visemes & Streaming PCM audio)
+        if (msg.event === 'audio_output' || msg.type === 'viseme') {
+          const voiceId = (msg.voice_id || (msg.data && msg.data.voice_id) || '').toLowerCase();
+          
+          // Strict filter check
+          if (hasVoiceFilter && voiceId && !currentVoices.includes(voiceId)) {
+            return;
+          }
+
+          const rawRms = (typeof msg.rms === 'number') ? msg.rms : (msg.data && typeof msg.data.rms === 'number') ? msg.data.rms : 0.0;
+          const text = msg.text || (msg.data && msg.data.text);
+          const audioB64 = msg.audio || (msg.data && msg.data.audio);
+
+          // Play streaming backend TTS audio
+          if (audioB64 && isAudioEnabled) {
+            const sampleRate = msg.sample_rate || (msg.data && msg.data.sample_rate) || 24000;
+            const channels = msg.channels || (msg.data && msg.data.channels) || 1;
+            pcmPlayer.playChunk(audioB64, sampleRate, channels);
+          }
+
+          if (voiceId) {
+            onSpeakerActivity(voiceId, rawRms);
+          }
+          if (text) {
+            setCaption(voiceId, text);
+          }
+          return;
+        }
+
+        // Subtitles / Text Chunks
+        if (msg.event === 'text_chunk' || msg.type === 'subtitle') {
+          const voiceId = (msg.voice_id || (msg.data && msg.data.voice_id) || '').toLowerCase();
+          if (hasVoiceFilter && voiceId && !currentVoices.includes(voiceId)) {
+            return;
+          }
+          const text = msg.text || (msg.data && msg.data.text);
+          if (voiceId && text) {
+            onSpeakerActivity(voiceId, 0.08);
+            setCaption(voiceId, text);
+          }
+          return;
+        }
+
+        // Debate Turns
+        if (msg.event === 'debate') {
+          const voiceId = (msg.voice_id || (msg.data && msg.data.voice_id) || '').toLowerCase();
+          if (hasVoiceFilter && voiceId && !currentVoices.includes(voiceId)) {
+            return;
+          }
+          const text = msg.text || (msg.data && msg.data.text);
+          if (voiceId && text) {
+            onSpeakerActivity(voiceId, 0.12);
+            setCaption(voiceId, text);
+          }
+          return;
+        }
+
+        // Interruption
+        if (msg.event === 'interrupt' || msg.type === 'interrupt') {
+          pcmPlayer.stop();
+          document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('speaking'));
+          agentCards.forEach(a => a.avatar.setRms(0));
+          return;
+        }
+
+        // Voice Idle
+        if (msg.event === 'voice_idle') {
+          document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('speaking'));
+          agentCards.forEach(a => a.avatar.setRms(0));
+          return;
+        }
+      };
+
+      ws.onclose = () => {
+        setTimeout(connectWs, 2000);
       };
     }
 
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/overlay`);
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        const patch = {};
-
-        const voiceId = msg.voice_id || (msg.data && msg.data.voice_id);
-        if (voiceId && voiceId !== activeVoice) {
-          activeVoice = voiceId;
-          patch.voice_id = voiceId;
-          // ponytail: reset fallback flag when switching voices to probe cutout first
-          patch.use_fallback = false;
-        }
-
-        let newText = null;
-        if (msg.type === 'viseme' && msg.text) {
-          newText = msg.text;
-        } else if (msg.type === 'subtitle' || msg.event === 'text_chunk') {
-          const t = msg.text !== undefined ? msg.text : (msg.data && msg.data.text);
-          if (t !== undefined) newText = t;
-        }
-
-        if (newText) {
-          patch.text = newText;
-          if (captionClearTimer) {
-            clearTimeout(captionClearTimer);
-            captionClearTimer = null;
-          }
-        }
-
-        const rawRms = (typeof msg.rms === 'number') ? msg.rms : (msg.data && typeof msg.data.rms === 'number') ? msg.data.rms : null;
-        if (rawRms !== null) {
-          patch.rms = rawRms;
-          const { jawOffsetX, jawOffsetY, jawRotation } = computeJawKinematics(rawRms);
-          patch.jawOffsetX = jawOffsetX;
-          patch.jawOffsetY = jawOffsetY;
-          patch.jawRotation = jawRotation;
-
-          if (rawRms < 0.015 && !captionClearTimer && patch.text !== '') {
-            captionClearTimer = setTimeout(() => {
-              mergePatch({ text: '' });
-              captionClearTimer = null;
-            }, 3500);
-          }
-        }
-
-        mergePatch(patch);
-      } catch (err) {
-        console.error('Failed to parse overlay event:', err);
-      }
-    };
-    // ponytail: no reconnect loop; add ws.onclose -> retry if the overlay must self-heal
+    connectWs();
   </script>
 </body>
 </html>

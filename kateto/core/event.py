@@ -98,6 +98,12 @@ class AudioOutput(EventModel):
     text: str | None = None
 
 
+class OverlayLayout(EventModel):
+    layout: str = "row"
+    positions: dict[str, str] = Field(default_factory=dict)
+    voices: list[str] | None = None
+
+
 class AudioInputStatus(StrEnum):
     IDLE = "idle"
     RECORDING = "recording"

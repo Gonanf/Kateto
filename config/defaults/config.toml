@@ -53,7 +53,16 @@ default_language = "en-us"
 
 [plugin.audio_output_edgetts]
 enabled = false
-default_language = "en-US-JennyNeural"
+default_voice = "es-AR-ElenaNeural"
+default_language = "es-AR-ElenaNeural"
+stream = true
+
+[plugin.audio_output_boson]
+enabled = false
+endpoint = "https://api.boson.ai/v1/audio/speech"
+api_key = ""
+model = "higgs-tts-3"
+default_voice = "chloe"
 
 [plugin.audio_output_player]
 enabled = true
@@ -122,4 +131,4 @@ voice_probabilities = { jane = 0.7, doktor = 0.15, conquest = 0.1, whisperer = 0
 [plugin.http_server]
 enabled = true
 host = "127.0.0.1"
-port = 8080
+port = 8099

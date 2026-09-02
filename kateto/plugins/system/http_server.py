@@ -13,13 +13,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from kateto.core.event import EventEnvelope
+from kateto.core.event import EventEnvelope, InterruptData, TextChunk
 from kateto.core.manager import PluginManager
 
 log = logger
 
 OVERLAY_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "index.html"
 COURTROOM_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "courtroom.html"
+WEB_DIR = Path(__file__).resolve().parent.parent / "visual_overlay" / "web"
 VALID_AVATAR_FILES = ("top.png", "mouth.png", "avatar_head.png", "avatar_jaw.png")
 
 
@@ -79,6 +80,29 @@ class HttpServer:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+        class NoCacheMiddleware:
+            def __init__(self, app: Any) -> None:
+                self.app = app
+
+            async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+                if scope["type"] != "http":
+                    await self.app(scope, receive, send)
+                    return
+
+                async def send_wrapper(message: Any) -> None:
+                    if message["type"] == "http.response.start":
+                        headers = list(message.get("headers", []))
+                        headers.append((b"cache-control", b"no-cache, no-store, must-revalidate, max-age=0"))
+                        headers.append((b"pragma", b"no-cache"))
+                        headers.append((b"expires", b"0"))
+                        message = dict(message)
+                        message["headers"] = headers
+                    await send(message)
+
+                await self.app(scope, receive, send_wrapper)
+
+        app.add_middleware(NoCacheMiddleware)
 
         @app.get("/events")
         async def list_events() -> list[EventListItem]:
@@ -176,6 +200,22 @@ class HttpServer:
         async def courtroom() -> FileResponse:
             return FileResponse(COURTROOM_HTML)
 
+        SOUNDS_DIR = (Path(__file__).resolve().parent.parent / "bate_debate" / "sounds").resolve()
+
+        @app.get("/components/{file}")
+        async def component_asset(file: str) -> FileResponse:
+            path = (WEB_DIR / file).resolve()
+            if not path.is_relative_to(WEB_DIR) or not path.is_file():
+                raise HTTPException(status_code=404, detail="not found")
+            return FileResponse(path)
+
+        @app.get("/sounds/{file}")
+        async def sound_asset(file: str) -> FileResponse:
+            path = (SOUNDS_DIR / file).resolve()
+            if not path.is_relative_to(SOUNDS_DIR) or not path.is_file():
+                raise HTTPException(status_code=404, detail="not found")
+            return FileResponse(path)
+
         @app.get("/voices/{name}/{file}")
         async def voice_asset(name: str, file: str) -> FileResponse:
             if file not in VALID_AVATAR_FILES or self._config_dir is None:
@@ -189,6 +229,92 @@ class HttpServer:
                 raise HTTPException(status_code=404, detail="not found")
             return FileResponse(path)
 
+        @app.get("/api/courtroom/state")
+        async def courtroom_state() -> dict[str, Any]:
+            plugin = self._manager.get_plugin("visual_overlay")
+            last_state = getattr(plugin, "_last_debate_state", None)
+            history = getattr(plugin, "_debate_history", [])
+            return {"current": last_state, "history": history}
+
+        @app.post("/api/game/event")
+        async def game_event(payload: dict[str, Any]) -> dict[str, Any]:
+            log.info("game_event {} {} {}", payload.get("game"), payload.get("event_type"), payload.get("voice_id"))
+            bridge = self._manager.get_plugin("game_bridge")
+            result = {"status": "ok"}
+            event_data = payload
+            if bridge is not None and hasattr(bridge, "handle_event"):
+                try:
+                    result = await bridge.handle_event(payload)
+                    event_data = result.get("event", payload)
+                except Exception as exc:
+                    log.warning("game_bridge handle_event failed: {}", exc)
+            if (event_data.get("event_type") or event_data.get("type")) == "move_request":
+                try:
+                    from kateto.core.event import GenerateData
+                    st = event_data.get("state") or {}
+                    fen = st.get("fen","")
+                    legal = st.get("legal_moves") or []
+                    req = st.get("request_id","")
+                    voice = str(event_data.get("voice_id") or "jane")
+                    color = st.get("color","")
+                    opponent = st.get("opponent","")
+                    history = st.get("history","")
+                    prompt = f"[CHESS GameMode] Sos {voice} con {color} vs {opponent}. FEN:{fen} Historial:{history} Legales:{legal[:12]} request_id={req}. Respondé SOLO con un UCI de Legales (ej e2e4), sin texto extra."
+                    log.info("game move_request -> emit generate for {} req {}", voice, req)
+                    await self._manager.emit("generate", GenerateData(prompt=prompt), source="game_bridge", target=voice)
+                    log.info("generate emitted for {}", voice)
+                except Exception as exc:
+                    log.warning("game generate emit failed: {}", exc)
+            # broadcast to visual_overlay for OBS overlay
+            vo = self._manager.get_plugin("visual_overlay")
+            if vo is not None and hasattr(vo, "_broadcast"):
+                try:
+                    text = str(event_data.get("text") or "")
+                    voice_id = str(event_data.get("voice_id") or "jane")
+                    game = str(event_data.get("game") or "unknown")
+                    rms = float(event_data.get("rms", event_data.get("rms_hint", 0.12)) or 0.12)
+                    # subtitle
+                    await vo._broadcast({
+                        "event": "text_chunk",
+                        "type": "subtitle",
+                        "text": text,
+                        "voice_id": voice_id,
+                        "game": game,
+                        "data": {"text": text, "voice_id": voice_id, "game": game},
+                    })
+                    # viseme
+                    from kateto.core.rms import map_rms_to_jaw_transform
+                    oy, rot = map_rms_to_jaw_transform(rms)
+                    await vo._broadcast({
+                        "event": "audio_output",
+                        "type": "viseme",
+                        "voice_id": voice_id,
+                        "rms": rms,
+                        "is_speaking": bool(rms > 0.01 and text),
+                        "jawOffsetY": oy,
+                        "jawRotation": rot,
+                        "game": game,
+                        "data": {"rms": rms, "voice_id": voice_id, "game": game},
+                    })
+                    await vo._broadcast(event_data if isinstance(event_data, dict) else payload)
+                except Exception as exc:
+                    log.warning("visual_overlay broadcast failed: {}", exc)
+            return result
+
+        @app.get("/api/game/state")
+        async def game_state(game: str | None = None) -> dict[str, Any]:
+            bridge = self._manager.get_plugin("game_bridge")
+            if bridge is not None and hasattr(bridge, "get_state"):
+                try:
+                    return bridge.get_state(game)
+                except Exception:
+                    pass
+            # fallback to visual_overlay last state
+            vo = self._manager.get_plugin("visual_overlay")
+            if vo is not None:
+                return {"game": game, "current": getattr(vo, "_last_debate_state", None)}
+            return {"game": game, "current": None}
+
         @app.websocket("/ws/overlay")
         async def overlay_stream(ws: WebSocket) -> None:
             await ws.accept()
@@ -199,17 +325,82 @@ class HttpServer:
                 await ws.close()
                 return
             await register(ws)
+            # Relay any message received on this socket (e.g. a debate turn pushed
+            # by `kateto debate --overlay`) to every other connected overlay client
+            # (e.g. courtroom.html), so the courtroom renders the debate live.
+            connected = getattr(plugin, "_connected_websockets", None)
             try:
                 while True:
-                    await ws.receive_text()
+                    data = await ws.receive_text()
+                    try:
+                        parsed = json.loads(data)
+                        if isinstance(parsed, dict) and parsed.get("event") == "debate":
+                            plugin._last_debate_state = parsed
+                            hist = getattr(plugin, "_debate_history", None)
+                            if isinstance(hist, list):
+                                hist.append(parsed)
+                                if len(hist) > 50:
+                                    hist.pop(0)
+
+
+                    except Exception:
+                        pass
+
+                    if connected is None:
+                        continue
+                    for other in list(connected):
+                        if other is ws:
+                            continue
+                        try:
+                            await other.send_text(data)
+                        except Exception:  # noqa: BLE001
+                            try:
+                                connected.discard(other)
+                            except Exception:  # noqa: BLE001
+                                pass
             except WebSocketDisconnect:
                 pass
             finally:
                 await unregister(ws)
+        try:
+            from kateto.plugins.system.openai_server import create_openai_router
+            app.include_router(create_openai_router(self._manager))
+        except Exception as exc:
+            log.warning("Failed to mount OpenAI router: {}", exc)
 
         return app
 
     def _on_event(self, envelope: EventEnvelope[Any]) -> None:
+        try:
+            if envelope.name == "tool_call":
+                d = envelope.data.model_dump() if hasattr(envelope.data, "model_dump") else {}
+                args = d.get("arguments") or {}
+                uci = args.get("uci") or args.get("move") or d.get("uci")
+                req = args.get("request_id") or d.get("request_id")
+                if uci and isinstance(uci, str) and len(uci) >= 4:
+                    log.info("tool_call -> game_action {} req {}", uci, req)
+                    bridge = self._manager.get_plugin("game_bridge")
+                    if bridge is not None and hasattr(bridge, "handle_event"):
+                        import asyncio as _aio
+                        payload_gc = {"game":"chess","event_type":"game_action","voice_id":d.get("voice") or envelope.target or "jane","text":uci,"rms":0.2,"state":{"uci":uci.lower().strip(),"request_id":req}}
+                        _aio.get_event_loop().create_task(bridge.handle_event(payload_gc))
+            elif envelope.name == "text_chunk":
+                d = envelope.data.model_dump() if hasattr(envelope.data, "model_dump") else {}
+                txt = (d.get("text") or "")
+                if txt:
+                    import re as _re
+                    for tok in _re.findall(r"[a-h][1-8][a-h][1-8][qrbn]?", txt.lower()):
+                        cand = tok.strip(".,;:")
+                        if len(cand) >= 4 and cand[0] in "abcdefgh" and cand[1] in "12345678":
+                            log.info("text_chunk -> game_action {} from {}", cand, d.get("voice_id") or envelope.target)
+                            bridge = self._manager.get_plugin("game_bridge")
+                            if bridge is not None and hasattr(bridge, "handle_event"):
+                                import asyncio as _aio
+                                payload_gc = {"game":"chess","event_type":"game_action","voice_id":d.get("voice_id") or envelope.target or "jane","text":cand,"rms":0.2,"state":{"uci":cand}}
+                                _aio.get_event_loop().create_task(bridge.handle_event(payload_gc))
+                            break
+        except Exception:
+            pass
         payload = {
             "name": envelope.name,
             "source": envelope.source,

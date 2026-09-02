@@ -78,4 +78,7 @@ def create_plugins(ctx: DiscoveryContext) -> tuple[Plugin, ...]:
         voice_manager_settings if voice_manager_settings is not None else None
     )
     workflow_engine = WorkflowEngine(config_dir=ctx.config.paths.config_dir)
-    return TurnGate(), voice_manager, workflow_engine
+
+    from kateto.plugins.system.openai_server import OpenAIServerPlugin
+    openai_plugin = OpenAIServerPlugin(manager=manager)
+    return TurnGate(), voice_manager, workflow_engine, openai_plugin

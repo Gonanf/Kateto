@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import asyncio  # noqa: ANYIO_OK
+import re
 from collections.abc import AsyncIterator
 from typing import override
+
+from loguru import logger
 
 from kateto.core.config import PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, InterruptData, TextChunk
 from kateto.core.plugin import Plugin
 from kateto.providers import CambProvider
+
+log = logger
 
 
 class CambAudioOutput(Plugin):
@@ -27,6 +32,7 @@ class CambAudioOutput(Plugin):
         self._default_language: str = default_language or settings.default_language or "en-us"
         self._provider_active: bool = False
         self._interrupted: bool = False
+        self._current_voice: str | None = None
         self._stream_task: asyncio.Task[None] | None = None
         self._playing = False
         self._status_emitted = False
@@ -70,7 +76,16 @@ class CambAudioOutput(Plugin):
                     source=self.name,
                 )
             return
+        # Only cancel prior stream task if an interrupt occurred or if a different voice cuts in
+        if self._interrupted or (
+            self._stream_task is not None
+            and not self._stream_task.done()
+            and self._current_voice != data.voice_id
+        ):
+            await self._cancel_stream()
+
         self._interrupted = False
+        self._current_voice = data.voice_id
         task = asyncio.create_task(self._emit_pcm(data), name=f"kateto-camb-{data.voice_id}")
         self._stream_task = task
         try:
@@ -87,6 +102,12 @@ class CambAudioOutput(Plugin):
         del data
         self._interrupted = True
         await self._cancel_stream()
+        while not self.queue.empty():
+            try:
+                self.queue.get_nowait()
+                self.queue.task_done()
+            except Exception:
+                break
 
     async def _emit_pcm(self, data: TextChunk) -> None:
         voice_id_str = data.voice_id
@@ -96,13 +117,37 @@ class CambAudioOutput(Plugin):
         camb_voice_id: int = voice_config.get("camb_voice_id") or self._default_voice_id
         camb_language: str = voice_config.get("camb_language") or self._default_language
         await self._set_playing(True)
-        async for output in self._provider.stream_sentence(
-            data,
-            voice_id=camb_voice_id,
-            language=camb_language,
-        ):
-            out = output.model_copy(update={"voice_id": voice_id_str, "text": data.text})
-            _ = await self.required_manager.emit("audio_output", out, source=self.name)
+
+        # Camb.ai /tts-stream endpoint returns 400 Bad Request on large texts (> 250-300 chars).
+        # Split text into sentence-level chunks so every phrase synthesizes successfully.
+        raw_text = (data.text or "").strip()
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?\n])\s+", raw_text) if s.strip()]
+        if not sentences:
+            sentences = [raw_text] if raw_text else []
+
+        for idx, sentence_text in enumerate(sentences):
+            if self._interrupted:
+                break
+            if len(sentence_text) > 350:
+                sentence_text = sentence_text[:350]
+            chunk = TextChunk(
+                text=sentence_text,
+                sequence=data.sequence + idx,
+                final=(idx == len(sentences) - 1) and data.final,
+                voice_id=voice_id_str,
+            )
+            try:
+                async for output in self._provider.stream_sentence(
+                    chunk,
+                    voice_id=camb_voice_id,
+                    language=camb_language,
+                ):
+                    if self._interrupted:
+                        break
+                    out = output.model_copy(update={"voice_id": voice_id_str, "text": sentence_text})
+                    _ = await self.required_manager.emit("audio_output", out, source=self.name)
+            except Exception as exc:
+                log.warning("camb tts sentence failed: {}", exc)
 
     async def _cancel_stream(self) -> None:
         task = self._stream_task
