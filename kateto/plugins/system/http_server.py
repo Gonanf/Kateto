@@ -22,6 +22,8 @@ OVERLAY_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web"
 COURTROOM_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "courtroom.html"
 WEB_DIR = Path(__file__).resolve().parent.parent / "visual_overlay" / "web"
 VALID_AVATAR_FILES = ("top.png", "mouth.png", "avatar_head.png", "avatar_jaw.png")
+ASSETS_DIR = (Path(__file__).resolve().parent.parent.parent.parent / "assets" / "bate_debate").resolve()
+SOUNDS_DIR = (Path(__file__).resolve().parent.parent / "bate_debate" / "sounds").resolve()
 
 
 class EventListItem(BaseModel):
@@ -200,8 +202,6 @@ class HttpServer:
         async def courtroom() -> FileResponse:
             return FileResponse(COURTROOM_HTML)
 
-        SOUNDS_DIR = (Path(__file__).resolve().parent.parent / "bate_debate" / "sounds").resolve()
-
         @app.get("/components/{file}")
         async def component_asset(file: str) -> FileResponse:
             path = (WEB_DIR / file).resolve()
@@ -215,6 +215,14 @@ class HttpServer:
             if not path.is_relative_to(SOUNDS_DIR) or not path.is_file():
                 raise HTTPException(status_code=404, detail="not found")
             return FileResponse(path)
+
+        @app.get("/assets/{file}")
+        async def debate_asset(file: str) -> FileResponse:
+            if ASSETS_DIR.is_dir():
+                path = (ASSETS_DIR / file).resolve()
+                if path.is_relative_to(ASSETS_DIR) and path.is_file():
+                    return FileResponse(path)
+            raise HTTPException(status_code=404, detail="not found")
 
         @app.get("/voices/{name}/{file}")
         async def voice_asset(name: str, file: str) -> FileResponse:
@@ -283,18 +291,20 @@ class HttpServer:
                         "data": {"text": text, "voice_id": voice_id, "game": game},
                     })
                     # viseme
-                    from kateto.core.rms import map_rms_to_jaw_transform
-                    oy, rot = map_rms_to_jaw_transform(rms)
+                    from kateto.core.rms import map_rms_to_puppet_transform
+                    puppet = map_rms_to_puppet_transform(rms)
                     await vo._broadcast({
                         "event": "audio_output",
                         "type": "viseme",
                         "voice_id": voice_id,
                         "rms": rms,
-                        "is_speaking": bool(rms > 0.01 and text),
-                        "jawOffsetY": oy,
-                        "jawRotation": rot,
+                        "is_speaking": bool(rms > 0.05 and text),
+                        "jawOffsetX": puppet["jawOffsetX"],
+                        "jawOffsetY": puppet["jawOffsetY"],
+                        "jawRotation": puppet["jawRotation"],
+                        "headOffsetY": puppet["headOffsetY"],
                         "game": game,
-                        "data": {"rms": rms, "voice_id": voice_id, "game": game},
+                        "data": {"rms": rms, "voice_id": voice_id, "game": game, **puppet},
                     })
                     await vo._broadcast(event_data if isinstance(event_data, dict) else payload)
                 except Exception as exc:

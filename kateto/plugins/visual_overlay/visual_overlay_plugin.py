@@ -6,12 +6,13 @@ from typing import Any
 import base64
 
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, TextChunk
+from kateto.core.event import AudioOutput, InterruptData, OverlayLayout, TextChunk
 from kateto.core.plugin import Plugin
 from kateto.core.rms import (
     RMSProcessor,
     calculate_raw_rms,
     map_rms_to_jaw_transform,
+    map_rms_to_puppet_transform,
     normalize_rms,
 )
 
@@ -113,6 +114,10 @@ class VisualOverlayPlugin(Plugin):
 
     async def on_interrupt(self, data: InterruptData) -> None:
         """Broadcast interrupt event so browser immediately silences audio and stops mouth."""
+        # P1-1: reset EMA so jaw closes immediately between turns
+        for proc in self._rms_processors.values():
+            proc.reset()
+        self._default_processor.reset()
         payload = {
             "event": "interrupt",
             "type": "interrupt",
@@ -121,25 +126,43 @@ class VisualOverlayPlugin(Plugin):
         }
         await self._broadcast(payload)
 
+    async def on_debate(self, data: Any) -> None:
+        """Persist debate state for /api/courtroom/state even without WS overlay connected (P1-7)."""
+        try:
+            packed = data.model_dump() if hasattr(data, "model_dump") else (dict(data) if isinstance(data, dict) else {})
+        except Exception:
+            packed = {}
+        if packed and isinstance(packed, dict):
+            state: dict[str, Any] = packed if packed.get("event") == "debate" else {"event": "debate", **packed}
+            self._last_debate_state = state
+            self._debate_history.append(state)
+            if len(self._debate_history) > 50:
+                self._debate_history.pop(0)
+            await self._broadcast(state)
+
     async def update_viseme(self, voice_id: str | None, rms: float, text: str | None = None) -> None:
         """Direct data-layer update for viseme/RMS kinematics, bypassing event bus dispatch."""
-        is_speaking = bool(rms > 0.01)
-        offset_y, rotation = map_rms_to_jaw_transform(rms)
+        is_speaking = bool(rms > 0.05)
+        puppet = map_rms_to_puppet_transform(rms)
         payload = {
             "event": "audio_output",
             "type": "viseme",
             "voice_id": voice_id,
             "rms": rms,
             "is_speaking": is_speaking,
-            "jawOffsetY": offset_y,
-            "jawRotation": rotation,
+            "jawOffsetX": puppet["jawOffsetX"],
+            "jawOffsetY": puppet["jawOffsetY"],
+            "jawRotation": puppet["jawRotation"],
+            "headOffsetY": puppet["headOffsetY"],
             "text": text,
             "data": {
                 "rms": rms,
                 "is_speaking": is_speaking,
                 "voice_id": voice_id,
-                "jawOffsetY": offset_y,
-                "jawRotation": rotation,
+                "jawOffsetX": puppet["jawOffsetX"],
+                "jawOffsetY": puppet["jawOffsetY"],
+                "jawRotation": puppet["jawRotation"],
+                "headOffsetY": puppet["headOffsetY"],
                 "text": text,
             },
         }
@@ -151,8 +174,15 @@ class VisualOverlayPlugin(Plugin):
         else:
             rms = self.compute_rms(data.samples, voice_id=data.voice_id)
 
-        is_speaking = bool(rms > 0.01 and not data.final)
-        offset_y, rotation = map_rms_to_jaw_transform(rms)
+        # P1-1: on final chunk reset EMA so next turn starts closed
+        if data.final:
+            proc = self._rms_processors.get(data.voice_id or "")
+            if proc is not None:
+                proc.reset()
+            self._default_processor.reset()
+
+        is_speaking = bool(rms > 0.05 and not data.final)
+        puppet = map_rms_to_puppet_transform(rms)
 
         audio_b64 = None
         if data.samples and self._stream_audio:
@@ -164,8 +194,10 @@ class VisualOverlayPlugin(Plugin):
             "voice_id": data.voice_id,
             "rms": rms,
             "is_speaking": is_speaking,
-            "jawOffsetY": offset_y,
-            "jawRotation": rotation,
+            "jawOffsetX": puppet["jawOffsetX"],
+            "jawOffsetY": puppet["jawOffsetY"],
+            "jawRotation": puppet["jawRotation"],
+            "headOffsetY": puppet["headOffsetY"],
             "text": data.text,
             "audio": audio_b64,
             "sample_rate": data.sample_rate,
@@ -176,8 +208,10 @@ class VisualOverlayPlugin(Plugin):
                 "rms": rms,
                 "is_speaking": is_speaking,
                 "voice_id": data.voice_id,
-                "jawOffsetY": offset_y,
-                "jawRotation": rotation,
+                "jawOffsetX": puppet["jawOffsetX"],
+                "jawOffsetY": puppet["jawOffsetY"],
+                "jawRotation": puppet["jawRotation"],
+                "headOffsetY": puppet["headOffsetY"],
                 "text": data.text,
                 "audio": audio_b64,
                 "sample_rate": data.sample_rate,

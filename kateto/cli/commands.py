@@ -9,7 +9,10 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import override
+try:
+    from typing import override
+except ImportError:
+    from typing_extensions import override
 
 from cliff.command import Command
 from loguru import logger
@@ -425,6 +428,12 @@ def _real_provider_factory():
     endpoint = "http://localhost:11434/v1"
     model = "Kateto"
     api_key = "sk-no"
+    backend = None
+    rwkv_model_path = None
+    rwkv_states_dir = None
+    rwkv_vocab_path = None
+    rwkv_temp = 0.7
+    rwkv_top_p = 0.7
     try:
         loaded = load_config()
         vllm = loaded.settings.plugin.get("voice_llm") if loaded.settings.plugin else None
@@ -433,17 +442,61 @@ def _real_provider_factory():
                 endpoint = vllm.get("endpoint") or endpoint
                 model = vllm.get("model") or model
                 api_key = vllm.get("api_key") or api_key
+                backend = vllm.get("backend")
+                rwkv_model_path = vllm.get("model_path") or (vllm.get("model") if vllm.get("model", "").endswith(".pth") else None)
+                rwkv_states_dir = vllm.get("states_dir")
+                rwkv_vocab_path = vllm.get("vocab_path") or vllm.get("vocab")
+                if "temperature" in vllm:
+                    rwkv_temp = float(vllm["temperature"])
+                if "top_p" in vllm:
+                    rwkv_top_p = float(vllm["top_p"])
+                if "max_tokens" in vllm and vllm["max_tokens"]:
+                    max_tokens = int(vllm["max_tokens"])
             else:
                 endpoint = getattr(vllm, "endpoint", None) or endpoint
                 model = getattr(vllm, "model", None) or model
                 api_key = getattr(vllm, "api_key", None) or api_key
+                backend = getattr(vllm, "backend", None)
+                m = getattr(vllm, "model", None)
+                rwkv_model_path = getattr(vllm, "model_path", None) or (m if m and m.endswith(".pth") else None)
+                rwkv_states_dir = getattr(vllm, "states_dir", None)
+                rwkv_vocab_path = getattr(vllm, "vocab_path", None) or getattr(vllm, "vocab", None)
+                if hasattr(vllm, "temperature") and getattr(vllm, "temperature", None) is not None:
+                    rwkv_temp = float(getattr(vllm, "temperature"))
+                if hasattr(vllm, "top_p") and getattr(vllm, "top_p", None) is not None:
+                    rwkv_top_p = float(getattr(vllm, "top_p"))
+                if hasattr(vllm, "max_tokens") and getattr(vllm, "max_tokens", None) is not None:
+                    max_tokens = int(getattr(vllm, "max_tokens"))
     except Exception:  # noqa: BLE001
         pass
 
     endpoint = os.environ.get("KATETO_LLM_ENDPOINT") or endpoint
     model = os.environ.get("KATETO_LLM_MODEL") or model
     api_key = os.environ.get("KATETO_LLM_API_KEY") or api_key
-    max_tokens = int(os.environ.get("KATETO_LLM_MAX_TOKENS", "256"))
+    max_tokens = int(os.environ.get("KATETO_LLM_MAX_TOKENS", str(max_tokens if 'max_tokens' in locals() else 256)))
+
+    provider_type = (os.environ.get("KATETO_PROVIDER") or backend or "rwkv").casefold()
+    if provider_type == "rwkv":
+        try:
+            from kateto.providers.rwkv_rocm import RWKVROCmProvider
+            rwkv_cache: dict[str, RWKVROCmProvider] = {}
+
+            def rwkv_factory(voice_id: str) -> RWKVROCmProvider:
+                if voice_id not in rwkv_cache:
+                    rwkv_cache[voice_id] = RWKVROCmProvider(
+                        voice_id=voice_id,
+                        model_path=rwkv_model_path,
+                        states_dir=rwkv_states_dir,
+                        vocab_path=rwkv_vocab_path,
+                        temperature=rwkv_temp,
+                        top_p=rwkv_top_p,
+                        max_tokens=max_tokens,
+                    )
+                return rwkv_cache[voice_id]
+
+            return rwkv_factory
+        except Exception as exc:
+            logger.warning("No se pudo inicializar RWKVROCmProvider, usando OpenAI fallback: {}", exc)
 
     cache: dict[str, OpenAICompatibleProvider] = {}
 

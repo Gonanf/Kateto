@@ -511,7 +511,7 @@
       }, 5000);
     }
 
-    function onSpeakerActivity(voiceId, rms) {
+    function onSpeakerActivity(voiceId, rms, msgPayload) {
       const vid = (voiceId || '').toLowerCase();
       if (!vid) return;
 
@@ -539,13 +539,24 @@
       }
 
       if (typeof rms === 'number') {
-        agent.avatar.setRms(rms);
-        if (rms > 0.015) {
+        // Prefer backend-authoritative transform if payload has it
+        if (msgPayload && (typeof msgPayload.jawOffsetY === 'number' || (msgPayload.data && typeof msgPayload.data.jawOffsetY === 'number'))) {
+          const j = (k) => typeof msgPayload[k] === 'number' ? msgPayload[k] : (msgPayload.data && typeof msgPayload.data[k] === 'number' ? msgPayload.data[k] : 0);
+          if (typeof agent.avatar.setJawTransform === 'function') {
+            agent.avatar.setJawTransform({ jawOffsetX: j('jawOffsetX'), jawOffsetY: j('jawOffsetY'), jawRotation: j('jawRotation'), headOffsetY: j('headOffsetY') });
+          } else {
+            agent.avatar.setRms(rms);
+          }
+        } else {
+          agent.avatar.setRms(rms);
+        }
+        if (rms > 0.05) {
           agent.card.classList.add('speaking');
           if (agent.speakingTimer) clearTimeout(agent.speakingTimer);
           agent.speakingTimer = setTimeout(() => {
             agent.card.classList.remove('speaking');
-            agent.avatar.setRms(0);
+            if (typeof agent.avatar.setJawTransform === 'function') agent.avatar.setJawTransform({ jawOffsetX:0, jawOffsetY:0, jawRotation:0, headOffsetY:0 });
+            else agent.avatar.setRms(0);
           }, 350);
         }
       }
@@ -598,7 +609,7 @@
           }
 
           if (voiceId) {
-            onSpeakerActivity(voiceId, rawRms);
+            onSpeakerActivity(voiceId, rawRms, msg);
           }
           if (text) {
             setCaption(voiceId, text);
@@ -638,14 +649,21 @@
         if (msg.event === 'interrupt' || msg.type === 'interrupt') {
           pcmPlayer.stop();
           document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('speaking'));
-          agentCards.forEach(a => a.avatar.setRms(0));
+          agentCards.forEach(a => {
+            if (typeof a.avatar.setJawTransform === 'function') a.avatar.setJawTransform({ jawOffsetX:0, jawOffsetY:0, jawRotation:0, headOffsetY:0 });
+            else a.avatar.setRms(0);
+            if (typeof a.avatar.stopSpeaking === 'function') a.avatar.stopSpeaking();
+          });
           return;
         }
 
         // Voice Idle
         if (msg.event === 'voice_idle') {
           document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('speaking'));
-          agentCards.forEach(a => a.avatar.setRms(0));
+          agentCards.forEach(a => {
+            if (typeof a.avatar.setJawTransform === 'function') a.avatar.setJawTransform({ jawOffsetX:0, jawOffsetY:0, jawRotation:0, headOffsetY:0 });
+            else a.avatar.setRms(0);
+          });
           return;
         }
       };

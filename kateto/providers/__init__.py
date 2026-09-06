@@ -22,6 +22,7 @@ from .whisper import (
 from .camb import CambProvider
 from .edgetts import EdgeTTSProvider
 from .zonos import ZonosProvider
+from .rwkv_rocm import RWKVROCmProvider
 
 __all__ = [
     "AgentResponse",

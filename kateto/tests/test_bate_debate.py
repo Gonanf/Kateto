@@ -76,6 +76,13 @@ async def test_run_debate_mock_flow(tmp_path: Path) -> None:
     assert Path(rec.registry_jsonl).is_file()
     assert len(spoken_turns) > 0
 
+    # Thinking ticks are broadcast to the overlay with empty text (display-only
+    # cue) and never recorded as registry turns.
+    thinking = [t for t in spoken_turns if t[1] == "thinking"]
+    assert len(thinking) > 0
+    assert all(t[2] == "" for t in thinking)
+    assert all(t.phase != "thinking" for t in rec.turns)
+
 
 class DummyVoicePlugin(Plugin):
     def __init__(self, name: str) -> None:

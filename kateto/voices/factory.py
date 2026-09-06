@@ -257,15 +257,35 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
     session_id = uuid4().hex
     headers = session_headers(voice_name, session_id)
 
-    provider = OpenAICompatibleProvider(
-        model=voice_settings.model or "unknown",
-        endpoint=voice_settings.endpoint,
-        api_key=voice_settings.api_key or "sk-no-key-required",
-        max_tokens=settings.max_tokens,
-        retries=settings.retries,
-        timeout=settings.timeout,
-        session_headers=headers,
-    )
+    m = getattr(voice_settings, "model", None)
+    backend = (getattr(voice_settings, "backend", None) or os.environ.get("KATETO_PROVIDER", "")).casefold()
+    if not backend and m and str(m).endswith(".pth"):
+        backend = "rwkv"
+
+    if backend == "rwkv":
+        from kateto.providers.rwkv_rocm import RWKVROCmProvider
+
+        model_path = getattr(voice_settings, "model_path", None) or (m if m and m.endswith(".pth") else None)
+        provider = RWKVROCmProvider(
+            voice_id=voice_name,
+            model_path=model_path,
+            states_dir=getattr(voice_settings, "states_dir", None),
+            vocab_path=getattr(voice_settings, "vocab_path", None) or getattr(voice_settings, "vocab", None),
+            max_tokens=settings.max_tokens or getattr(voice_settings, "max_tokens", 256),
+            temperature=float(getattr(voice_settings, "temperature", 0.7)),
+            top_p=float(getattr(voice_settings, "top_p", 0.7)),
+            enable_rosa=bool(getattr(voice_settings, "enable_rosa", True)),
+        )
+    else:
+        provider = OpenAICompatibleProvider(
+            model=voice_settings.model or "unknown",
+            endpoint=voice_settings.endpoint,
+            api_key=voice_settings.api_key or "sk-no-key-required",
+            max_tokens=settings.max_tokens,
+            retries=settings.retries,
+            timeout=settings.timeout,
+            session_headers=headers,
+        )
     voice = VoiceAgent(
         profile=profile,
         config_dir=ctx.config.paths.config_dir,
@@ -275,7 +295,7 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
         session_id=session_id,
     )
 
-    if voice_settings.model:
+    if voice_settings.model and backend != "rwkv" and not str(voice_settings.model).endswith(".pth"):
         from kateto.providers.agent import HermesProvider, OpenAIAgentProvider
         from kateto.voices.tools import VoiceToolExecutor
 

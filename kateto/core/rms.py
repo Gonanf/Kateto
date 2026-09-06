@@ -70,6 +70,36 @@ def map_rms_to_jaw_transform(
     return (round(offset_y, 4), round(rotation, 4))
 
 
+def map_rms_to_puppet_transform(
+    rms: float,
+    *,
+    max_offset_y: float = 16.0,
+    max_rotation_deg: float = 4.5,
+    max_head_offset_y: float = 1.8,
+    noise_floor: float = 0.05,
+) -> dict[str, float]:
+    """Backend-authoritative puppet kinematics for 2-image puppet.
+
+    Returns dict with jawOffsetY, jawRotation, jawOffsetX, headOffsetY.
+    jawOffsetX is deterministic (no per-frame jitter); headOffsetY is subtle
+    opposite bob (~10% of jaw) so head moves sutilmente.
+    """
+    if rms < noise_floor:
+        return {"jawOffsetX": 0.0, "jawOffsetY": 0.0, "jawRotation": 0.0, "headOffsetY": 0.0}
+    denominator = 1.0 - noise_floor
+    factor = (rms - noise_floor) / denominator if denominator > 0 else 0.0
+    factor = max(0.0, min(1.0, factor))
+    jaw_offset_y = round(factor * max_offset_y, 4)
+    jaw_rotation = round(factor * max_rotation_deg, 4)
+    head_offset_y = round(-factor * max_head_offset_y, 4)
+    return {
+        "jawOffsetX": 0.0,
+        "jawOffsetY": jaw_offset_y,
+        "jawRotation": jaw_rotation,
+        "headOffsetY": head_offset_y,
+    }
+
+
 class RMSProcessor:
     """Processes PCM audio in real-time with windowing, noise thresholding and EMA smoothing."""
 

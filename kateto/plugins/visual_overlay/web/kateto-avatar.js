@@ -11,22 +11,39 @@
  */
 
 // 1. Pure jaw kinematics formula (Kateto visual overlay standard)
+// Backend is authoritative (RMSProcessor + map_rms_to_jaw_transform -> 16px/4.5deg, floor 0.05).
+// This function is kept as deterministic fallback for synthetic TTS (pulseWord) and
+// when backend payload is absent. It is intentionally conservative (18px / 6deg)
+// and deterministic (no Math.random per-frame jitter). For live audio, prefer
+// setJawTransform({jawOffsetX, jawOffsetY, jawRotation, headOffsetY}) with backend values.
 export function computeJawKinematics(rms) {
   if (typeof rms !== 'number' || rms < 0.015) {
-    return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
+    return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0, headOffsetY: 0 };
   }
-  // Punchy response curve with strong upward force
   const factor = Math.min(1.0, Math.max(0.0, Math.pow((rms - 0.015) / 0.985, 0.68)));
-  const upMovement = -Number((factor * 52.0).toFixed(2));
-  const sideDir = (Math.random() * 2 - 1);
-  const sideShake = Number((sideDir * factor * 28.0).toFixed(2));
-  const tilt = Number(((sideDir * 0.9 + (Math.random() * 0.2 - 0.1)) * factor * 34.0).toFixed(2));
+  const upMovement = -Number((factor * 18.0).toFixed(2));
+  const tilt = Number((factor * 6.0).toFixed(2));
+  const headBob = Number((-factor * 1.5).toFixed(2));
 
   return {
-    jawOffsetX: sideShake,
+    jawOffsetX: 0,
     jawOffsetY: upMovement,
     jawRotation: tilt,
+    headOffsetY: headBob,
   };
+}
+
+// Backend-authoritative kinematics (deterministic, no jitter).
+// rms expected already normalized 0..1 (RMSProcessor output).
+export function computeBackendKinematics(rms) {
+  if (typeof rms !== 'number' || rms < 0.05) {
+    return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0, headOffsetY: 0 };
+  }
+  const factor = Math.min(1.0, Math.max(0.0, (rms - 0.05) / 0.95));
+  const jawOffsetY = Number((factor * 16.0).toFixed(2));
+  const jawRotation = Number((factor * 4.5).toFixed(2));
+  const headOffsetY = Number((-factor * 1.8).toFixed(2));
+  return { jawOffsetX: 0, jawOffsetY, jawRotation, headOffsetY };
 }
 
 // 2. Automatic Subtitle Chunker
@@ -150,6 +167,9 @@ export class KatetoAvatar extends HTMLElement {
           object-fit: contain;
           z-index: 2;
           pointer-events: none;
+          transform-origin: 50% 50%;
+          will-change: transform;
+          transition: transform 0.05s ease-out;
         }
         .layer-jaw {
           position: absolute;
@@ -159,7 +179,7 @@ export class KatetoAvatar extends HTMLElement {
           height: 100%;
           object-fit: contain;
           z-index: 1;
-          transform-origin: 50% 65%;
+          transform-origin: 50% 22%;
           will-change: transform;
           transition: transform 0.04s ease-out;
           pointer-events: none;
@@ -233,22 +253,37 @@ export class KatetoAvatar extends HTMLElement {
     this._jaw.style.display = 'block';
     this._fallback.style.display = 'none';
     this._jaw.style.transform = 'translate(0px, 0px) rotate(0deg)';
+    this._head.style.transform = 'translateY(0px)';
 
     this._head.src = `/voices/${encodeURIComponent(this._voice)}/avatar_head.png`;
     this._jaw.src = `/voices/${encodeURIComponent(this._voice)}/avatar_jaw.png`;
     this._fallback.src = `/voices/${encodeURIComponent(this._voice)}/top.png`;
   }
 
-  setRms(rms) {
-    this._rms = rms;
-    const { jawOffsetX, jawOffsetY, jawRotation } = computeJawKinematics(rms);
-    if (!this._useFallback) {
-      this._jaw.style.transform = `translate(${jawOffsetX}px, ${jawOffsetY}px) rotate(${jawRotation}deg)`;
-    } else {
-      this._fallback.src = (rms > 0.015)
+  // Backend-authoritative transform: jaw moves with RMS, head has subtle opposite bob.
+  setJawTransform({ jawOffsetX = 0, jawOffsetY = 0, jawRotation = 0, headOffsetY = 0 } = {}) {
+    if (this._useFallback) {
+      const active = (Math.abs(jawOffsetY) > 0.5 || Math.abs(jawRotation) > 0.3);
+      this._fallback.src = active
         ? `/voices/${encodeURIComponent(this._voice)}/mouth.png`
         : `/voices/${encodeURIComponent(this._voice)}/top.png`;
+      return;
     }
+    this._jaw.style.transform = `translate(${jawOffsetX}px, ${jawOffsetY}px) rotate(${jawRotation}deg)`;
+    if (headOffsetY !== 0 || this._head.style.transform !== 'translateY(0px)') {
+      this._head.style.transform = `translateY(${headOffsetY}px)`;
+    }
+  }
+
+  setRms(rms) {
+    this._rms = rms;
+    if (rms == null || typeof rms !== 'number') {
+      this.setJawTransform({ jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0, headOffsetY: 0 });
+      return;
+    }
+    // If backend provided explicit transform via setJawTransform, this is fallback path only.
+    const { jawOffsetX, jawOffsetY, jawRotation, headOffsetY } = computeJawKinematics(rms);
+    this.setJawTransform({ jawOffsetX, jawOffsetY, jawRotation, headOffsetY });
   }
 
   pulseWord(wordDurationMs = 385) {

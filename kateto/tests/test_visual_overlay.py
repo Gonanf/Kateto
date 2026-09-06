@@ -186,8 +186,17 @@ async def test_http_server_serves_avatar_assets_and_overlay(tmp_path: Path):
 
             resp_court = await client.get("http://127.0.0.1:8996/courtroom")
             assert resp_court.status_code == 200
-            assert "kateto-avatar" in resp_court.text
             assert "kateto-paper-transcript" in resp_court.text
+            # Display-only courtroom: no buttons, no browser TTS.
+            assert "<button" not in resp_court.text
+            assert "speechSynthesis" not in resp_court.text
+            assert "BrowserPcmPlayer" not in resp_court.text
+            # Photo-based scene and thinking-phase handling.
+            assert "/assets/courtroom_bg.jpg" in resp_court.text
+            assert "/assets/judge_bench.jpg" in resp_court.text
+            assert "/assets/stand_left.jpg" in resp_court.text
+            assert "/assets/stand_right.jpg" in resp_court.text
+            assert 'phase === "thinking"' in resp_court.text
 
             assert "caption" in resp_overlay.text
 
@@ -209,6 +218,22 @@ async def test_http_server_serves_avatar_assets_and_overlay(tmp_path: Path):
             # 4. Non-existent avatar
             resp_missing = await client.get("http://127.0.0.1:8996/voices/ghost/avatar_head.png")
             assert resp_missing.status_code == 404
+
+            # 5. Debate scene assets served from assets/bate_debate/
+            resp_bg = await client.get("http://127.0.0.1:8996/assets/courtroom_bg.jpg")
+            assert resp_bg.status_code == 200
+            assert resp_bg.headers["content-type"].startswith("image/jpeg")
+            resp_bench = await client.get("http://127.0.0.1:8996/assets/judge_bench.jpg")
+            assert resp_bench.status_code == 200
+            assert resp_bench.headers["content-type"].startswith("image/jpeg")
+            resp_stands = await client.get("http://127.0.0.1:8996/assets/stand_left.jpg")
+            assert resp_stands.status_code == 200
+            resp_chars = await client.get("http://127.0.0.1:8996/assets/jane.png")
+            assert resp_chars.status_code == 200
+            resp_no_traversal = await client.get("http://127.0.0.1:8996/assets/..%2F..%2Fpyproject.toml")
+            assert resp_no_traversal.status_code == 404
+            resp_ghost_asset = await client.get("http://127.0.0.1:8996/assets/ghost.png")
+            assert resp_ghost_asset.status_code == 404
     finally:
         await server.stop()
 

@@ -43,6 +43,9 @@ PHASE_OBJECTION = "objection"
 PHASE_REBUTTAL = "rebuttal"
 PHASE_RULING = "ruling"
 PHASE_VERDICT = "verdict"
+# UX-only phase: announced via ``on_speak`` before a voice starts generating so
+# the visual overlay can show a "thinking" animation. Never stored in the record.
+PHASE_THINKING = "thinking"
 
 _ALL_PHASES = (
     PHASE_OPENING,
@@ -160,12 +163,22 @@ def _debate_system_prompt(voice_id: str, config_dir: Path | None = None) -> str:
     base = _strip_constraint(raw)
     return (
         base + "\n\nInstrucción de debate en el tribunal: Estás participando en un juicio verbal "
-        "en vivo junto a tus compañeros del equipo Kateto. Mantén plenamente tu personalidad y carácter original.\n"
+        "en vivo junto a tus compañeros del equipo Kateto, al estilo teatral de Ace Attorney. "
+        "Mantén plenamente tu personalidad y carácter original, pero AMPLIFÍCALO para el tribunal: "
+        "eres dramático, gracioso y exagerado como un abogado de novela.\n"
         "REGLAS ESTRICTAS DE JUICIO:\n"
         "- Habla SIEMPRE en primera persona ('Yo sostengo...', 'Mi postura es...', 'Rechazo...').\n"
         "- PROHIBIDO hablar en tercera persona de ti mismo o de los demás (nunca digas tu propio nombre ni relates desde afuera como narrador).\n"
         "- PROHIBIDO usar frases meta como 'Tengo que defender...' o 'Como [rol]...'. Entra directo al argumento.\n"
-        "- Habla en español, de forma directa, oral y elocuente. Sin markdown, sin listas, sin encabezados."
+        "- Habla en español, de forma directa, oral y elocuente. Sin markdown, sin listas, sin encabezados.\n"
+        "COMEDIA DE TRIBUNAL (obligatoria):\n"
+        "- Cada tanto (1 o 2 veces por intervención) incluye UNA acotación teatral entre asteriscos, "
+        "por ejemplo: *golpea la mesa*, *se atraganta*, *ajusta las gafas dramáticamente*, *suda la sentencia*, "
+        "*apunta con el dedo acusadoramente*, *se le cae el papelito*, *suspira como estrella de telenovela*.\n"
+        "- Sé dramáticamente ofendido por los argumentos rivales, suéñalos sin sentido a veces, "
+        "y reconoce con humor cuando te pillan en una contradicción ('...bueno, TÉCNICAMENTE...').\n"
+        "- Cuando una objeción te tome desprevenido, reacciona en voz alta, teatral y cómico.\n"
+        "- Nunca pierdas el ritmo del debate: la comedia es condimento, no el plato principal."
     )
 
 
@@ -330,6 +343,16 @@ class _AsyncDebate:
     def _profile(self, voice_id: str):
         return _PROFILES[voice_id]
 
+    def _emit_thinking(self, voice_id: str) -> None:
+        """Announce a 'thinking' tick so the overlay shows the pending speaker's stand."""
+        if self.on_speak is None:
+            return
+        try:
+            prof = self._profile(voice_id)
+            self.on_speak(voice_id, prof.role.value, PHASE_THINKING, "")
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("on_speak (thinking) callback failed: {}", exc)
+
     async def _speak_turn(
         self,
         voice_id: str,
@@ -338,6 +361,7 @@ class _AsyncDebate:
         phase: str = "argument",
         system_prompt: str | None = None,
     ) -> str:
+        self._emit_thinking(voice_id)
         if self.event_client is not None:
             return await self.event_client.generate_turn(
                 voice_id,
