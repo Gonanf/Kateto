@@ -475,7 +475,16 @@ def _real_provider_factory():
     api_key = os.environ.get("KATETO_LLM_API_KEY") or api_key
     max_tokens = int(os.environ.get("KATETO_LLM_MAX_TOKENS", str(max_tokens if 'max_tokens' in locals() else 256)))
 
-    provider_type = (os.environ.get("KATETO_PROVIDER") or backend or "rwkv").casefold()
+    # Resolve provider type: env var > config backend > auto-detect (.pth → rwkv, else openai)
+    env_provider = os.environ.get("KATETO_PROVIDER")
+    if env_provider:
+        provider_type = env_provider.casefold()
+    elif backend:
+        provider_type = backend.casefold()
+    elif model and str(model).endswith(".pth"):
+        provider_type = "rwkv"
+    else:
+        provider_type = "openai"
     if provider_type == "rwkv":
         try:
             from kateto.providers.rwkv_rocm import RWKVROCmProvider
