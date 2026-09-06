@@ -514,28 +514,11 @@
       setTimeout(() => b.classList.remove("go"), 1700);
     }
 
-    // Apply backend puppet kinematics to a stand's avatar (jaw + head subtle).
+    // Apply erratic jaw animation to a stand's avatar — jaw moves randomly,
+    // body stays still (no head bob). Uses computeJawKinematics via setRms.
     function applyPuppetToStand(stand, msg) {
       const av = avatars[stand];
       if (!av) return;
-      // Prefer backend authoritative jawOffsetY/Rotation/offsetX/headOffsetY if present
-      const jin = (v) => (typeof v === 'number' ? v : (msg.data && typeof msg.data[v] === 'number' ? msg.data[v] : undefined));
-      const jawOffsetY = jin('jawOffsetY');
-      const jawRotation = jin('jawRotation');
-      const jawOffsetX = jin('jawOffsetX');
-      const headOffsetY = jin('headOffsetY');
-      if (jawOffsetY !== undefined || jawRotation !== undefined) {
-        if (typeof av.setJawTransform === 'function') {
-          av.setJawTransform({
-            jawOffsetX: jawOffsetX != null ? jawOffsetX : 0,
-            jawOffsetY: jawOffsetY != null ? jawOffsetY : 0,
-            jawRotation: jawRotation != null ? jawRotation : 0,
-            headOffsetY: headOffsetY != null ? headOffsetY : 0,
-          });
-          return;
-        }
-      }
-      // Fallback: compute from RMS locally (deterministic, no jitter)
       const rawRms = (typeof msg.rms === 'number') ? msg.rms : (msg.data && typeof msg.data.rms === 'number' ? msg.data.rms : 0);
       av.setRms(rawRms);
     }

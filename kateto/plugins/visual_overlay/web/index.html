@@ -539,24 +539,15 @@
       }
 
       if (typeof rms === 'number') {
-        // Prefer backend-authoritative transform if payload has it
-        if (msgPayload && (typeof msgPayload.jawOffsetY === 'number' || (msgPayload.data && typeof msgPayload.data.jawOffsetY === 'number'))) {
-          const j = (k) => typeof msgPayload[k] === 'number' ? msgPayload[k] : (msgPayload.data && typeof msgPayload.data[k] === 'number' ? msgPayload.data[k] : 0);
-          if (typeof agent.avatar.setJawTransform === 'function') {
-            agent.avatar.setJawTransform({ jawOffsetX: j('jawOffsetX'), jawOffsetY: j('jawOffsetY'), jawRotation: j('jawRotation'), headOffsetY: j('headOffsetY') });
-          } else {
-            agent.avatar.setRms(rms);
-          }
-        } else {
-          agent.avatar.setRms(rms);
-        }
+        // Use erratic jaw animation (computeJawKinematics) — jaw moves randomly,
+        // body stays still. Ignores backend jawOffsetX/headOffsetY for animation.
+        agent.avatar.setRms(rms);
         if (rms > 0.05) {
           agent.card.classList.add('speaking');
           if (agent.speakingTimer) clearTimeout(agent.speakingTimer);
           agent.speakingTimer = setTimeout(() => {
             agent.card.classList.remove('speaking');
-            if (typeof agent.avatar.setJawTransform === 'function') agent.avatar.setJawTransform({ jawOffsetX:0, jawOffsetY:0, jawRotation:0, headOffsetY:0 });
-            else agent.avatar.setRms(0);
+            agent.avatar.setRms(0);
           }, 350);
         }
       }
