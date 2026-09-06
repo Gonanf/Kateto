@@ -112,6 +112,7 @@ class AudioOutputPlayer(Plugin):
         self._active_pipelines: dict[str, AudioPipeline] = {}
         self._pipeline_queues: dict[str, asyncio.Queue[bytes | None]] = {}
         self._rms_processors: dict[str, RMSProcessor] = {}
+        self._last_write_time: float = 0.0
 
     def _rms_for(self, voice_id: str) -> RMSProcessor:
         if voice_id not in self._rms_processors:
@@ -195,11 +196,16 @@ class AudioOutputPlayer(Plugin):
                 continue
             try:
                 _ = await to_thread.run_sync(stream.write, chunk)
+                self._last_write_time = time.monotonic()
             except Exception:
-                self._close_stream(abort=True)
+                # ponytail: never abort() on write failure — stream may be in
+                # xrun-corrupted state where abort() triggers double-free in
+                # PortAudio's ALSA mmap path. Graceful stop+close+reopen.
+                self._close_stream()
                 stream = await self._stream_for(data)
                 try:
                     _ = await to_thread.run_sync(stream.write, chunk)
+                    self._last_write_time = time.monotonic()
                 except Exception:
                     break
             if self._interrupted or self._stream is None:
@@ -207,7 +213,7 @@ class AudioOutputPlayer(Plugin):
             await self._send_viseme(data.voice_id, processor.process(chunk), data.text)
 
         if self._interrupted:
-            self._close_stream(abort=True)
+            self._close_stream()
             await self._set_playing(False)
             self._interrupted = False
             self._interrupted_voice = None
@@ -245,10 +251,14 @@ class AudioOutputPlayer(Plugin):
                     mixed = _mix_pcm(pcm_buffers)
                     stream = self._open_or_reopen_stream((24_000, 1))
                     _ = await to_thread.run_sync(stream.write, mixed)
+                    self._last_write_time = time.monotonic()
                     for vid, pcm in active_voice_pcms:
                         rms = self._rms_for(vid).process(pcm)
                         await self._send_viseme(vid, rms, None)
                 else:
+                    # Idle timeout: close stream after 1.5s of no data to prevent ALSA xrun
+                    if self._stream is not None and (time.monotonic() - self._last_write_time) > 1.5:
+                        self._close_stream()
                     await asyncio.sleep(0.005)
         except asyncio.CancelledError:
             pass
@@ -296,7 +306,7 @@ class AudioOutputPlayer(Plugin):
                     self._active_pipelines.pop(voice_id, None)
                     self._pipeline_queues.pop(voice_id, None)
             if not self._active_pipelines:
-                self._close_stream(abort=True)
+                self._close_stream()
                 if self._mixer_task is not None and not self._mixer_task.done():
                     self._mixer_task.cancel()
                 self._mixer_task = None
@@ -311,8 +321,8 @@ class AudioOutputPlayer(Plugin):
                     self.queue.task_done()
                 except Exception:
                     break
-            # Calling stream.abort() via _close_stream tells PortAudio immediately to clear pending hardware buffers
-            self._close_stream(abort=True)
+            # Graceful stop+close (never abort — see _close_stream)
+            self._close_stream()
             if self._mixer_task is not None and not self._mixer_task.done():
                 self._mixer_task.cancel()
             self._mixer_task = None
@@ -347,11 +357,9 @@ class AudioOutputPlayer(Plugin):
         self._stream = None
         self._stream_format = None
         if stream is not None:
-            if abort and hasattr(stream, "abort"):
-                try:
-                    stream.abort()
-                except Exception:
-                    pass
+            # ponytail: never call abort() — on xrun-corrupted streams, abort()
+            # triggers double-free in PortAudio's ALSA mmap path. Use graceful
+            # stop() + close() even when abort was requested.
             try:
                 stream.stop()
             except Exception:

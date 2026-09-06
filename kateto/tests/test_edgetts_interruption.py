@@ -113,7 +113,7 @@ async def test_edgetts_resumes_speech_on_next_turn_after_interrupt():
 
 
 @pytest.mark.asyncio
-async def test_audio_player_aborts_stream_on_interrupt():
+async def test_audio_player_closes_stream_gracefully_on_interrupt():
     manager = PluginManager()
     settings = PluginSettings(enabled=True)
     player = AudioOutputPlayer(settings)
@@ -138,8 +138,11 @@ async def test_audio_player_aborts_stream_on_interrupt():
     # When: interrupt arrives
     await player.on_interrupt(InterruptData(reason="objection"))
 
-    # Then: PortAudio stream.abort() is explicitly called to silence hardware buffers instantly
-    mock_raw_stream.abort.assert_called_once()
+    # Then: PortAudio stream is stopped and closed (never abort() — abort triggers
+    # double-free on xrun-corrupted streams in ALSA mmap path)
+    mock_raw_stream.stop.assert_called_once()
+    mock_raw_stream.close.assert_called_once()
+    mock_raw_stream.abort.assert_not_called()
     assert player._stream is None
 
     # And when next audio output arrives for objection (conquest)
