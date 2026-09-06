@@ -83,7 +83,7 @@ class SoundDeviceOutputFactory:
                 channels=channels,
                 dtype="int16",
                 latency="high",
-                blocksize=2048,
+                blocksize=1024,
             )
         except (sounddevice.PortAudioError, ValueError) as error:
             raise AudioOutputDeviceError(device=device, reason=str(error)) from error

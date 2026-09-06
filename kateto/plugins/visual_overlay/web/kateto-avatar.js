@@ -22,7 +22,7 @@ export function computeJawKinematics(rms) {
   const factor = Math.min(1.0, Math.max(0.0, Math.pow((rms - 0.015) / 0.985, 0.68)));
   const upMovement = -Number((factor * 52.0).toFixed(2));
   const sideDir = (Math.random() * 2 - 1);
-  const sideShake = Number((sideDir * factor * 28.0).toFixed(2));
+  const sideShake = Number((sideDir * factor * 12.0).toFixed(2));
   const tilt = Number(((sideDir * 0.9 + (Math.random() * 0.2 - 0.1)) * factor * 34.0).toFixed(2));
 
   return {
