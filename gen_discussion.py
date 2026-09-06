@@ -71,7 +71,7 @@ async def speak(voice_id: str, user: str, *, timeout: float = 120) -> str:
         ChatMessage(role="system", content=_doc_prompt(voice_id)),
         ChatMessage(role="user", content=user),
     )
-    req = GenerationRequest(voice_id=voice_id, reference_wav=Path("/tmp/kateto_none.wav"), messages=msgs)
+    req = GenerationRequest(voice_id=voice_id, reference_wav=None, messages=msgs)
 
     async def _collect() -> str:
         out = []

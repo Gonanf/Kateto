@@ -107,6 +107,37 @@ def _reference(config_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_stream_response_skips_reference_wav_for_non_zonos_tts(tmp_path: Path) -> None:
+    # Given: a voice using edge_tts (no reference WAV needed) with no reference.wav file.
+    provider = RecordingProvider()
+    voice = VoiceAgent(
+        profile=VoiceProfile(
+            voice_id="jane",
+            display_name="Jane",
+            role=VoiceRole.ORCHESTRATOR,
+            system_prompt="system",
+            relevance_terms=frozenset(),
+        ),
+        config_dir=tmp_path,
+        provider=provider,
+        settings=VoiceSettings(tts_provider="edge_tts"),
+    )
+    manager = PluginManager()
+    await manager.enable_plugin(voice)
+
+    try:
+        # When: generate is emitted without a reference WAV file present.
+        await manager.emit("generate", GenerateData(prompt="hello"), source="fixture")
+        await manager.wait_for_idle()
+
+        # Then: no ReferenceClipError is raised and reference_wav is None on the request.
+        assert provider.requests, "provider should have received at least one request"
+        assert provider.requests[0].reference_wav is None
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
 async def test_voice_provider_request_includes_bounded_event_history_once(tmp_path: Path) -> None:
     # Given: a voice that has received a transcription before its generation trigger.
     _reference(tmp_path)

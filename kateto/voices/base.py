@@ -222,7 +222,7 @@ class VoiceProfile:
 @dataclass(frozen=True, slots=True)
 class GenerationRequest:
     voice_id: str
-    reference_wav: Path
+    reference_wav: Path | None
     messages: tuple[ChatMessage, ...]
 
 
@@ -818,9 +818,13 @@ class VoiceAgent(Plugin):
         if self._agent_provider is not None and self._tool_executor is not None:
             await self._agent_loop(prompt, workflow=workflow, phase_id=phase_id)
             return
+        # Only Zonos TTS requires a reference WAV (for voice cloning). Other
+        # providers (edge_tts, camb, boson) do not, and eagerly resolving
+        # self.reference_wav would raise ReferenceClipError when no WAV exists.
+        needs_reference = self._settings.tts_provider == "zonos"
         request = GenerationRequest(
             voice_id=self.name,
-            reference_wav=self.reference_wav,
+            reference_wav=self.reference_wav if needs_reference else None,
             messages=await self._messages_for(
                 prompt,
                 workflow=workflow,
