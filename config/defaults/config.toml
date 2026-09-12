@@ -69,7 +69,7 @@ enabled = true
 
 [voice.jane]
 enabled = true
-skills = ["orchestrator"]
+skills = ["orchestrator", "look-at"]
 mcp_servers = ["system"]
 stream = true
 max_tokens = 4096
@@ -78,7 +78,7 @@ timeout = 600
 
 [voice.doktor]
 enabled = true
-skills = ["backlog", "risk-analysis", "planning-poker"]
+skills = ["backlog", "risk-analysis", "planning-poker", "look-at"]
 mcp_servers = ["system"]
 stream = true
 max_tokens = 4096
@@ -87,7 +87,7 @@ timeout = 600
 
 [voice.conquest]
 enabled = true
-skills = ["backlog"]
+skills = ["backlog", "look-at"]
 mcp_servers = ["system"]
 stream = true
 max_tokens = 4096
@@ -96,7 +96,7 @@ timeout = 600
 
 [voice.whisperer]
 enabled = true
-skills = ["orchestrator"]
+skills = ["orchestrator", "look-at"]
 mcp_servers = ["system"]
 stream = true
 max_tokens = 4096
@@ -105,6 +105,13 @@ timeout = 600
 
 [mcp_servers.system]
 command = "kateto"
+
+# BYO video-rag sidecar for the vision describe fallback chain (plugin-side
+# use only — no voice mcp_servers entry). Inherits Kateto's process env.
+[mcp_servers.video_rag]
+command = "video-rag"
+args = ["mcp", "serve"]
+# enabled = false
 
 [cli]
 allowlist = ["git", "ls", "pwd", "cat", "echo", "date"]
@@ -132,3 +139,13 @@ voice_probabilities = { jane = 0.7, doktor = 0.15, conquest = 0.1, whisperer = 0
 enabled = true
 host = "127.0.0.1"
 port = 8099
+
+[plugin.executor_vision]
+enabled = true
+source_default = "screen"
+window_secs = 5.0
+capture_fps = 1.0
+describe_interval = "30s"
+vision_max_tokens = 300
+vision_timeout = 60.0
+device_index = 0

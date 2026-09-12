@@ -55,6 +55,31 @@ class VisionFrameData(EventModel):
     source_pid: int | None = None
     ts: float
     dept: str = "fun"
+    source: str = "screen"
+
+
+class VisionCaptureTriggerData(EventModel):
+    dept: str = "fun"
+
+
+class VisionDescribeRequestData(EventModel):
+    requester: str
+    source: str = "auto"
+    window_secs: float | None = None
+    max_images: int | None = None
+    correlation_id: str | None = None
+
+
+class VisionDescribeResultData(EventModel):
+    text: str
+    frame_count: int
+    kept_count: int
+    dropped: int
+    window_start: float
+    window_end: float
+    source: str
+    via: str = "primary"
+    correlation_id: str | None = None
 
 
 class ProcessTranscriptionData(EventModel):
