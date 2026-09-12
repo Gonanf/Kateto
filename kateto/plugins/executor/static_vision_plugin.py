@@ -358,34 +358,29 @@ class StaticVisionPlugin(Plugin):
             return
 
         headers = {"x-kateto-requester": requester}
-        primary_model = self.vision_model or "gpt-4o-mini"
-        try:
-            texts = {
-                name: _completion_text(
-                    await _openai_client(
-                        self.vision_endpoint, _vision_api_key(), 1, self.vision_timeout
-                    ).chat.completions.create(
-                        model=primary_model,
-                        messages=[{"role": "user", "content": content}],
-                        max_tokens=self.vision_max_tokens,
-                        timeout=self.vision_timeout,
-                        extra_headers=headers,
+        if self.vision_endpoint and self.vision_model:
+            try:
+                texts = {
+                    name: _completion_text(
+                        await _openai_client(
+                            self.vision_endpoint, _vision_api_key(), 1, self.vision_timeout
+                        ).chat.completions.create(
+                            model=self.vision_model,
+                            messages=[{"role": "user", "content": content}],
+                            max_tokens=self.vision_max_tokens,
+                            timeout=self.vision_timeout,
+                            extra_headers=headers,
+                        )
                     )
-                )
-                for name, _kept, _total, _prompt, content in sections
-            }
-            via = "primary"
-        except (BadRequestError, APIStatusError) as error:
-            if getattr(error, "status_code", 400) != 400:
-                raise
-            fused_prompt = "\n".join(prompt for _, _, _, prompt, _ in sections)
-            fused_content: list[Any] = [{"type": "text", "text": fused_prompt}]
-            for _, _, _, _, content in sections:
-                fused_content += [part for part in content if part.get("type") != "text"]
-            fallback_text, via = await self._describe_fallback(
-                fused_prompt, fused_content, headers, sections
-            )
-            texts = {name: fallback_text for name, _, _, _, _ in sections}
+                    for name, _kept, _total, _prompt, content in sections
+                }
+                via = "primary"
+            except (BadRequestError, APIStatusError) as error:
+                if getattr(error, "status_code", 400) != 400:
+                    raise
+                texts, via = await self._fallback_texts(headers, sections)
+        else:
+            texts, via = await self._fallback_texts(headers, sections)
 
         def section_span(kept: list[tuple[float, bytes]]) -> float:
             return kept[-1][0] - kept[0][0] if len(kept) > 1 else 0.0
@@ -419,6 +414,18 @@ class StaticVisionPlugin(Plugin):
                     target=voice,
                 )
 
+    async def _fallback_texts(
+        self,
+        headers: dict[str, str],
+        sections: list[tuple[str, list[tuple[float, bytes]], int, str, list[Any]]],
+    ) -> tuple[dict[str, str], str]:
+        prompt = "\n".join(text for _, _, _, text, _ in sections)
+        content: list[Any] = [{"type": "text", "text": prompt}]
+        for _, _, _, _, parts in sections:
+            content += [part for part in parts if part.get("type") != "text"]
+        text, via = await self._describe_fallback(prompt, content, headers, sections)
+        return {name: text for name, _, _, _, _ in sections}, via
+
     async def _describe_fallback(
         self,
         prompt: str,
@@ -440,13 +447,13 @@ class StaticVisionPlugin(Plugin):
                     return str(result), "sidecar"
         except Exception:
             pass
-        if self.vision_fallback_endpoint:
+        fallback_model = self.vision_fallback_model or self.vision_model
+        if self.vision_fallback_endpoint and fallback_model:
             try:
-                model = self.vision_fallback_model or self.vision_model or "gpt-4o-mini"
                 response = await _openai_client(
                     self.vision_fallback_endpoint, _vision_api_key(), 1, self.vision_timeout
                 ).chat.completions.create(
-                    model=model,
+                    model=fallback_model,
                     messages=[{"role": "user", "content": content}],
                     max_tokens=self.vision_max_tokens,
                     timeout=self.vision_timeout,
@@ -461,7 +468,11 @@ class StaticVisionPlugin(Plugin):
             f"{(kept[-1][0] - kept[0][0]) if len(kept) > 1 else 0.0:.1f}s"
             for name, kept, total, _, _ in sections
         )
-        return f"recap (no VLM available): {details}", "recap"
+        return (
+            "recap (vision not configured: set vision_endpoint/vision_model "
+            f"or enable the video-rag sidecar): {details}",
+            "recap",
+        )
 
     async def on_vision_capture_trigger(self, data: Any = None) -> None:
         """Trigger handler for static vision capture."""

@@ -21,7 +21,8 @@ from kateto.plugins.executor import static_vision_plugin as svp
 from kateto.plugins.executor.static_vision_plugin import StaticVisionPlugin
 
 
-PRIMARY = None
+PRIMARY = "http://primary:8080/v1"
+PRIMARY_MODEL = "test-vision-model"
 FALLBACK = "http://fallback:8080/v1"
 
 
@@ -126,6 +127,8 @@ async def _make_plugin(manager: PluginManager, **kwargs) -> StaticVisionPlugin:
     """Enabled plugin with a neutered capture loop (no dummy-PNG races)."""
     plugin = StaticVisionPlugin(capture_fps=20.0, config_dir=None)
     plugin.capture_frame = lambda target_pid=None: b""  # type: ignore[method-assign]
+    plugin.vision_endpoint = kwargs.pop("vision_endpoint", PRIMARY)
+    plugin.vision_model = kwargs.pop("vision_model", PRIMARY_MODEL)
     for key, value in kwargs.items():
         setattr(plugin, key, value)
     await manager.enable_plugin(plugin)
@@ -420,3 +423,69 @@ async def test_describe_registrations_have_receivers() -> None:
     assert "vision_describe_request" in regs
     assert "static_vision" in regs["vision_describe_request"].receivers
     await _teardown(manager, plugin.name)
+
+
+@pytest.mark.asyncio
+async def test_describe_unconfigured_links_recap_names_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: NO endpoint/model anywhere, sidecar absent, frames present
+    calls: list = []
+    _install_fake_vision(monkeypatch, {}, calls)
+    _install_fake_sidecar(monkeypatch, _FakeMCP(result=None))
+    manager = PluginManager()
+    results = _ResultRecorder()
+    await manager.enable_plugin(results)
+    plugin = await _make_plugin(manager, vision_endpoint=None, vision_model=None)
+    plugin._append_frame("screen", _noise_frame(81), 90.0)
+
+    # When/Then: no HTTP link attempted, recap names the missing configuration
+    await plugin.on_vision_describe_request(
+        VisionDescribeRequestData(requester="jane", source="screen")
+    )
+    await manager.wait_for_idle()
+    assert calls == []
+    assert len(results.seen) == 1
+    assert results.seen[0].via == "recap"
+    assert "not configured" in results.seen[0].text
+    assert "vision_endpoint/vision_model" in results.seen[0].text
+    await _teardown(manager, plugin.name, results.name)
+
+
+@pytest.mark.asyncio
+async def test_describe_endpoint_without_model_skips_both_http_links(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: endpoints set but NO model name anywhere (primary + fallback gates fail)
+    calls: list = []
+    _install_fake_vision(monkeypatch, {}, calls)
+    manager = PluginManager()
+    results = _ResultRecorder()
+    await manager.enable_plugin(results)
+    plugin = await _make_plugin(
+        manager,
+        vision_endpoint=PRIMARY,
+        vision_model=None,
+        vision_fallback_endpoint=FALLBACK,
+        vision_fallback_model=None,
+    )
+    plugin._append_frame("screen", _noise_frame(82), 91.0)
+
+    # When/Then: neither HTTP link attempted, recap without exception
+    await plugin.on_vision_describe_request(
+        VisionDescribeRequestData(requester="jane", source="screen")
+    )
+    await manager.wait_for_idle()
+    assert calls == []
+    assert results.seen[0].via == "recap"
+    assert "not configured" in results.seen[0].text
+    await _teardown(manager, plugin.name, results.name)
+
+
+def test_describe_no_hardcoded_default_model() -> None:
+    # The plan pins NO default model: every HTTP link needs an explicit model
+    # name from settings, so the plugin source must not name one.
+    from pathlib import Path
+
+    source = Path(svp.__file__).read_text()
+    assert "gpt-4o-mini" not in source
