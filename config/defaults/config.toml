@@ -106,6 +106,13 @@ timeout = 600
 [mcp_servers.system]
 command = "kateto"
 
+# BYO video-rag sidecar for the vision describe fallback chain (plugin-side
+# use only — no voice mcp_servers entry). Inherits Kateto's process env.
+[mcp_servers.video_rag]
+command = "video-rag"
+args = ["mcp", "serve"]
+# enabled = false
+
 [cli]
 allowlist = ["git", "ls", "pwd", "cat", "echo", "date"]
 
