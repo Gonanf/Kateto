@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 import math
 import os
@@ -11,9 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from kateto.core.config import PluginSettings
+from kateto.core.discovery import discovery_context_for
 from kateto.core.event import (
+    GenerateData,
     PluginErrorData,
     ScheduleCancelData,
+    ScheduleRequestData,
+    ScheduleType,
     VisionCaptureTriggerData,
     VisionDescribeRequestData,
     VisionDescribeResultData,
@@ -21,6 +26,8 @@ from kateto.core.event import (
 )
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
+from kateto.voices.base import _openai_client
+from openai import APIStatusError, BadRequestError
 
 
 def _setting(settings: PluginSettings | None, key: str, default: Any) -> Any:
@@ -92,6 +99,25 @@ def dedupe_window(
     return kept
 
 
+def _vision_api_key() -> str:
+    """Primary/fallback vision endpoint key (factory precedent: no-key default for local servers)."""
+    return os.environ.get("OPENAI_API_KEY") or "sk-no-key-required"
+
+
+def _data_url(payload: bytes) -> str:
+    """Wrap raw frame bytes as a data-URL (PNG magic sniff, else JPEG)."""
+    mime = "image/png" if payload[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
+    return f"data:{mime};base64," + base64.b64encode(payload).decode("ascii")
+
+
+def _completion_text(response: Any) -> str:
+    """Extract assistant text from a chat completion (empty string, never raise)."""
+    try:
+        return response.choices[0].message.content or ""
+    except Exception:
+        return ""
+
+
 class StaticVisionPlugin(Plugin):
     """Plugin for capturing static vision frames (screen / process window)."""
 
@@ -132,6 +158,9 @@ class StaticVisionPlugin(Plugin):
         self.device_index = _setting(settings, "device_index", 0)
         # Factory-built from the voice table (todo 9 consumes); never read here.
         self.opted_in = tuple(opted_in)
+        self._opted_in = self.opted_in
+        # ponytail: unknown opt-in voices land here with a reason instead of a job.
+        self._periodic_skipped: dict[str, str] = {}
         # ponytail: todo-4 lane adds maxlen bounds + drop counting on these same names.
         self._windows: dict[str, deque[tuple[float, bytes]]] = {}
         self._dropped: dict[str, int] = {}
@@ -162,11 +191,39 @@ class StaticVisionPlugin(Plugin):
 
     async def enable(self) -> None:
         await super().enable()
+        await self._schedule_periodic()
         if self._capture_task is not None and not self._capture_task.done():
             return
         self._capture_task = asyncio.create_task(
             self._capture_loop(), name=f"kateto-vision-capture-{self.name}"
         )
+
+    async def _schedule_periodic(self) -> None:
+        """Emit ONE stable INTERVAL schedule_request per opted-in voice (todo 9)."""
+        pairs = tuple(self._opted_in)
+        if not pairs or self.manager is None:
+            return
+        known = {p.name for p in self.manager.get_plugins() if "voice" in p.capabilities}
+        for voice, interval in pairs:
+            job_id = f"vision-describe-{voice}"
+            if job_id in self._periodic_jobs:
+                continue
+            if known and voice not in known:
+                self._periodic_skipped[voice] = f"unknown voice {voice!r} (known: {sorted(known)})"
+                continue
+            await self.required_manager.emit(
+                "schedule_request",
+                ScheduleRequestData(
+                    schedule_type=ScheduleType.INTERVAL,
+                    expression=interval,
+                    event_name="vision_describe_request",
+                    data={"requester": f"scheduler:{voice}"},
+                    job_id=job_id,
+                    target_voice=voice,
+                ),
+                source=self.name,
+            )
+            self._periodic_jobs.append(job_id)
 
     async def disable(self) -> None:
         task, self._capture_task = self._capture_task, None
@@ -223,6 +280,188 @@ class StaticVisionPlugin(Plugin):
                     source=self.name,
                 )
             await asyncio.sleep(interval)
+
+    async def on_vision_describe_request(self, data: Any = None) -> None:
+        manager = self.required_manager
+        if isinstance(data, dict):
+            data = VisionDescribeRequestData.model_validate(data)
+        requester: str = data.requester
+        source: str = data.source or "auto"
+        max_images = data.max_images if data.max_images and data.max_images > 0 else 5
+        correlation_id = data.correlation_id
+
+        async def emit_result(
+            text: str,
+            *,
+            frame_count: int = 0,
+            kept_count: int = 0,
+            dropped: int = 0,
+            window_start: float = 0.0,
+            window_end: float = 0.0,
+            via: str = "primary",
+        ) -> None:
+            await manager.emit(
+                "vision_describe_result",
+                VisionDescribeResultData(
+                    text=text,
+                    frame_count=frame_count,
+                    kept_count=kept_count,
+                    dropped=dropped,
+                    window_start=window_start,
+                    window_end=window_end,
+                    source=source,
+                    via=via,
+                    correlation_id=correlation_id,
+                ),
+                source=self.name,
+            )
+
+        if source not in ("auto", "screen", "webcam"):
+            await emit_result(f'unknown source "{source}" (valid: auto, screen, webcam)')
+            return
+
+        wanted = (
+            [s for s in ("screen", "webcam") if self._windows.get(s)]
+            if source == "auto"
+            else [source]
+        )
+        snapshots = {s: list(self._windows.get(s, ())) for s in wanted}
+        if not any(snapshots.values()):
+            if source == "webcam" and self._webcam_unavailable:
+                await emit_result(f"webcam unavailable: {self._webcam_unavailable}")
+            else:
+                await emit_result("no frames captured yet")
+            return
+
+        sections: list[tuple[str, list[tuple[float, bytes]], int, str, list[Any]]] = []
+        for name in wanted:
+            frames = snapshots[name]
+            if not frames:
+                continue
+            kept = dedupe_window(frames, fallback_keep=max_images)[:max_images]
+            if not kept:
+                continue
+            t0 = kept[0][0]
+            labels = ", ".join(f"t+{ts - t0:.1f}s" for ts, _ in kept)
+            prompt = (
+                f"Describe what happens across these {len(kept)} {name} frames "
+                f"(oldest to newest: {labels}). One short timestamped description."
+            )
+            content: list[Any] = [{"type": "text", "text": prompt}]
+            content += [
+                {"type": "image_url", "image_url": {"url": _data_url(payload), "detail": "low"}}
+                for _, payload in kept
+            ]
+            sections.append((name, kept, len(frames), prompt, content))
+        if not sections:
+            await emit_result("no frames captured yet")
+            return
+
+        headers = {"x-kateto-requester": requester}
+        primary_model = self.vision_model or "gpt-4o-mini"
+        try:
+            texts = {
+                name: _completion_text(
+                    await _openai_client(
+                        self.vision_endpoint, _vision_api_key(), 1, self.vision_timeout
+                    ).chat.completions.create(
+                        model=primary_model,
+                        messages=[{"role": "user", "content": content}],
+                        max_tokens=self.vision_max_tokens,
+                        timeout=self.vision_timeout,
+                        extra_headers=headers,
+                    )
+                )
+                for name, _kept, _total, _prompt, content in sections
+            }
+            via = "primary"
+        except (BadRequestError, APIStatusError) as error:
+            if getattr(error, "status_code", 400) != 400:
+                raise
+            fused_prompt = "\n".join(prompt for _, _, _, prompt, _ in sections)
+            fused_content: list[Any] = [{"type": "text", "text": fused_prompt}]
+            for _, _, _, _, content in sections:
+                fused_content += [part for part in content if part.get("type") != "text"]
+            fallback_text, via = await self._describe_fallback(
+                fused_prompt, fused_content, headers, sections
+            )
+            texts = {name: fallback_text for name, _, _, _, _ in sections}
+
+        def section_span(kept: list[tuple[float, bytes]]) -> float:
+            return kept[-1][0] - kept[0][0] if len(kept) > 1 else 0.0
+
+        fused = "\n".join(
+            f"--- {name} ({section_span(kept):.0f}s, {len(kept)}/{total} frames) ---\n{texts[name]}"
+            for name, kept, total, _, _ in sections
+        )
+        all_ts = [ts for _, kept, _, _, _ in sections for ts, _ in kept]
+        frame_count = sum(total for _, _, total, _, _ in sections)
+        kept_count = sum(len(kept) for _, kept, _, _, _ in sections)
+        dropped = sum(self._dropped.get(name, 0) for name, _, _, _, _ in sections)
+        window_start, window_end = min(all_ts), max(all_ts)
+        await emit_result(
+            fused,
+            frame_count=frame_count,
+            kept_count=kept_count,
+            dropped=dropped,
+            window_start=window_start,
+            window_end=window_end,
+            via=via,
+        )
+        if requester.startswith("scheduler:"):
+            voice = requester.split("scheduler:", 1)[1]
+            if voice and kept_count > 0:
+                span = window_end - window_start
+                await manager.emit(
+                    "generate",
+                    GenerateData(prompt=f"[look-at {source} {span:.0f}s]: {fused}"),
+                    source=self.name,
+                    target=voice,
+                )
+
+    async def _describe_fallback(
+        self,
+        prompt: str,
+        content: list[Any],
+        headers: dict[str, str],
+        sections: list[tuple[str, list[tuple[float, bytes]], int, str, list[Any]]],
+    ) -> tuple[str, str]:
+        images = [
+            part["image_url"]["url"] for part in content if part.get("type") == "image_url"
+        ]
+        try:
+            context = discovery_context_for((self,))
+            mcp = getattr(context, "external_mcp", None) if context is not None else None
+            if mcp is not None:
+                result = await mcp.try_call_tool(
+                    ["video_rag"], "describe_images", {"prompt": prompt, "images": images}
+                )
+                if result is not None:
+                    return str(result), "sidecar"
+        except Exception:
+            pass
+        if self.vision_fallback_endpoint:
+            try:
+                model = self.vision_fallback_model or self.vision_model or "gpt-4o-mini"
+                response = await _openai_client(
+                    self.vision_fallback_endpoint, _vision_api_key(), 1, self.vision_timeout
+                ).chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": content}],
+                    max_tokens=self.vision_max_tokens,
+                    timeout=self.vision_timeout,
+                    extra_headers=headers,
+                )
+                return _completion_text(response), "fallback-vlm"
+            except (BadRequestError, APIStatusError) as error:
+                if getattr(error, "status_code", 400) != 400:
+                    raise
+        details = "; ".join(
+            f"{name}: {len(kept)}/{total} frames over "
+            f"{(kept[-1][0] - kept[0][0]) if len(kept) > 1 else 0.0:.1f}s"
+            for name, kept, total, _, _ in sections
+        )
+        return f"recap (no VLM available): {details}", "recap"
 
     async def on_vision_capture_trigger(self, data: Any = None) -> None:
         """Trigger handler for static vision capture."""
