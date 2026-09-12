@@ -5,11 +5,30 @@ import io
 import os
 import subprocess
 import time
+from collections import deque
 from typing import Any
 
-from kateto.core.event import ScheduleRequestData, ScheduleType, VisionFrameData
+from kateto.core.config import PluginSettings
+from kateto.core.event import (
+    PluginErrorData,
+    ScheduleCancelData,
+    VisionCaptureTriggerData,
+    VisionDescribeRequestData,
+    VisionDescribeResultData,
+    VisionFrameData,
+)
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
+
+
+def _setting(settings: PluginSettings | None, key: str, default: Any) -> Any:
+    """Dual getattr-or-get access (visual_overlay precedent); kwarg default wins when absent."""
+    if settings is None:
+        return default
+    value = getattr(settings, key, None)
+    if value is None:
+        value = settings.get(key, None)
+    return default if value is None else value
 
 
 class StaticVisionPlugin(Plugin):
@@ -17,44 +36,121 @@ class StaticVisionPlugin(Plugin):
 
     def __init__(
         self,
-        name: str = "static_vision",
+        settings: PluginSettings | None = None,
         *,
+        name: str = "static_vision",
         interval_seconds: float = 10.0,
         target_pid: int | None = None,
         dept: str = "fun",
+        opted_in: tuple[tuple[str, str], ...] = (),
+        # Compat: parallel lanes pass capture_fps as a kwarg; settings key wins when present.
+        capture_fps: float = 1.0,
     ) -> None:
         super().__init__(name=name, capabilities=("vision", "static_vision"))
-        self.interval_seconds = interval_seconds
-        self.target_pid = target_pid
-        self.dept = dept
+        self._settings = settings
+        # Backward-compat kwargs stay the default; a settings key overrides when present.
+        self.interval_seconds = _setting(settings, "interval_seconds", interval_seconds)
+        self.target_pid = _setting(settings, "target_pid", target_pid)
+        self.dept = _setting(settings, "dept", dept)
+        # Vision settings keys with plan defaults.
+        self.source_default = _setting(settings, "source_default", "screen")
+        self.window_secs = _setting(settings, "window_secs", 5.0)
+        self.capture_fps = _setting(settings, "capture_fps", capture_fps)
+        self.describe_interval = _setting(settings, "describe_interval", "30s")
+        self.vision_endpoint = _setting(settings, "vision_endpoint", None)
+        self.vision_model = _setting(settings, "vision_model", None)
+        self.vision_max_tokens = _setting(settings, "vision_max_tokens", 300)
+        self.vision_timeout = _setting(settings, "vision_timeout", 60.0)
+        self.vision_fallback_endpoint = _setting(settings, "vision_fallback_endpoint", None)
+        self.vision_fallback_model = _setting(settings, "vision_fallback_model", None)
+        self.device_index = _setting(settings, "device_index", 0)
+        # Factory-built from the voice table (todo 9 consumes); never read here.
+        self.opted_in = tuple(opted_in)
+        # ponytail: todo-4 lane adds maxlen bounds + drop counting on these same names.
+        self._windows: dict[str, deque[tuple[float, bytes]]] = {}
+        self._dropped: dict[str, int] = {}
+        # ponytail: todo-9 lane appends stable per-voice job ids here; disable cancels them.
+        self._periodic_jobs: list[str] = []
+        self._capture_task: asyncio.Task[None] | None = None
+        # ponytail: todo-5 lane opens the webcam handle; disable releases it.
+        self._webcam_handle: Any | None = None
 
     async def initialize(self) -> None:
         if self.manager is not None:
             self.manager.register_event("vision_frame", VisionFrameData)
-            self.manager.register_event("schedule_request", ScheduleRequestData)
+            self.manager.register_event("vision_capture_trigger", VisionCaptureTriggerData)
+            self.manager.register_event("vision_describe_request", VisionDescribeRequestData)
+            self.manager.register_event("vision_describe_result", VisionDescribeResultData)
 
     async def enable(self) -> None:
         await super().enable()
-        # Emit schedule request for auto-jittered frame capture
-        await self.required_manager.emit(
-            "schedule_request",
-            ScheduleRequestData(
-                schedule_type=ScheduleType.INTERVAL,
-                expression=f"{self.interval_seconds}s",
-                event_name="vision_capture_trigger",
-                data={"dept": self.dept},
-            ),
-            source=self.name,
+        if self._capture_task is not None and not self._capture_task.done():
+            return
+        self._capture_task = asyncio.create_task(
+            self._capture_loop(), name=f"kateto-vision-capture-{self.name}"
         )
+
+    async def disable(self) -> None:
+        task, self._capture_task = self._capture_task, None
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        handle, self._webcam_handle = self._webcam_handle, None
+        if handle is not None:
+            release = getattr(handle, "release", None)
+            if callable(release):
+                try:
+                    release()
+                except Exception:
+                    pass
+        for job_id in list(self._periodic_jobs):
+            await self.required_manager.emit(
+                "schedule_cancel", ScheduleCancelData(job_id=job_id), source=self.name
+            )
+        self._periodic_jobs.clear()
+        await super().disable()
+
+    def _append_frame(self, source: str, frame: bytes, ts: float) -> None:
+        # No lock: the producer appends in the event loop after to_thread returns.
+        self._windows.setdefault(source, deque()).append((ts, frame))
+
+    async def _capture_loop(self) -> None:
+        source = "screen"
+        interval = 1.0 / self.capture_fps if self.capture_fps > 0 else 1.0
+        while True:
+            try:
+                # ponytail: target_pid threading stays as-is; per-source capture is todo 5.
+                frame_bytes = await asyncio.to_thread(self.capture_frame, self.target_pid)
+                if frame_bytes:
+                    self._append_frame(source, frame_bytes, time.time())
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                await self.required_manager.emit(
+                    "error",
+                    PluginErrorData(
+                        plugin=self.name,
+                        event_name="vision_capture",
+                        error_type=type(error).__name__,
+                        message=str(error),
+                    ),
+                    source=self.name,
+                )
+            await asyncio.sleep(interval)
 
     async def on_vision_capture_trigger(self, data: Any = None) -> None:
         """Trigger handler for static vision capture."""
         frame_bytes = self.capture_frame(self.target_pid)
         if frame_bytes:
+            ts = time.time()
+            self._append_frame("screen", frame_bytes, ts)
             event_data = VisionFrameData(
                 frame=frame_bytes,
                 source_pid=self.target_pid,
-                ts=time.time(),
+                ts=ts,
                 dept=self.dept,
             )
             await self.required_manager.emit("vision_frame", event_data, source=self.name)
