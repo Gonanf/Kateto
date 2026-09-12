@@ -52,5 +52,5 @@ def create_plugins(ctx):
             if interval is None:
                 interval = voice_settings.get("vision_interval", "30s")
             opted_in.append((voice_name, interval))
-        plugins.append(StaticVisionPlugin(vision_settings, opted_in=tuple(opted_in)))
+        plugins.append(StaticVisionPlugin(vision_settings, opted_in=tuple(opted_in), config_dir=ctx.config.paths.config_dir))
     return plugins
