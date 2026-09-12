@@ -185,3 +185,76 @@ def test_webcam_absent_screen_still_works(monkeypatch):
     assert plugin._webcam_unavailable is not None
     assert "opencv" in plugin._webcam_unavailable
     assert isinstance(plugin.capture_frame(), bytes)
+
+
+# --- Todo 6: dHash window dedupe as a pure function ---
+
+
+def _png_bytes(img) -> bytes:
+    import io as _io
+
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _distinct_images():
+    from PIL import Image
+
+    square = Image.new("RGB", (64, 64), (0, 0, 0))
+    square.paste(Image.new("RGB", (32, 32), (255, 255, 255)), (16, 16))
+    diag = Image.new("RGB", (64, 64), (0, 0, 0))
+    pixels = diag.load()
+    assert pixels is not None
+    for x in range(64):
+        for y in range(64):
+            pixels[x, y] = (255, 255, 255) if x > y else (0, 0, 0)
+    checker = Image.new("RGB", (64, 64))
+    pixels = checker.load()
+    assert pixels is not None
+    for x in range(64):
+        for y in range(64):
+            pixels[x, y] = (255, 255, 255) if (x // 8 + y // 8) % 2 else (0, 0, 0)
+    return square, diag, checker
+
+
+def test_dedupe_identical_keeps_earliest_one():
+    # Given: 5 identical frames with increasing timestamps
+    from kateto.plugins.executor.static_vision_plugin import dedupe_window
+
+    from PIL import Image
+
+    payload = _png_bytes(Image.new("RGB", (64, 64), (200, 30, 30)))
+    frames = [(float(i), payload) for i in range(5)]
+    # When/Then: exactly the earliest survives (the ≥1 invariant)
+    assert dedupe_window(frames) == [(0.0, payload)]
+
+
+def test_dedupe_distinct_keeps_all_in_order():
+    # Given: structurally distinct frames oldest→newest
+    from kateto.plugins.executor.static_vision_plugin import dedupe_window
+
+    kinds = _distinct_images()
+    frames = [(float(i), _png_bytes(img)) for i, img in enumerate(kinds)]
+    # When/Then: all kept, order preserved
+    assert dedupe_window(frames) == frames
+
+
+def test_dedupe_empty_in_empty_out():
+    # Given/When/Then: empty window never raises, returns empty
+    from kateto.plugins.executor.static_vision_plugin import dedupe_window
+
+    assert dedupe_window([]) == []
+
+
+def test_dedupe_pil_blocked_bounded_fallback(monkeypatch):
+    # Given: PIL unavailable and 8 frames with fallback_keep=5
+    from kateto.plugins.executor.static_vision_plugin import dedupe_window
+
+    monkeypatch.setitem(sys.modules, "PIL", None)
+    monkeypatch.setitem(sys.modules, "PIL.Image", None)
+    frames = [(float(i), b"frame-%d" % i) for i in range(8)]
+    # When/Then: the 5 most recent pass through untouched, no raise
+    assert dedupe_window(frames, fallback_keep=5) == frames[-5:]
+    # And: the default is 5 (K is never symbolic)
+    assert dedupe_window(frames) == frames[-5:]

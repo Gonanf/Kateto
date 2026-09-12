@@ -58,6 +58,40 @@ def _encode_bounded(img: Any) -> bytes:
     return encoded
 
 
+# ponytail: 8/64 hamming bound borrowed from video-rag phash_dedupe; dense 1fps
+# frames stay conservative and the window always keeps >= 1 frame.
+def dedupe_window(
+    frames: list[tuple[float, bytes]],
+    *,
+    hash_bits: int = 64,
+    threshold: int = 8,
+    fallback_keep: int | None = None,
+) -> list[tuple[float, bytes]]:
+    try:
+        from PIL import Image
+    except Exception:
+        keep = 5 if fallback_keep is None else max(0, fallback_keep)
+        return list(frames[-keep:]) if keep > 0 else []
+    side = math.isqrt(hash_bits)
+    kept: list[tuple[float, bytes]] = []
+    digests: list[int] = []
+    for ts, payload in frames:
+        try:
+            gray = Image.open(io.BytesIO(payload)).convert("L").resize((side + 1, side))
+            px = gray.tobytes()
+            digest = 0
+            for y in range(side):
+                row = y * (side + 1)
+                for x in range(side):
+                    digest = (digest << 1) | (1 if px[row + x] > px[row + x + 1] else 0)
+            if all((digest ^ known).bit_count() > threshold for known in digests):
+                kept.append((ts, payload))
+                digests.append(digest)
+        except Exception:
+            kept.append((ts, payload))
+    return kept
+
+
 class StaticVisionPlugin(Plugin):
     """Plugin for capturing static vision frames (screen / process window)."""
 
@@ -120,10 +154,10 @@ class StaticVisionPlugin(Plugin):
             # dirs, so the skill file is copied here; failures degrade silently and
             # surface later as SkillLoadError at voice load.
             try:
-                from kateto.voices.skills import SkillLoadError, ensure_shared_skill
+                from kateto.voices.skills import ensure_shared_skill
 
                 ensure_shared_skill(self._config_dir, "look-at")
-            except (OSError, SkillLoadError):
+            except Exception:
                 pass
 
     async def enable(self) -> None:
