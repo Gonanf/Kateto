@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import io
+import math
 import os
 import subprocess
 import time
 from collections import deque
+from pathlib import Path
 from typing import Any
 
 from kateto.core.config import PluginSettings
@@ -31,6 +33,31 @@ def _setting(settings: PluginSettings | None, key: str, default: Any) -> Any:
     return default if value is None else value
 
 
+# ponytail: JPEG floor-accept — q60→q40→q30, then accept whatever remains; never raise.
+_FRAME_BYTE_CAP = 128 * 1024
+
+
+def _encode_bounded(img: Any) -> bytes:
+    """Encode a PIL image to bounded JPEG bytes (max side 640, 128KB cap, floor-accept)."""
+    from PIL import Image
+
+    width, height = img.size
+    longest = max(width, height)
+    if longest > 640:
+        scale = 640.0 / longest
+        img = img.resize((max(1, int(width * scale)), max(1, int(height * scale))), Image.Resampling.LANCZOS)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    encoded = b""
+    for quality in (60, 40, 30):
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality)
+        encoded = buf.getvalue()
+        if len(encoded) <= _FRAME_BYTE_CAP:
+            return encoded
+    return encoded
+
+
 class StaticVisionPlugin(Plugin):
     """Plugin for capturing static vision frames (screen / process window)."""
 
@@ -45,6 +72,9 @@ class StaticVisionPlugin(Plugin):
         opted_in: tuple[tuple[str, str], ...] = (),
         # Compat: parallel lanes pass capture_fps as a kwarg; settings key wins when present.
         capture_fps: float = 1.0,
+        window_secs: float = 5.0,
+        # Config dir for the look-at skill backfill; None disables it (tests).
+        config_dir: Path | None = None,
     ) -> None:
         super().__init__(name=name, capabilities=("vision", "static_vision"))
         self._settings = settings
@@ -53,8 +83,11 @@ class StaticVisionPlugin(Plugin):
         self.target_pid = _setting(settings, "target_pid", target_pid)
         self.dept = _setting(settings, "dept", dept)
         self.source_default = _setting(settings, "source_default", "screen")
-        self.window_secs = _setting(settings, "window_secs", 5.0)
+        self.window_secs = _setting(settings, "window_secs", window_secs)
+        if self.window_secs <= 0:
+            raise ValueError(f"window_secs must be positive, got {self.window_secs!r}")
         self.capture_fps = _setting(settings, "capture_fps", capture_fps)
+        self._maxlen = max(1, math.ceil(self.window_secs * self.capture_fps))
         self.describe_interval = _setting(settings, "describe_interval", "30s")
         self.vision_endpoint = _setting(settings, "vision_endpoint", None)
         self.vision_model = _setting(settings, "vision_model", None)
@@ -73,6 +106,7 @@ class StaticVisionPlugin(Plugin):
         self._capture_task: asyncio.Task[None] | None = None
         # ponytail: todo-5 lane opens the webcam handle; disable releases it.
         self._webcam_handle: Any | None = None
+        self._config_dir = config_dir
 
     async def initialize(self) -> None:
         if self.manager is not None:
@@ -80,6 +114,16 @@ class StaticVisionPlugin(Plugin):
             self.manager.register_event("vision_capture_trigger", VisionCaptureTriggerData)
             self.manager.register_event("vision_describe_request", VisionDescribeRequestData)
             self.manager.register_event("vision_describe_result", VisionDescribeResultData)
+        if self._config_dir is not None:
+            # ponytail: narrow backfill exception — bootstrap skips existing config
+            # dirs, so the skill file is copied here; failures degrade silently and
+            # surface later as SkillLoadError at voice load.
+            try:
+                from kateto.voices.skills import SkillLoadError, ensure_shared_skill
+
+                ensure_shared_skill(self._config_dir, "look-at")
+            except (OSError, SkillLoadError):
+                pass
 
     async def enable(self) -> None:
         await super().enable()
@@ -114,7 +158,12 @@ class StaticVisionPlugin(Plugin):
 
     def _append_frame(self, source: str, frame: bytes, ts: float) -> None:
         # No lock: the producer appends in the event loop after to_thread returns.
-        self._windows.setdefault(source, deque()).append((ts, frame))
+        dq = self._windows.get(source)
+        if dq is None:
+            dq = self._windows[source] = deque(maxlen=self._maxlen)
+        if len(dq) == dq.maxlen:
+            self._dropped[source] = self._dropped.get(source, 0) + 1
+        dq.append((ts, frame))
 
     async def _capture_loop(self) -> None:
         source = "screen"
@@ -175,9 +224,12 @@ class StaticVisionPlugin(Plugin):
                 monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
                 sct_img = sct.grab(monitor)
                 img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                return buf.getvalue()
+                try:
+                    return _encode_bounded(img)
+                except Exception:
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    return buf.getvalue()
         except Exception:
             pass
 
