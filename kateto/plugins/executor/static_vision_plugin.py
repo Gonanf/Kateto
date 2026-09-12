@@ -52,7 +52,6 @@ class StaticVisionPlugin(Plugin):
         self.interval_seconds = _setting(settings, "interval_seconds", interval_seconds)
         self.target_pid = _setting(settings, "target_pid", target_pid)
         self.dept = _setting(settings, "dept", dept)
-        # Vision settings keys with plan defaults.
         self.source_default = _setting(settings, "source_default", "screen")
         self.window_secs = _setting(settings, "window_secs", 5.0)
         self.capture_fps = _setting(settings, "capture_fps", capture_fps)
@@ -188,3 +187,20 @@ class StaticVisionPlugin(Plugin):
             b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0"
             b"\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82"
         )
+
+
+from kateto.core.config import register_plugin_param, register_voice_param
+
+register_plugin_param("executor_vision", "source_default", "screen")
+register_plugin_param("executor_vision", "window_secs", 5.0)
+register_plugin_param("executor_vision", "capture_fps", 1.0)
+register_plugin_param("executor_vision", "describe_interval", "30s")
+register_plugin_param("executor_vision", "vision_endpoint", None)
+register_plugin_param("executor_vision", "vision_model", None)
+register_plugin_param("executor_vision", "vision_max_tokens", 300)
+register_plugin_param("executor_vision", "vision_timeout", 60.0)
+register_plugin_param("executor_vision", "vision_fallback_endpoint", None)
+register_plugin_param("executor_vision", "vision_fallback_model", None)
+register_plugin_param("executor_vision", "device_index", 0)
+register_voice_param("vision_periodic", False)
+register_voice_param("vision_interval", "30s")
