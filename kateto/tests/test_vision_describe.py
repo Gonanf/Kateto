@@ -426,6 +426,90 @@ async def test_describe_registrations_have_receivers() -> None:
 
 
 @pytest.mark.asyncio
+async def test_describe_unconfigured_recaps_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: no endpoint/model anywhere + sidecar absent (None)
+    calls: list = []
+    _install_fake_vision(monkeypatch, {}, calls)
+    _install_fake_sidecar(monkeypatch, _FakeMCP(result=None))
+    manager = PluginManager()
+    results = _ResultRecorder()
+    await manager.enable_plugin(results)
+    plugin = await _make_plugin(
+        manager, vision_endpoint=None, vision_model=None, vision_fallback_endpoint=None
+    )
+    plugin._append_frame("screen", _noise_frame(81), 90.0)
+
+    # When/Then: no HTTP link attempted, recap names the missing config
+    await plugin.on_vision_describe_request(
+        VisionDescribeRequestData(requester="jane", source="screen")
+    )
+    await manager.wait_for_idle()
+    assert calls == []
+    assert results.seen[0].via == "recap"
+    assert "not configured" in results.seen[0].text
+    assert "vision_endpoint/vision_model" in results.seen[0].text
+    await _teardown(manager, plugin.name, results.name)
+
+
+@pytest.mark.asyncio
+async def test_describe_primary_skipped_fallback_used(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: primary unconfigured, fallback endpoint+model configured, sidecar absent
+    calls: list = []
+    _install_fake_vision(monkeypatch, {FALLBACK: ("text", "fallback says")}, calls)
+    _install_fake_sidecar(monkeypatch, _FakeMCP(result=None))
+    manager = PluginManager()
+    results = _ResultRecorder()
+    await manager.enable_plugin(results)
+    plugin = await _make_plugin(
+        manager,
+        vision_endpoint=None,
+        vision_model=None,
+        vision_fallback_endpoint=FALLBACK,
+        vision_fallback_model="fb-vlm",
+    )
+    plugin._append_frame("screen", _noise_frame(82), 91.0)
+
+    # When/Then: primary skipped, fallback HTTP answers directly
+    await plugin.on_vision_describe_request(
+        VisionDescribeRequestData(requester="jane", source="screen")
+    )
+    await manager.wait_for_idle()
+    assert [endpoint for endpoint, _ in calls] == [FALLBACK]
+    assert results.seen[0].via == "fallback-vlm"
+    assert "fallback says" in results.seen[0].text
+    await _teardown(manager, plugin.name, results.name)
+
+
+@pytest.mark.asyncio
+async def test_describe_fallback_skipped_without_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: fallback endpoint set but no model anywhere, sidecar absent
+    calls: list = []
+    _install_fake_vision(monkeypatch, {}, calls)
+    _install_fake_sidecar(monkeypatch, _FakeMCP(result=None))
+    manager = PluginManager()
+    results = _ResultRecorder()
+    await manager.enable_plugin(results)
+    plugin = await _make_plugin(
+        manager,
+        vision_endpoint=None,
+        vision_model=None,
+        vision_fallback_endpoint=FALLBACK,
+        vision_fallback_model=None,
+    )
+    plugin._append_frame("screen", _noise_frame(83), 92.0)
+
+    # When/Then: fallback HTTP skipped too, recap without any HTTP call
+    await plugin.on_vision_describe_request(
+        VisionDescribeRequestData(requester="jane", source="screen")
+    )
+    await manager.wait_for_idle()
+    assert calls == []
+    assert results.seen[0].via == "recap"
+    assert "not configured" in results.seen[0].text
+    await _teardown(manager, plugin.name, results.name)
+
+
+@pytest.mark.asyncio
 async def test_describe_unconfigured_links_recap_names_configuration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
