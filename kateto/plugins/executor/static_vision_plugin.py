@@ -106,6 +106,7 @@ class StaticVisionPlugin(Plugin):
         self._capture_task: asyncio.Task[None] | None = None
         # ponytail: todo-5 lane opens the webcam handle; disable releases it.
         self._webcam_handle: Any | None = None
+        self._webcam_unavailable: str | None = None
         self._config_dir = config_dir
 
     async def initialize(self) -> None:
@@ -239,6 +240,50 @@ class StaticVisionPlugin(Plugin):
             b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0"
             b"\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82"
         )
+
+    def _capture_webcam(self) -> bytes | None:
+        try:
+            import cv2
+        except Exception as error:
+            self._webcam_unavailable = f"opencv unavailable: {error}"
+            return None
+        try:
+            handle = self._webcam_handle
+            if handle is None:
+                handle = cv2.VideoCapture(self.device_index)
+                setter = getattr(handle, "set", None)
+                if callable(setter):
+                    try:
+                        setter(3, 640)
+                        setter(4, 480)
+                    except Exception:
+                        pass
+                self._webcam_handle = handle
+            is_opened = getattr(handle, "isOpened", None)
+            if callable(is_opened) and not is_opened():
+                self._webcam_unavailable = "webcam open failed"
+                return None
+            ok, frame = handle.read()
+            if not ok or frame is None:
+                self._webcam_unavailable = "webcam read failed"
+                return None
+            encoder = getattr(cv2, "imencode", None)
+            if encoder is None:
+                self._webcam_unavailable = "webcam encode unavailable"
+                return None
+            quality_flag = int(getattr(cv2, "IMWRITE_JPEG_QUALITY", 1))
+            enc_ok, buf = encoder(".jpg", frame, [quality_flag, 60])
+            if not enc_ok or buf is None:
+                self._webcam_unavailable = "webcam encode failed"
+                return None
+            raw = buf.tobytes() if hasattr(buf, "tobytes") else bytes(buf)
+            data = bytes(raw)
+            self._webcam_unavailable = None
+            self._append_frame("webcam", data, time.time())
+            return data
+        except Exception as error:
+            self._webcam_unavailable = f"webcam error: {error}"
+            return None
 
 
 from kateto.core.config import register_plugin_param, register_voice_param

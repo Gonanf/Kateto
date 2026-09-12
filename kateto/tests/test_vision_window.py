@@ -7,6 +7,7 @@ test here additive.
 from __future__ import annotations
 
 import sys
+import types
 
 import pytest
 
@@ -104,3 +105,83 @@ def test_webcam_buffer_independent_from_screen():
     assert len(plugin._windows["webcam"]) == 10
     assert plugin._dropped["screen"] == 2
     assert plugin._dropped["webcam"] == 2
+
+
+# --- Todo 5: webcam source behind lazy cv2 import ---
+
+
+class _FakeBuf:
+    def tobytes(self):
+        return b"fake-jpeg-bytes"
+
+
+class _FakeCapture:
+    def __init__(self, read_result):
+        self.read_result = read_result
+        self.set_calls: list[tuple[int, int]] = []
+        self.released = False
+
+    def set(self, prop, value):
+        self.set_calls.append((prop, value))
+        return True
+
+    def isOpened(self):
+        return True
+
+    def read(self):
+        return self.read_result
+
+    def release(self):
+        self.released = True
+
+
+def _fake_cv2(monkeypatch, read_result=(True, object())):
+    captures: list[_FakeCapture] = []
+
+    def _capture(index):
+        cap = _FakeCapture(read_result)
+        captures.append(cap)
+        return cap
+
+    fake = types.ModuleType("cv2")
+    fake.VideoCapture = _capture  # type: ignore[attr-defined]
+    fake.imencode = lambda ext, frame, params: (True, _FakeBuf())  # type: ignore[attr-defined]
+    fake.IMWRITE_JPEG_QUALITY = 1  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "cv2", fake)
+    return captures
+
+
+def test_webcam_capture_mocked(monkeypatch):
+    # Given: a mocked cv2 returning a frame
+    captures = _fake_cv2(monkeypatch)
+    plugin = _make_plugin()
+    # When: webcam capture runs
+    out = plugin._capture_webcam()
+    # Then: JPEG bytes land in the webcam deque, no unavailability recorded
+    assert out == b"fake-jpeg-bytes"
+    assert len(captures) == 1
+    assert len(plugin._windows["webcam"]) == 1
+    assert plugin._windows["webcam"][0][1] == b"fake-jpeg-bytes"
+    assert plugin._webcam_unavailable is None
+
+
+def test_webcam_read_failure_records_reason(monkeypatch):
+    # Given: cv2 whose read fails
+    _fake_cv2(monkeypatch, read_result=(False, None))
+    plugin = _make_plugin()
+    # When/Then: reason recorded, no exception, bus idle (nothing appended)
+    assert plugin._capture_webcam() is None
+    assert plugin._webcam_unavailable is not None
+    assert "read failed" in plugin._webcam_unavailable
+    assert len(plugin._windows.get("webcam", ())) == 0
+
+
+def test_webcam_absent_screen_still_works(monkeypatch):
+    # Given: opencv missing entirely
+    monkeypatch.setitem(sys.modules, "cv2", None)
+    plugin = _make_plugin()
+    # When/Then: unavailable reason, no exception — and screen capture unaffected
+    assert plugin._capture_webcam() is None
+    assert plugin._webcam_unavailable is not None
+    assert "opencv" in plugin._webcam_unavailable
+    assert isinstance(plugin.capture_frame(), bytes)
