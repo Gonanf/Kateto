@@ -49,7 +49,7 @@ async def test_stable_prompt_is_frozen_across_turns(tmp_path: Path) -> None:
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="You are Jane, the lead.",
             relevance_terms=frozenset(),
         ),
@@ -94,7 +94,7 @@ async def test_volatile_context_is_appended_not_inlined(tmp_path: Path) -> None:
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),
@@ -136,7 +136,7 @@ def test_voice_session_headers_are_stable_across_turns(tmp_path: Path) -> None:
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),

@@ -145,8 +145,15 @@ async def test_audio_player_closes_stream_gracefully_on_interrupt():
     mock_raw_stream.abort.assert_not_called()
     assert player._stream is None
 
-    # And when next audio output arrives for objection (conquest)
+    # And when next audio output arrives for objection (conquest): the chunk
+    # is enqueued into conquest's data lane and the lane sequencer reopens a
+    # fresh stream asynchronously.
     await player.on_audio_output(AudioOutput(samples=b"\x00" * 4000, sample_rate=24000, channels=1, format="pcm_s16le", voice_id="conquest", sequence=0, final=False))
+    await player.on_audio_output(AudioOutput(samples=b"", sample_rate=24000, channels=1, format="pcm_s16le", voice_id="conquest", sequence=1, final=True))
+    deadline = asyncio.get_running_loop().time() + 5.0
+    while not mock_new_raw_stream.write.called:
+        assert asyncio.get_running_loop().time() < deadline, "sequencer never reopened the stream"
+        await asyncio.sleep(0.01)
     assert mock_factory.create.called
     assert mock_new_raw_stream.start.called
     assert mock_new_raw_stream.write.called

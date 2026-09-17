@@ -90,11 +90,13 @@ export const VOICE_NAMES = {
 };
 
 export const ROLE_LABELS = {
-  orchestrator: "Judge",
-  adversary: "Adversaria",
-  project_manager: "Project Manager",
-  agile_facilitator: "Agile Lead",
-  delivery_advisor: "Delivery",
+  judge: "Judge",
+  debater: "Debater",
+  absurd_situational: "Situational Absurd",
+  chaotic_slapstick: "Chaotic Slapstick",
+  deadpan_pedant: "Deadpan Pedant",
+  deadpan_drill: "Deadpan Drill",
+  improviser: "Improviser",
 };
 
 export function formatSpeakerName(voice_id, role) {
@@ -610,7 +612,7 @@ export class KatetoSubtitles extends HTMLElement {
         if (this._idleTimer) clearTimeout(this._idleTimer);
         const label = formatSpeakerName(turn.voice_id, turn.role);
         this._who.textContent = label;
-        this._who.className = "who" + (turn.role === "orchestrator" ? " judge" : "");
+        this._who.className = "who" + (turn.role === "orchestrator" || turn.role === "judge" ? " judge" : "");
         this._phase.textContent = (turn.phase || "speaking").toUpperCase();
         this._text.textContent = "";
         this._box.classList.remove('idle');
@@ -666,7 +668,7 @@ export class KatetoSubtitles extends HTMLElement {
     if (!voice_id && !text) return;
     const label = formatSpeakerName(voice_id, role);
     this._who.textContent = label;
-    this._who.className = "who" + (role === "orchestrator" ? " judge" : "");
+    this._who.className = "who" + (role === "orchestrator" || role === "judge" ? " judge" : "");
     this._phase.textContent = (phase || "speaking").toUpperCase();
     this._counter.textContent = "";
     this._text.textContent = text || "";

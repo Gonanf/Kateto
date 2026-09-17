@@ -170,14 +170,16 @@ def test_find_interruption_cue() -> None:
 
 
 @pytest.mark.asyncio
-async def test_wait_for_speech_finish_synchronizes_with_player() -> None:
+async def test_pace_applies_delay_without_waiting_for_playback() -> None:
+    # Data-lane model: the orchestrator never waits on TTS/playback between
+    # turns — the player's lane sequencer guarantees audio ordering. Pacing is
+    # a pure optional sleep.
     from kateto.plugins.bate_debate.orchestrator import _AsyncDebate
-    import random
 
     class MockPlayer:
         name = "audio_output_player"
         enabled = True
-        _playing = True
+        _playing = True  # never goes idle
 
         async def wait_idle(self, timeout: float | None = None) -> bool:
             while self._playing:
@@ -199,23 +201,68 @@ async def test_wait_for_speech_finish_synchronizes_with_player() -> None:
         debaters=["whisperer", "doktor"],
         provider_factory=lambda vid: None,
         manager=mgr,
-        rng=random.Random(42),
+        rng=__import__("random").Random(7),
         delay_between_arguments=0.05,
     )
 
-    # When: player starts playing asynchronously
-    async def simulate_audio():
-        await asyncio.sleep(0.05)
-        mgr.player._playing = True
-        await asyncio.sleep(0.15)
-        mgr.player._playing = False
-
-    sim_task = asyncio.create_task(simulate_audio())
+    # When: the player is still playing and we pace between turns
     t0 = asyncio.get_running_loop().time()
-    await engine._wait_for_speech_finish("Breve prueba de sincronización de voz.")
+    await engine._pace()
     elapsed = asyncio.get_running_loop().time() - t0
-    await sim_task
 
-    # Then: it waited for the player to finish playing plus the argument delay
-    assert elapsed >= 0.20
+    # Then: _pace returns after the optional delay WITHOUT waiting for the
+    # still-playing player (the next turn's generation pipelines behind it).
+    assert 0.04 <= elapsed < 0.2
+
+
+@pytest.mark.asyncio
+async def test_emit_waits_until_voice_is_actually_playing() -> None:
+    # Data-lane model: text is broadcast when the voice's lane reaches the
+    # device, not when generation finishes — subtitles no longer lead audio.
+    from kateto.plugins.bate_debate.orchestrator import _AsyncDebate
+
+    class SyncPlayer:
+        name = "audio_output_player"
+        enabled = True
+        is_busy = True
+        _pipeline_queues = {"jane": asyncio.Queue()}
+        _playing_speaker = "jane"
+
+    class MockManager:
+        def __init__(self):
+            self.player = SyncPlayer()
+
+        def get_plugin(self, name):
+            if name == "audio_output_player":
+                return self.player
+            return None
+
+    mgr = MockManager()
+    engine = _AsyncDebate(
+        judge="jane",
+        debaters=["whisperer", "doktor"],
+        provider_factory=lambda vid: None,
+        manager=mgr,
+        rng=__import__("random").Random(3),
+    )
+
+    spoken: list[tuple[str, str]] = []
+    engine.on_speak = lambda voice_id, role, phase, text: spoken.append((voice_id, phase))
+
+    # When: doktor's text is ready but jane's lane is still playing; doktor's
+    # lane reaches the device 0.1s later.
+    async def _become_head():
+        await asyncio.sleep(0.1)
+        mgr.player._playing_speaker = "doktor"
+
+    task = asyncio.create_task(_become_head())
+    t0 = asyncio.get_running_loop().time()
+    await engine._emit("doktor", "argument", "texto de prueba")
+    elapsed = asyncio.get_running_loop().time() - t0
+    await task
+
+    # Then: the speak broadcast waited for doktor to be the audible speaker
+    assert elapsed >= 0.1
+    assert spoken == [("doktor", "argument")]
+
 

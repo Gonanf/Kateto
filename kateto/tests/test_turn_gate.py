@@ -53,8 +53,8 @@ async def test_decide_external_queues_different_prompt_while_turn_in_flight() ->
 
 
 @pytest.mark.asyncio
-async def test_decide_queues_when_mixer_busy() -> None:
-    # Given: the mixer is mid-playback
+async def test_decide_executes_while_mixer_busy() -> None:
+    # Given: the mixer is mid-playback (another voice's lane is yielding)
     manager, gate = await _with_gate()
     await manager.emit(
         "audio_output_status",
@@ -62,8 +62,9 @@ async def test_decide_queues_when_mixer_busy() -> None:
         source="player",
     )
     await manager.wait_for_idle(timeout=5)
-    # Then: an external generate is queued while another voice speaks
-    assert gate.decide(voice="jane", prompt="hola", origin="external") is Decision.QUEUE
+    # Then: generation is NOT gated on playback (data-lane model): the voice
+    # generates immediately and the player serializes its lane at the device.
+    assert gate.decide(voice="jane", prompt="hola", origin="external") is Decision.EXECUTE
 
 
 @pytest.mark.asyncio
@@ -191,7 +192,7 @@ async def test_interrupt_cancels_generation_mid_stream(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_followup_queued_while_mixer_busy_then_executes_when_free() -> None:
+async def test_followup_executes_while_mixer_busy_but_queues_while_turn_held() -> None:
     # Given: the mixer is playing another voice's speech
     manager, gate = await _with_gate()
     await manager.emit(
@@ -200,14 +201,13 @@ async def test_followup_queued_while_mixer_busy_then_executes_when_free() -> Non
         source="player",
     )
     await manager.wait_for_idle(timeout=5)
-    # Then: a follow-up attempt cannot take the turn
+    # Then: playback no longer blocks generation (data-lane model) — the
+    # follow-up claims the turn and its lane queues at the player.
+    assert gate.decide(voice="doktor", prompt="followup", origin="followup") is Decision.EXECUTE
+    # When: another voice tries to follow up while doktor holds the turn
+    gate.release("doktor")
+    assert gate.decide(voice="jane", prompt="first", origin="external") is Decision.EXECUTE
+    # Then: the follow-up is queued until the active turn is released
     assert gate.decide(voice="doktor", prompt="followup", origin="followup") is Decision.QUEUE
-    # When: the playback finishes
-    await manager.emit(
-        "audio_output_status",
-        AudioOutputStatusData(status=AudioOutputStatus.IDLE),
-        source="player",
-    )
-    await manager.wait_for_idle(timeout=5)
-    # Then: the turn is free again
+    gate.release("jane")
     assert gate.decide(voice="doktor", prompt="followup", origin="followup") is Decision.EXECUTE

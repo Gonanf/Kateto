@@ -345,7 +345,7 @@ async def test_workflow_calls_real_voice_provider_for_automatic_request(tmp_path
         profile=VoiceProfile(
             voice_id="doktor",
             display_name="Doktor",
-            role=VoiceRole.DELIVERY_ADVISOR,
+            role=VoiceRole.IMPROVISER,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),

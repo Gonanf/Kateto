@@ -186,7 +186,7 @@
       width: min(44vw, 640px); height: 40vh;
     }
     #zone-judge .furniture { height: 62%; }
-    #zone-judge .char-wrap { bottom: 34%; }
+    #zone-judge .char-wrap { bottom: 20%; }
     #zone-judge kateto-avatar.show { width: min(20vh, 190px); height: min(20vh, 190px); }
     #zone-judge .nameplate { bottom: 2%; }
 
@@ -197,7 +197,7 @@
     #zone-left { left: 2vw; }
     #zone-right { right: 2vw; }
     #zone-left .furniture, #zone-right .furniture { height: 52%; }
-    #zone-left .char-wrap, #zone-right .char-wrap { bottom: 30%; }
+    #zone-left .char-wrap, #zone-right .char-wrap { bottom: 20%; }
     #zone-left kateto-avatar.show, #zone-right kateto-avatar.show {
       width: min(32vh, 18vw, 280px);
       height: min(38vh, 22vw, 340px);
@@ -210,7 +210,7 @@
       width: min(20vw, 320px); height: 58vh; display: none;
     }
     #zone-center.occupied { display: block; }
-    #zone-center .char-wrap { bottom: 0; }
+    #zone-center .char-wrap { bottom: 20%; }
     #zone-center kateto-avatar.show { width: min(40vh, 20vw); height: min(46vh, 24vw); }
     #zone-center .nameplate { bottom: -4.5vh; }
 
@@ -385,8 +385,10 @@
       jane: "Jane", doktor: "Doktor", conquest: "Conquest", whisperer: "Whisperer",
     };
     const ROLE_LABELS = {
-      orchestrator: "Juez", adversary: "Adversaria", project_manager: "Project Manager",
-      agile_facilitator: "Agile Lead", delivery_advisor: "Delivery",
+      judge: "Juez", debater: "Debater",
+      absurd_situational: "Absurdo Situacional", chaotic_slapstick: "Slapstick Caótico",
+      deadpan_pedant: "Pedante Deadpan", deadpan_drill: "Sargento Deadpan",
+      improviser: "Improvisador",
     };
     function formatSpeakerName(voice_id, role) {
       if (!voice_id) return "Kateto";
@@ -696,7 +698,14 @@
           const rawRms = (typeof msg.rms === "number")
             ? msg.rms
             : (msg.data && typeof msg.data.rms === "number") ? msg.data.rms : 0.0;
-          const stand = currentSpeaker ? standByVoice[currentSpeaker] : null;
+          // Route by the viseme's OWN voice_id, not the last debate speaker:
+          // the orchestrator emits a "thinking" event (which assigns the stand)
+          // before the next voice's TTS starts, so its stand already exists.
+          // Falling back to currentSpeaker keeps legacy behavior for payloads
+          // without voice_id.
+          const vid = String(msg.voice_id || (msg.data && msg.data.voice_id) || "").toLowerCase();
+          const stand = (vid && standByVoice[vid]) ? standByVoice[vid]
+            : (currentSpeaker ? standByVoice[currentSpeaker] : null);
           const zone = stand ? ZONES[stand] : null;
           if (zone) {
             zone.classList.toggle("talking", rawRms > 0.05);

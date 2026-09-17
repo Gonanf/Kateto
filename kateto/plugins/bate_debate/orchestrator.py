@@ -343,13 +343,18 @@ class _AsyncDebate:
     def _profile(self, voice_id: str):
         return _PROFILES[voice_id]
 
+    def _debate_role(self, voice_id: str) -> str:
+        """Debate function (judge/debater) — the profile 'role' is a personality
+        archetype, not a courtroom function, so the overlay gets this instead."""
+        return "judge" if voice_id == self.judge else "debater"
+
     def _emit_thinking(self, voice_id: str) -> None:
         """Announce a 'thinking' tick so the overlay shows the pending speaker's stand."""
         if self.on_speak is None:
             return
         try:
             prof = self._profile(voice_id)
-            self.on_speak(voice_id, prof.role.value, PHASE_THINKING, "")
+            self.on_speak(voice_id, self._debate_role(voice_id), PHASE_THINKING, "")
         except Exception as exc:  # pragma: no cover - best effort
             logger.warning("on_speak (thinking) callback failed: {}", exc)
 
@@ -383,38 +388,53 @@ class _AsyncDebate:
         # Realistic Spanish speaking rate: ~135-145 WPM (~0.42s per word).
         return max(2.0, min(35.0, words * 0.42))
 
-    async def _wait_for_speech_finish(self, text: str) -> None:
-        if self.delay_between_arguments <= 0.0 and self.manager is None:
-            return
+    async def _pace(self) -> None:
+        """Optional inter-turn pacing (opt-in via ``delay_between_arguments``).
 
-        words = len((text or "").split())
-        est_duration = max(1.8, words * 0.42)
-        idle_timeout = max(4.0, min(25.0, est_duration * 1.5))
-
-        if self.manager is not None and hasattr(self.manager, "get_plugin"):
-            # 1. Wait for active TTS plugins to finish synthesis & queue draining
-            for tts_name in ("audio_output_edgetts", "audio_output_boson", "audio_output_camb", "audio_output_zonos"):
-                tts_plugin = self.manager.get_plugin(tts_name)
-                if tts_plugin is not None and getattr(tts_plugin, "enabled", True) and hasattr(tts_plugin, "wait_idle"):
-                    await tts_plugin.wait_idle(timeout=idle_timeout)
-
-            # 2. Wait for audio output player to finish hardware playback
-            player = self.manager.get_plugin("audio_output_player")
-            if player is not None and getattr(player, "enabled", True) and hasattr(player, "wait_idle"):
-                await player.wait_idle(timeout=idle_timeout)
-            elif player is None:
-                await asyncio.sleep(est_duration)
-        else:
-            await asyncio.sleep(est_duration)
-
+        Audio ordering is handled by the player's lane sequencer: generation of
+        the next turn pipelines freely while the previous turn is still
+        audible, so no playback wait is inserted between turns.
+        """
         if self.delay_between_arguments > 0.0:
             await asyncio.sleep(self.delay_between_arguments)
 
-    def _emit(self, voice_id: str, phase: str, text: str) -> Turn:
+    async def _wait_until_speaking(self, voice_id: str, timeout: float = 30.0) -> None:
+        """Wait until this voice's data lane is the one actually reaching the device.
+
+        Keeps the overlay transcript/subtitles in lock-step with audible
+        playback: text is broadcast when the voice starts being heard, not when
+        generation finishes (which, with the lane sequencer, can be much
+        earlier). Degrades gracefully: without a player, without TTS lanes, or
+        on timeout, text is emitted immediately (old behavior).
+        """
+        if self.manager is None or not hasattr(self.manager, "get_plugin"):
+            return
+        player = self.manager.get_plugin("audio_output_player")
+        if player is None or not hasattr(player, "_playing_speaker"):
+            return
+        deadline = time.monotonic() + timeout
+        idle_since: float | None = None
+        while time.monotonic() < deadline:
+            if getattr(player, "_playing_speaker", None) == voice_id:
+                return
+            # If the player is completely idle and this voice never opened a
+            # lane, there is no audio to sync with — emit now.
+            busy = player.is_busy or bool(getattr(player, "_pipeline_queues", None))
+            if not busy:
+                if idle_since is None:
+                    idle_since = time.monotonic()
+                elif time.monotonic() - idle_since > 2.0:
+                    return
+            else:
+                idle_since = None
+            await asyncio.sleep(0.02)
+
+    async def _emit(self, voice_id: str, phase: str, text: str) -> Turn:
         prof = self._profile(voice_id)
+        await self._wait_until_speaking(voice_id)
         if self.on_speak is not None:
             try:
-                self.on_speak(voice_id, prof.role.value, phase, text)
+                self.on_speak(voice_id, self._debate_role(voice_id), phase, text)
             except Exception as exc:  # pragma: no cover - best effort
                 logger.warning("on_speak callback failed: {}", exc)
         return Turn(
@@ -613,8 +633,8 @@ class _AsyncDebate:
         # a) Opening: judge frames the topic (or uses provided topic).
         opening = await self._judge_propose_topic(forced=topic)
         rec.topic = opening
-        rec.turns.append(self._emit(self.judge, PHASE_OPENING, opening))
-        await self._wait_for_speech_finish(opening)
+        rec.turns.append(await self._emit(self.judge, PHASE_OPENING, opening))
+        await self._pace()
 
         # b) Arguments: each debater in turn.
         max_objections = 2
@@ -622,7 +642,7 @@ class _AsyncDebate:
             for vid in self.debaters:
                 stance = stances.get(vid, "Postura argumentativa")
                 text = await self._argument(vid, self._transcript(rec.turns), rec.topic, stance)
-                rec.turns.append(self._emit(vid, PHASE_ARGUMENT, text))
+                rec.turns.append(await self._emit(vid, PHASE_ARGUMENT, text))
 
                 # Check if a random other debater interrupts with a counter-argument
                 interrupted = False
@@ -671,12 +691,11 @@ class _AsyncDebate:
                                 )
 
                             rec.turns.append(
-                                self._emit(candidate, PHASE_OBJECTION, obj_text)
+                                await self._emit(candidate, PHASE_OBJECTION, obj_text)
                             )
-                            await self._wait_for_speech_finish(obj_text)
 
                             rebut = await self._rebuttal(vid, obj_text)
-                            rec.turns.append(self._emit(vid, PHASE_REBUTTAL, rebut))
+                            rec.turns.append(await self._emit(vid, PHASE_REBUTTAL, rebut))
                             rec.objections.append(
                                 Objection(
                                     raised_by=candidate,
@@ -691,10 +710,9 @@ class _AsyncDebate:
                                     reasoning="",
                                 )
                             )
-                            await self._wait_for_speech_finish(rebut)
 
                 if not interrupted:
-                    await self._wait_for_speech_finish(text)
+                    await self._pace()
 
         # Fallback for self-test / deterministic testing: ensure 1 objection if none occurred
         if not rec.objections and len(self.debaters) >= 2:
@@ -706,10 +724,9 @@ class _AsyncDebate:
             if obj_text:
                 if self.event_client is not None:
                     await self.event_client.interrupt(reason="objection")
-                rec.turns.append(self._emit(candidate, PHASE_OBJECTION, obj_text))
-                await self._wait_for_speech_finish(obj_text)
+                rec.turns.append(await self._emit(candidate, PHASE_OBJECTION, obj_text))
                 rebut = await self._rebuttal(vid, obj_text)
-                rec.turns.append(self._emit(vid, PHASE_REBUTTAL, rebut))
+                rec.turns.append(await self._emit(vid, PHASE_REBUTTAL, rebut))
                 rec.objections.append(
                     Objection(
                         raised_by=candidate,
@@ -722,7 +739,6 @@ class _AsyncDebate:
                         reasoning="",
                     )
                 )
-                await self._wait_for_speech_finish(rebut)
 
         # d) Judge ruling on each objection.
         objections_block = (
@@ -736,13 +752,12 @@ class _AsyncDebate:
         ruling_text, rulings = await self._ruling(
             self._transcript(rec.turns), objections_block
         )
-        rec.turns.append(self._emit(self.judge, PHASE_RULING, ruling_text))
+        rec.turns.append(await self._emit(self.judge, PHASE_RULING, ruling_text))
         for obj, (ruling, reasoning) in zip(
             rec.objections, rulings or [("", "")] * len(rec.objections)
         ):
             obj.ruling = ruling or "denied"
             obj.reasoning = reasoning
-        await self._wait_for_speech_finish(ruling_text)
 
         # e) Final verdict.
         rulings_block = (
@@ -756,8 +771,7 @@ class _AsyncDebate:
             self._transcript(rec.turns), rulings_block
         )
         rec.verdict = verdict
-        rec.turns.append(self._emit(self.judge, PHASE_VERDICT, verdict))
-        await self._wait_for_speech_finish(verdict)
+        rec.turns.append(await self._emit(self.judge, PHASE_VERDICT, verdict))
         return rec
 
 

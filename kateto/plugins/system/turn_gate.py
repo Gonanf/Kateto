@@ -132,19 +132,25 @@ class TurnGate(Plugin):
 
     def decide(self, *, voice: str, prompt: str, origin: str) -> Decision:
         """Feed-only decision: ``origin`` is "external" (user/system: steering
-        priority) or "followup" (inter-voice: only when no other voice holds the turn)."""
+        priority) or "followup" (inter-voice: only when no other voice holds the turn).
+
+        Data-lane model: generation is never gated on playback. A voice may
+        generate (and its TTS lane buffer) while another voice's audio is still
+        playing — the audio_output_player serializes lanes at the device, so
+        overlapping speech is impossible by construction.
+        """
         if self._consume_ignored(prompt):
             return Decision.DISCARD
         if origin == "followup":
             if voice in self._barge_in or (
                 self._active is not None and self._active != voice
-            ) or self._mixer_busy:
+            ):
                 return Decision.QUEUE
             self._claim(voice, prompt)
             return Decision.EXECUTE
         self._steering = False
         self._barge_in.discard(voice)
-        if self._active is not None or self._mixer_busy:
+        if self._active is not None:
             if self._active_prompt is not None and prompt == self._active_prompt:
                 return Decision.DISCARD
             return Decision.QUEUE
@@ -187,7 +193,7 @@ class TurnGate(Plugin):
         manager = self.manager
         if manager is None or not self._pending:
             return
-        if self._active is not None or self._mixer_busy or self._steering:
+        if self._active is not None or self._steering:
             return
         for _ in range(len(self._pending)):
             event, data, target = self._pending[0]

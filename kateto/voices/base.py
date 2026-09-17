@@ -201,11 +201,18 @@ def get_pipeline(voice_id: str) -> AudioPipeline | None:
 
 
 class VoiceRole(StrEnum):
-    ORCHESTRATOR = "orchestrator"
-    DELIVERY_ADVISOR = "delivery_advisor"
-    AGILE_FACILITATOR = "agile_facilitator"
-    PROJECT_MANAGER = "project_manager"
-    ADVERSARY = "adversary"
+    """Comedy personality archetypes — NOT work roles.
+
+    The criteria comes from the kateto-train research (comedy improvisation
+    archetypes + anti-sycophancy rioplatense alignment): voices differ only in
+    personality, never in job function.
+    """
+
+    SITUATIONAL_ABSURD = "absurd_situational"
+    CHAOTIC_SLAPSTICK = "chaotic_slapstick"
+    DEADPAN_PEDANT = "deadpan_pedant"
+    DEADPAN_DRILL = "deadpan_drill"
+    IMPROVISER = "improviser"
 
 
 @dataclass(frozen=True, slots=True)

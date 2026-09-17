@@ -11,7 +11,7 @@ async def test_pydantic_agent_loop_streams_text(tmp_path):
     profile = VoiceProfile(
         voice_id="jane",
         display_name="Jane",
-        role=VoiceRole.ORCHESTRATOR,
+        role=VoiceRole.SITUATIONAL_ABSURD,
         system_prompt="Test system prompt",
         relevance_terms=frozenset({"test"}),
     )

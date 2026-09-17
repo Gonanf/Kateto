@@ -299,7 +299,7 @@ class Debate(Command):
         _ = parser.add_argument("--overlay", action="store_true",
                                 help="best-effort: reenvia cada turno al visual overlay por WS (no fatal)")
         _ = parser.add_argument("--delay", type=float, default=None,
-                                help="pausa en segundos entre argumentos (default: 3.5s para debates reales, 0.0s en mock)")
+                                help="pausa opcional entre turnos en segundos (default: 0.5s; el orden de audio lo garantiza el lane sequencer)")
         return parser
 
     @override

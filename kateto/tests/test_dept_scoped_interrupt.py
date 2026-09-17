@@ -16,7 +16,7 @@ async def test_dept_scoped_interrupt(tmp_path):
     profile_fun = VoiceProfile(
         voice_id="jane",
         display_name="Jane",
-        role=VoiceRole.ORCHESTRATOR,
+        role=VoiceRole.SITUATIONAL_ABSURD,
         system_prompt="Fun voice",
         relevance_terms=frozenset({"fun"}),
         depts=("fun",),
@@ -24,7 +24,7 @@ async def test_dept_scoped_interrupt(tmp_path):
     profile_mgmt = VoiceProfile(
         voice_id="doktor",
         display_name="Doktor",
-        role=VoiceRole.PROJECT_MANAGER,
+        role=VoiceRole.DEADPAN_PEDANT,
         system_prompt="Management voice",
         relevance_terms=frozenset({"mgmt"}),
         depts=("management",),

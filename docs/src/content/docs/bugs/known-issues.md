@@ -92,6 +92,7 @@ description: "Known Issues — índice de bugs"
 | 85 | Fuga de bandera _playing en EdgeTTS causando congelamiento de 45s en wait_idle | Crítica | `plugins/audio_output/edgetts.py`, `plugins/bate_debate/` | [85-edgetts-playing-flag-leak-and-wait-idle-stall.md](./bugs/85-edgetts-playing-flag-leak-and-wait-idle-stall.md) |
 | 86 | ALSA mmap xrun en streams persistentes y demora artificial en cue de objeción | Crítica | `plugins/audio_output/player.py`, `plugins/bate_debate/` | [86-alsa-mmap-xrun-and-stream-lifecycle.md](./bugs/86-alsa-mmap-xrun-and-stream-lifecycle.md) |
 | 87 | Voice generate fails with ReferenceClipError when TTS provider is not Zonos | Alta | `kateto/voices/base.py` | [87-reference-wav-validation-blocks-non-zonos-tts.md](./bugs/87-reference-wav-validation-blocks-non-zonos-tts.md) |
+| 88 | Mixer task dies on PortAudio host error -9999 (unretrieved exception, audio silent) | Alta | `kateto/plugins/audio_output/player.py` | [88-mixer-portaudio-host-error-kills-task.md](./bugs/88-mixer-portaudio-host-error-kills-task.md) |
 
 ---
 

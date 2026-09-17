@@ -138,7 +138,7 @@ def _make_voice(config_dir: Path, provider: _ToolCallingProvider | None = None) 
         profile=VoiceProfile(
             voice_id="doktor",
             display_name="Doktor",
-            role=VoiceRole.DELIVERY_ADVISOR,
+            role=VoiceRole.IMPROVISER,
             system_prompt="You are Doktor.",
             relevance_terms=frozenset(),
         ),

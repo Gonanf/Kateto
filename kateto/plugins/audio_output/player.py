@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import struct
 import time
 from typing import override
 
 from anyio import to_thread
+from loguru import logger
 from pydantic import BaseModel
 import sounddevice
 
@@ -107,10 +107,18 @@ class AudioOutputPlayer(Plugin):
         self._interrupted_at: float = 0.0
         self._current_speaker: str | None = None
         self._interrupted_voice: str | None = None
+        # Voice whose lane is CURRENTLY reaching the device (set by the
+        # sequencer on every head-lane write). Overlay/transcript consumers
+        # use it to sync text with actual audible playback.
+        self._playing_speaker: str | None = None
         self._status_emitted: bool = False
         self._mixer_task: asyncio.Task[None] | None = None
         self._active_pipelines: dict[str, AudioPipeline] = {}
         self._pipeline_queues: dict[str, asyncio.Queue[bytes | None]] = {}
+        # Raw data lanes for non-streaming TTS (EdgeTTS/Boson/CAMB): same lane
+        # model as pipelines so the mixer serializes ALL producers per voice.
+        self._raw_lanes: dict[str, asyncio.Queue[bytes | None]] = {}
+        self._raw_formats: dict[str, tuple[int, int]] = {}
         self._rms_processors: dict[str, RMSProcessor] = {}
         self._last_write_time: float = 0.0
 
@@ -136,6 +144,8 @@ class AudioOutputPlayer(Plugin):
         self._mixer_task = None
         self._active_pipelines.clear()
         self._pipeline_queues.clear()
+        self._raw_lanes.clear()
+        self._raw_formats.clear()
         await self._set_playing(False)
 
     @property
@@ -166,13 +176,13 @@ class AudioOutputPlayer(Plugin):
                     await pipeline.pcm_queue.put(None)
                 return
         _validate_pcm(data)
+        key = data.voice_id or ""
         if data.final:
-            self._close_stream()
-            await self._set_playing(False)
-            self._interrupted = False
-            self._interrupted_voice = None
-            if not self.is_busy:
-                self._idle_event.set()
+            # Final chunk closes this voice's raw data lane: the sequencer
+            # advances to the next lane when the sentinel drains.
+            lane = self._raw_lanes.get(key)
+            if lane is not None:
+                await lane.put(None)
             return
         if not data.samples:
             return
@@ -183,89 +193,121 @@ class AudioOutputPlayer(Plugin):
             self._interrupted = False
             self._interrupted_voice = None
         self._current_speaker = data.voice_id
-        stream = await self._stream_for(data)
-        # ponytail: chunked write + per-window RMS so the overlay jaw moves
-        # continuously for non-streaming TTS (EdgeTTS/Boson); Zonos path uses the mixer.
-        processor = self._rms_for(data.voice_id or "")
-        window = max(2, int(data.sample_rate * 0.02) * 2)
-        for offset in range(0, len(data.samples), window):
-            if self._interrupted or self._stream is None:
-                break
-            chunk = data.samples[offset : offset + window]
-            if not chunk:
-                continue
-            try:
-                _ = await to_thread.run_sync(stream.write, chunk)
-                self._last_write_time = time.monotonic()
-            except Exception:
-                # ponytail: never abort() on write failure — stream may be in
-                # xrun-corrupted state where abort() triggers double-free in
-                # PortAudio's ALSA mmap path. Graceful stop+close+reopen.
-                self._close_stream()
-                stream = await self._stream_for(data)
-                try:
-                    _ = await to_thread.run_sync(stream.write, chunk)
-                    self._last_write_time = time.monotonic()
-                except Exception:
-                    break
-            if self._interrupted or self._stream is None:
-                break
-            await self._send_viseme(data.voice_id, processor.process(chunk), data.text)
-
-        if self._interrupted:
-            self._close_stream()
-            await self._set_playing(False)
-            self._interrupted = False
-            self._interrupted_voice = None
+        # Data lane model: every producer gets its own FIFO lane; the mixer
+        # serializes lanes in arrival order (no mixing, no overlap). A speak
+        # event that arrives while another lane is still yielding simply opens
+        # a new lane behind the current one.
+        # ponytail: lane maxsize bounds memory if the head lane stalls forever.
+        lane = self._raw_lanes.get(key)
+        if lane is None:
+            lane = asyncio.Queue(maxsize=64)
+            self._raw_lanes[key] = lane
+            self._raw_formats[key] = (data.sample_rate, data.channels)
+            self._pipeline_queues[key] = lane
+            if self._mixer_task is None or self._mixer_task.done():
+                self._mixer_task = asyncio.create_task(
+                    self._run_mixer(), name="kateto-mixer"
+                )
+        await lane.put(data.samples)
 
     async def _run_mixer(self) -> None:
+        """Lane sequencer: drains one voice's data lane at a time, in arrival order.
+
+        Lanes are never mixed — a speak event that arrives while another lane is
+        still yielding is queued behind it, so overlapping generations never
+        produce overlapping speech. The `None` sentinel marks a lane as
+        finished ("stopped yielding") and advances playback to the next one.
+        """
         try:
             await self._set_playing(True)
             idle_cycles = 0
+            head_empty_since: float | None = None
             while True:
                 if not self._pipeline_queues:
                     idle_cycles += 1
                     if idle_cycles > 200:  # ~1.0s grace period between streaming phrases
                         break
+                    head_empty_since = None
                     await asyncio.sleep(0.005)
                     continue
                 idle_cycles = 0
-                done_voices: list[str] = []
-                pcm_buffers: list[bytes] = []
-                active_voice_pcms: list[tuple[str, bytes]] = []
-                for voice_id, queue in list(self._pipeline_queues.items()):
-                    try:
-                        pcm = queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        continue
-                    if pcm is None:
-                        done_voices.append(voice_id)
-                        continue
-                    if pcm:
-                        pcm_buffers.append(pcm)
-                        active_voice_pcms.append((voice_id, pcm))
-                for vid in done_voices:
-                    self._pipeline_queues.pop(vid, None)
-                    self._active_pipelines.pop(vid, None)
-                if pcm_buffers:
-                    mixed = _mix_pcm(pcm_buffers)
-                    stream = self._open_or_reopen_stream((24_000, 1))
-                    _ = await to_thread.run_sync(stream.write, mixed)
-                    self._last_write_time = time.monotonic()
-                    for vid, pcm in active_voice_pcms:
-                        rms = self._rms_for(vid).process(pcm)
-                        await self._send_viseme(vid, rms, None)
-                else:
-                    # Idle timeout: close stream after 1.5s of no data to prevent ALSA xrun
-                    if self._stream is not None and (time.monotonic() - self._last_write_time) > 1.5:
+                voice_id, queue = next(iter(self._pipeline_queues.items()))
+                try:
+                    pcm = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    # Head lane has not yielded yet (synthesis in flight): wait
+                    # for it, but drop a dead lane so it cannot block the device.
+                    now = time.monotonic()
+                    if head_empty_since is None:
+                        head_empty_since = now
+                    elif (now - head_empty_since) > 10.0:
+                        logger.warning(
+                            "audio_output_player: lane {} stalled >10s; dropping", voice_id
+                        )
+                        self._pop_lane(voice_id)
+                        head_empty_since = None
+                    elif self._stream is not None and (now - self._last_write_time) > 1.5:
+                        # Idle timeout: close stream to prevent ALSA xrun
                         self._close_stream()
+                    await asyncio.sleep(0.005)
+                    continue
+                head_empty_since = None
+                if pcm is None:
+                    # Lane stopped yielding: pop it and advance to the next lane.
+                    self._pop_lane(voice_id)
+                    self._rms_for(voice_id).reset()
+                    continue
+                if pcm:
+                    fmt = self._raw_formats.get(voice_id, (24_000, 1))
+                    try:
+                        stream = self._open_or_reopen_stream(fmt)
+                        _ = await to_thread.run_sync(stream.write, pcm)
+                        self._last_write_time = time.monotonic()
+                    except (
+                        sounddevice.PortAudioError,
+                        ValueError,
+                        AudioOutputDeviceError,
+                    ) as error:
+                        # Host error (e.g. PaErrorCode -9999 "Unanticipated host
+                        # error"): the stream is dead, not the sequencer. Drop
+                        # this chunk, close the corrupted stream, and let the
+                        # next iteration reopen a fresh one. Never let the
+                        # exception escape — a dead sequencer task silently
+                        # kills all output.
+                        logger.warning(
+                            "audio_output_player: device write failed ({}); "
+                            "reopening stream", error,
+                        )
+                        self._close_stream()
+                        self._last_write_time = time.monotonic()
+                        await self._set_playing(False)
+                        await asyncio.sleep(0.05)
+                    rms = self._rms_for(voice_id).process(pcm)
+                    if self._playing_speaker != voice_id:
+                        # New lane reached the device: this voice is now the
+                        # one actually being heard.
+                        self._playing_speaker = voice_id
+                    await self._send_viseme(voice_id, rms, None)
+                else:
                     await asyncio.sleep(0.005)
         except asyncio.CancelledError:
             pass
+        except Exception as error:  # pragma: no cover - defensive
+            # Last-resort guard: a sequencer task that dies with an unretrieved
+            # exception leaves the bus up but audio permanently silent.
+            logger.exception("audio_output_player: mixer crashed: {}", error)
         finally:
             self._active_pipelines.clear()
             self._pipeline_queues.clear()
+            self._raw_lanes.clear()
+            self._raw_formats.clear()
             await self._set_playing(False)
+
+    def _pop_lane(self, voice_id: str) -> None:
+        self._pipeline_queues.pop(voice_id, None)
+        self._active_pipelines.pop(voice_id, None)
+        self._raw_lanes.pop(voice_id, None)
+        self._raw_formats.pop(voice_id, None)
 
     @override
     async def _enqueue(self, envelope: EventEnvelope[BaseModel], handler: EventHandler) -> None:
@@ -301,11 +343,11 @@ class AudioOutputPlayer(Plugin):
                 if "voice" in plugin.capabilities and data.dept in plugin.depts
             }
         if target_voices is not None:
-            for voice_id in list(self._active_pipelines.keys()):
+            for voice_id in list(self._pipeline_queues.keys()):
                 if voice_id in target_voices:
-                    self._active_pipelines.pop(voice_id, None)
-                    self._pipeline_queues.pop(voice_id, None)
-            if not self._active_pipelines:
+                    self._pop_lane(voice_id)
+            if not self._pipeline_queues:
+                self._playing_speaker = None
                 self._close_stream()
                 if self._mixer_task is not None and not self._mixer_task.done():
                     self._mixer_task.cancel()
@@ -328,29 +370,11 @@ class AudioOutputPlayer(Plugin):
             self._mixer_task = None
             self._active_pipelines.clear()
             self._pipeline_queues.clear()
+            self._raw_lanes.clear()
+            self._raw_formats.clear()
+            self._playing_speaker = None
             await self._set_playing(False)
             self._idle_event.set()
-
-    async def _stream_for(self, data: AudioOutput) -> SoundDeviceOutputStream:
-        requested_format = (data.sample_rate, data.channels)
-        stream = self._stream
-        if stream is not None and self._stream_format != requested_format:
-            self._close_stream()
-            await self._set_playing(False)
-            stream = None
-        if stream is None:
-            stream = self._factory.create(
-                device=self._device,
-                sample_rate=data.sample_rate,
-                channels=data.channels,
-            )
-            stream.start()
-            self._stream = stream
-            self._stream_format = requested_format
-        else:
-            stream.start()
-        await self._set_playing(True)
-        return stream
 
     def _close_stream(self, *, abort: bool = False) -> None:
         stream = self._stream
@@ -417,23 +441,3 @@ def _validate_pcm(data: AudioOutput) -> None:
     frame_width = data.channels * 2
     if len(data.samples) % frame_width:
         raise AudioOutputFormatError(format=data.format, reason="contains an incomplete PCM sample frame")
-
-
-def _mix_pcm(buffers: list[bytes]) -> bytes:
-    """Mix multiple s16LE PCM buffers by averaging samples, with ducking."""
-    if len(buffers) == 1:
-        return buffers[0]
-    max_len = max(len(b) for b in buffers)
-    mixed = bytearray(max_len)
-    for i in range(0, max_len, 2):
-        total = 0
-        count = 0
-        for buf in buffers:
-            if i + 1 < len(buf):
-                sample = struct.unpack_from("<h", buf, i)[0]
-                total += sample
-                count += 1
-        if count > 0:
-            avg = total // count
-            struct.pack_into("<h", mixed, i, max(-32768, min(32767, avg)))
-    return bytes(mixed)

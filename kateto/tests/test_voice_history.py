@@ -114,7 +114,7 @@ async def test_stream_response_skips_reference_wav_for_non_zonos_tts(tmp_path: P
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),
@@ -146,7 +146,7 @@ async def test_voice_provider_request_includes_bounded_event_history_once(tmp_pa
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),
@@ -180,7 +180,7 @@ async def test_agent_emits_final_response_after_streamed_tool_call(tmp_path: Pat
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),
@@ -220,7 +220,7 @@ async def test_agent_returns_to_idle_when_provider_fails_after_tool_call(tmp_pat
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),
@@ -264,7 +264,7 @@ async def test_voice_provider_request_enforces_project_language(tmp_path: Path) 
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),
@@ -311,7 +311,7 @@ async def test_workflow_request_adds_internal_engine_system_message(tmp_path: Pa
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),
@@ -355,7 +355,7 @@ async def test_workflow_completion_tool_describes_array_fields_for_the_model(tmp
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),
@@ -396,7 +396,7 @@ async def test_voice_provider_request_lists_available_workflows(tmp_path: Path) 
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),
@@ -429,7 +429,7 @@ async def test_voice_provider_history_retains_received_events_and_own_output_onc
         profile=VoiceProfile(
             voice_id="jane",
             display_name="Jane",
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.SITUATIONAL_ABSURD,
             system_prompt="system",
             relevance_terms=frozenset(),
         ),

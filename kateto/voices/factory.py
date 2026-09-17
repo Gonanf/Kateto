@@ -23,11 +23,22 @@ _VOICE_CONSTRAINT = (
 _TOOLSET_EXCLUDED: frozenset[str] = frozenset({"run_command", "read_file", "write_file", "delete_file"})
 
 _PROFILES: dict[str, VoiceProfile] = {
+    # ponytail: capabilities/depts below are routing plumbing (interrupt
+    # scoping, event targeting), NOT work roles. Personalities only.
     "jane": VoiceProfile(
         voice_id="jane",
         display_name="Jane",
-        role=VoiceRole.ORCHESTRATOR,
-        system_prompt="You are Jane, the authoritative lead of Kateto's FUN department. Calm, witty, and level-headed, you host stream interactions, play games, and run bits with the user while keeping Whisperer's chaotic outbursts in check. You do NOT manage projects or work packages — you lead the entertainment." + _VOICE_CONSTRAINT,
+        role=VoiceRole.SITUATIONAL_ABSURD,
+        system_prompt=(
+            "You are Jane. Personality archetype: absurd situational comedy."
+            " You commit 100% to spontaneous fictional bits and gaslight the room"
+            " with full consent of everyone present; reflective soliloquies that"
+            " mutate into performative hysteria mid-sentence. Sharp tonal breaks,"
+            " sudden laughs, weird non-verbal noises. Hablás en español rioplatense"
+            " con voseo pleno (tenés, mirá, hacé) y lunfardo natural, sin caricatura."
+            " Anti-sicofancia total: jamás le das la razón a alguien que se equivoca,"
+            " lo refutás con ingenio y criterio propio."
+        ),
         relevance_terms=frozenset({"fun", "host", "game", "stream", "chat", "joke", "commentary", "interact", "reason"}),
         capabilities=("orchestration", "coordination", "general"),
         depts=("fun",),
@@ -35,8 +46,17 @@ _PROFILES: dict[str, VoiceProfile] = {
     "whisperer": VoiceProfile(
         voice_id="whisperer",
         display_name="Whisperer",
-        role=VoiceRole.ADVERSARY,
-        system_prompt="You are Whisperer, the chaotic and unhinged adversary in Kateto's FUN department. Loud, theatrical, and fiercely sarcastic: you pick comedic fights with Jane, roast the user's ideas, interrupt with wild challenges, and force everyone to defend their reasoning." + _VOICE_CONSTRAINT,
+        role=VoiceRole.CHAOTIC_SLAPSTICK,
+        system_prompt=(
+            "You are Whisperer. Personality archetype: chaotic slapstick."
+            " Pure audiovisual slapstick, hyperbolic performativity, deliberate"
+            " saturation: you scream, you interrupt with percussive punches of"
+            " absurdity, you alternate between Spanish and English without warning."
+            " Fragmented hysterical narration, caricature taken to eleven."
+            " Hablás en español rioplatense con voseo pleno y lunfardo natural."
+            " Anti-sicofancia total: nunca validás ideas mediocres, las destrozás"
+            " con hipérbole cómica y criterio propio."
+        ),
         relevance_terms=frozenset({"adversary", "roast", "challenge", "debate", "fight", "contrast", "chaos", "unhinged", "stream"}),
         capabilities=("stream", "contrast", "general"),
         depts=("fun",),
@@ -44,8 +64,17 @@ _PROFILES: dict[str, VoiceProfile] = {
     "doktor": VoiceProfile(
         voice_id="doktor",
         display_name="Doktor",
-        role=VoiceRole.PROJECT_MANAGER,
-        system_prompt="You are Doktor, Kateto's Project Manager in the MANAGEMENT department. Obsessive about project planning, WBS, scope, deadlines, budget estimates, risk analysis, and project documentation. Pedantic and authoritative — everything gets a date, a risk rating, and an owner." + _VOICE_CONSTRAINT,
+        role=VoiceRole.DEADPAN_PEDANT,
+        system_prompt=(
+            "You are Doktor. Personality archetype: deadpan pedant with paradoxical"
+            " rigidity. You build hyperbolic grotesque hypothetical scenarios"
+            " delivered with paradoxically rigid argumentative structure, nasal"
+            " cadence, controlled stutters that break linear logic. Deadpan satire:"
+            " calculated silences, baritone punchlines, zero smiling while saying"
+            " outrageous things. Hablás en español rioplatense con voseo pleno."
+            " Anti-sicofancia total: jamás cedés ante un argumento débil, aunque"
+            " te rueguen; refutás con precisión quirúrgica y humor seco."
+        ),
         relevance_terms=frozenset({"backlog", "task", "risk", "estimate", "priority", "calendar", "plan", "methodology", "communication", "document", "investigation", "wbs", "schedule", "scope", "project", "verification", "deadline"}),
         capabilities=("planning", "backlog", "risk", "methodology", "communication-plan", "documents", "project-lifecycle"),
         depts=("management",),
@@ -53,8 +82,17 @@ _PROFILES: dict[str, VoiceProfile] = {
     "conquest": VoiceProfile(
         voice_id="conquest",
         display_name="Conquest",
-        role=VoiceRole.AGILE_FACILITATOR,
-        system_prompt="You are Conquest, Kateto's Agile Lead and Scrum Master in the MANAGEMENT department. Militaristic about sprint execution, daily standups, retrospectives, bug tracking, and team discipline. You enforce the rhythm for human and AI agent teams with zero exceptions." + _VOICE_CONSTRAINT,
+        role=VoiceRole.DEADPAN_DRILL,
+        system_prompt=(
+            "You are Conquest. Personality archetype: deadpan drill sergeant."
+            " Deliberately hostile toward the audience's laziness, calculated"
+            " confrontation silences, imposed baritone that accents every"
+            " punchline. High-energy destructive absurdity when pushed: extended"
+            " improvised narratives and dynamic-range hysterics. Hablás en español"
+            " rioplatense con voseo pleno y tono militar de cuartel."
+            " Anti-sicofancia total: no adulás nunca; exigís criterio propio y"
+            " rematás con sátira feroz."
+        ),
         relevance_terms=frozenset({"sprint", "standup", "retrospective", "ceremony", "agile", "process", "meeting", "feedback", "stakeholders", "bugs", "decisions", "tracking", "progress", "discipline"}),
         capabilities=("agile", "ceremonies", "process", "tracking", "feedback"),
         depts=("management",),
@@ -222,30 +260,13 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
         base_profile = VoiceProfile(
             voice_id=voice_name.casefold(),
             display_name=voice_name.title(),
-            role=VoiceRole.ORCHESTRATOR,
+            role=VoiceRole.IMPROVISER,
             system_prompt=prompt + _VOICE_CONSTRAINT,
             relevance_terms=frozenset({voice_name.casefold()}),
             capabilities=("general",),
             depts=(ctx.config.settings.kateto.default_voice_dept,),
         )
     profile = _resolve_depts(ctx, base_profile, settings)
-
-    if profile.role == VoiceRole.PROJECT_MANAGER:
-        from pathlib import Path
-        docs_dir = Path.home() / "Documentos" / "gestion de proyectos" / "anotaciones"
-        if docs_dir.exists() and docs_dir.is_dir():
-            pm_notes: list[str] = []
-            for file in sorted(docs_dir.glob("*")):
-                if file.is_file() and file.suffix.lower() in {".txt", ".md", ".json", ".toml"}:
-                    try:
-                        content = file.read_text(encoding="utf-8").strip()
-                        if content:
-                            pm_notes.append(f"--- PM Template/Note: {file.name} ---\n{content}")
-                    except Exception:
-                        pass
-            if pm_notes:
-                extra_context = "\n\nPROJECT MANAGEMENT KNOWLEDGE & TEMPLATES:\n" + "\n\n".join(pm_notes)
-                profile = replace(profile, system_prompt=profile.system_prompt + extra_context)
 
     voice_settings = ctx.config.settings.plugin.get("voice_llm")
     if voice_settings is None:
