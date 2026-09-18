@@ -122,6 +122,7 @@ description: "Known Issues — índice de bugs"
 | 115 | Config por voz pisa al principal en silencio y el recap hace hablar a la voz cada 30 s | Alta | `kateto/core/config.py`, `kateto/plugins/executor/static_vision_plugin.py`, `kateto/plugins/system/external_mcp.py` | [115-precedencia-silenciosa-voz-y-recap-narra.md](./bugs/115-precedencia-silenciosa-voz-y-recap-narra.md) |
 | 116 | Describe de visión reporta ventanas de 0 s cuando la escena está quieta | Alta | `kateto/plugins/executor/static_vision_plugin.py` | [116-describe-vision-ventanas-0s-escena-quieta.md](./bugs/116-describe-vision-ventanas-0s-escena-quieta.md) |
 | 117 | El cliente MCP tiraba `isError` y un error del sidecar se narraba como descripción | Alta | `kateto/plugins/system/external_mcp.py`, `kateto/plugins/executor/static_vision_plugin.py` | [117-cliente-mcp-tiraba-iserror.md](./bugs/117-cliente-mcp-tiraba-iserror.md) |
+| 118 | Mensajes ignorados por el clasificador: quedan sin marca y el LLM los contesta en el turno siguiente | Alta | `kateto/voices/base.py` | [118-mensajes-ignorados-sin-marca-llm-contesta-despues.md](./bugs/118-mensajes-ignorados-sin-marca-llm-contesta-despues.md) |
 
 ---
 

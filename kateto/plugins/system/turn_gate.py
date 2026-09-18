@@ -9,7 +9,6 @@ from kateto.core.event import (
     AudioOutput,
     AudioOutputStatus,
     AudioOutputStatusData,
-    Classification,
     ClassificationData,
     EventModel,
     GenerateData,
@@ -21,6 +20,7 @@ from kateto.core.event import (
     VoiceStatus,
     VoiceStatusData,
 )
+from kateto.core.event import is_ignored_category
 from kateto.core.plugin import Plugin
 
 log = logger
@@ -131,7 +131,7 @@ class TurnGate(Plugin):
             self._steering = True
 
     async def on_classification(self, data: ClassificationData) -> None:
-        if data.category in (Classification.IGNORE_SELF_TALK, Classification.IGNORE_THIRD_PARTY):
+        if is_ignored_category(data.category):
             self._ignored.append(data.text)
 
     def decide(self, *, voice: str, prompt: str, origin: str) -> Decision:
