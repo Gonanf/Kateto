@@ -8,6 +8,7 @@ from asyncio import (  # noqa: ANYIO_OK
     create_task,
     current_task,
     get_running_loop,
+    sleep,
     to_thread,
 )
 from collections.abc import Callable
@@ -17,6 +18,7 @@ from time import monotonic
 from kateto.core.event import AudioData, AudioInputStatus, AudioInputStatusData, AudioOutput
 from kateto.core.plugin import Plugin
 from kateto.core.manager import PluginManager
+from kateto.core.rms import apply_ema, calculate_raw_rms
 
 from loguru import logger as log
 
@@ -57,6 +59,12 @@ class AudioInputPlugin(Plugin):
         self._capture_session = 0
         self._accepting_audio = False
         self._playback_active = False
+        self._playback_started_at: float | None = None
+        self._deferred_barge_in = False
+        self._playback_rms = 0.0
+        self._speech_onset_at: float | None = None
+        self._turn_buffer = bytearray()
+        self._turn_flush_task: Task[None] | None = None
         self._recording_status_emitted = False
         self._recording = False
         self._last_resume_gap_ms: float | None = None
@@ -85,6 +93,12 @@ class AudioInputPlugin(Plugin):
         self._recording = False
         self._recording_status_emitted = False
         self._last_resume_gap_ms = None
+        self._playback_started_at = None
+        self._deferred_barge_in = False
+        self._playback_rms = 0.0
+        self._speech_onset_at = None
+        self._cancel_turn_flush()
+        self._turn_buffer.clear()
         self._capture_session += 1
         session = self._capture_session
         self._loop = get_running_loop()
@@ -126,13 +140,32 @@ class AudioInputPlugin(Plugin):
         self._segmenter.reset()
         await self._set_recording(False)
         self._playback_active = False
+        self._playback_started_at = None
+        self._deferred_barge_in = False
+        self._playback_rms = 0.0
+        self._speech_onset_at = None
+        self._cancel_turn_flush()
+        self._turn_buffer.clear()
         self._loop = None
 
     async def on_audio_output(self, data: AudioOutput) -> None:
+        if data.samples:
+            self._playback_rms = apply_ema(calculate_raw_rms(data.samples), self._playback_rms)
         self.set_playback_active(not data.final)
 
     def set_playback_active(self, active: bool) -> None:
-        self._playback_active = active
+        if active:
+            if self._playback_active:
+                return
+            self._playback_active = True
+            self._playback_started_at = monotonic()
+            self._playback_rms = 0.0
+        else:
+            self._playback_active = False
+            self._playback_started_at = None
+            self._deferred_barge_in = False
+            self._playback_rms = 0.0
+            self._speech_onset_at = None
 
     def _callback_for(self, session: int) -> Callable:
         def callback(
@@ -168,27 +201,141 @@ class AudioInputPlugin(Plugin):
                 if samples is None:
                     break
                 speech = await to_thread(self._vad.is_speech, samples)
+                mic_rms = calculate_raw_rms(samples)
                 update = self._segmenter.consume(samples, speech=speech)
+                if not speech:
+                    self._speech_onset_at = None
                 if update.voice_started:
                     log.info("[mic] Speech detected, recording...")
                     await self._set_recording(True)
-                    await self._interrupt_playback()
+                    await self._interrupt_playback(mic_rms)
+                elif speech and self._playback_active:
+                    # Speech continues while our own voice is out: re-check every
+                    # frame so a real barge-in fires as soon as it qualifies.
+                    await self._interrupt_playback(mic_rms)
                 if update.samples is not None:
                     await self._set_recording(False)
-                    await self._emit_segment(update.samples)
+                    await self._handle_closed_segment(update.samples)
             self._queue_ready.clear()
             if self._callback_queue.pending:
                 self._queue_ready.set()
 
-    async def _interrupt_playback(self) -> None:
+    async def _interrupt_playback(self, mic_rms: float) -> None:
         if not self._config.interrupt_on_vad:
             return
+        if not self._playback_active:
+            self._speech_onset_at = None
+            await self._require_manager().interrupt(
+                reason="voice_activity",
+                source=self._event_source,
+                dept=self._config.dept,
+            )
+            return
+        now = monotonic()
+        started_at = self._playback_started_at
+        if started_at is None:
+            # ponytail: defensive — playback active without a start stamp.
+            started_at = now
+            self._playback_started_at = started_at
+        grace_ms = self._config.barge_in_grace_ms
+        elapsed_ms = (now - started_at) * 1_000
+        if elapsed_ms < grace_ms:
+            self._deferred_barge_in = True
+            self._speech_onset_at = None
+            log.info(
+                "[mic] vad ignored: own playback within grace ({elapsed:.0f}ms < {grace:.0f}ms), barge-in deferred",
+                elapsed=elapsed_ms,
+                grace=grace_ms,
+            )
+            return
+        factor = self._config.barge_in_level_factor
+        playback_rms = self._playback_rms
+        if mic_rms < playback_rms * factor:
+            self._deferred_barge_in = True
+            self._speech_onset_at = None
+            log.info(
+                "[mic] barge-in denied mic_rms={mic:.3f} playback_rms={pb:.3f} factor={f} reason=bleed elapsed_ms={el:.0f}",
+                mic=mic_rms,
+                pb=playback_rms,
+                f=factor,
+                el=elapsed_ms,
+            )
+            return
+        if self._speech_onset_at is None:
+            self._speech_onset_at = now
+        sustained_ms = (now - self._speech_onset_at) * 1_000
+        required_ms = self._config.barge_in_min_speech_ms
+        if sustained_ms < required_ms:
+            self._deferred_barge_in = True
+            log.info(
+                "[mic] barge-in denied mic_rms={mic:.3f} playback_rms={pb:.3f} factor={f} reason=too-short sustained_ms={s:.0f} required_ms={r:.0f}",
+                mic=mic_rms,
+                pb=playback_rms,
+                f=factor,
+                s=sustained_ms,
+                r=required_ms,
+            )
+            return
+        self._deferred_barge_in = False
+        self._speech_onset_at = None
+        log.info(
+            "[mic] barge-in granted mic_rms={mic:.3f} playback_rms={pb:.3f} factor={f} sustained_ms={s:.0f} elapsed_ms={el:.0f}",
+            mic=mic_rms,
+            pb=playback_rms,
+            f=factor,
+            s=sustained_ms,
+            el=elapsed_ms,
+        )
         self._playback_active = False
+        self._playback_started_at = None
+        self._playback_rms = 0.0
         await self._require_manager().interrupt(
             reason="voice_activity",
             source=self._event_source,
             dept=self._config.dept,
         )
+
+    async def _handle_closed_segment(self, samples: bytes) -> None:
+        if self._config.interrupt_on_vad and self._playback_active:
+            log.info("[mic] segment attributed to own playback, dropped")
+            return
+        self._turn_buffer.extend(samples)
+        if duration_ms(bytes(self._turn_buffer)) >= self._config.max_turn_secs * 1_000:
+            self._cancel_turn_flush()
+            await self._flush_turn()
+            return
+        self._rearm_turn_flush()
+
+    def _rearm_turn_flush(self) -> None:
+        self._cancel_turn_flush()
+        if not self._turn_buffer:
+            return
+        self._turn_flush_task = create_task(
+            self._turn_flush_later(),
+            name=f"kateto-audio-turn-{self.name}",
+        )
+
+    def _cancel_turn_flush(self) -> None:
+        task = self._turn_flush_task
+        self._turn_flush_task = None
+        if task is not None and task is not current_task():
+            task.cancel()
+
+    async def _turn_flush_later(self) -> None:
+        try:
+            await sleep(self._config.turn_silence_timeout)
+        except CancelledError:
+            return
+        if self._turn_flush_task is not current_task():
+            return
+        self._turn_flush_task = None
+        await self._flush_turn()
+
+    async def _flush_turn(self) -> None:
+        if not self._turn_buffer:
+            return
+        await self._emit_segment(bytes(self._turn_buffer))
+        self._turn_buffer.clear()
 
     async def _emit_segment(self, samples: bytes) -> None:
         dur = duration_ms(samples)

@@ -16,6 +16,24 @@ CHANNELS: Final = 1
 SAMPLE_WIDTH_BYTES: Final = 2
 PCM_FORMAT: Final = "pcm_s16le"
 DEFAULT_SILENCE_TIMEOUT: Final = 1.5
+# ponytail: 800 ms grace assumes the mic bleeds the speaker loudest right at
+# TTS onset (no AEC, no headset).  A real user barge-in sustains speech past
+# this window; self-bleed usually collapses as the utterance settles.
+# Tune via barge_in_grace_ms per plugin.  0 disables the grace entirely.
+DEFAULT_BARGE_IN_GRACE_MS: Final = 800.0
+# ponytail: without AEC the mic hears the speaker, so time alone cannot tell
+# bleed from a real barge-in.  The mic frame must exceed the smoothed playback
+# level times this factor.  Tune per hardware (mic gain vs speaker volume).
+DEFAULT_BARGE_IN_LEVEL_FACTOR: Final = 1.3
+# ponytail: a real barge-in sustains; a bleed spike does not.  Speech must stay
+# louder than the playback level for this long before we cut the response.
+DEFAULT_BARGE_IN_MIN_SPEECH_MS: Final = 300.0
+# ponytail: end-of-turn is quieter than end-of-segment.  Consecutive segments
+# closer than this merge into one turn (one Whisper pass); silence longer than
+# this flushes the turn.  silence_timeout stays the intra-turn cut.
+DEFAULT_TURN_SILENCE_TIMEOUT: Final = 2.0
+# ponytail: hard ceiling so a monologue cannot grow the turn buffer forever.
+DEFAULT_MAX_TURN_SECS: Final = 30.0
 # ponytail: 0.5 is the upstream default, but it assumes loud/normalised
 # audio.  On typical consumer mics the Silero JIT model peaks at 0.3–0.6
 # for actual speech, while silence sits below 0.03.  0.2 gives reliable
@@ -58,6 +76,16 @@ class AudioInputConfig:
     silence_timeout: float
     vad_threshold: float
     interrupt_on_vad: bool
+    # Barge-in grace: while our own playback is active, VAD activity younger
+    # than this window is ignored (it is usually the speaker bleeding into the
+    # mic).  Activity that persists beyond the window still interrupts.
+    barge_in_grace_ms: float = DEFAULT_BARGE_IN_GRACE_MS
+    # Level discriminator + sustained-speech gate (see listener._interrupt_playback).
+    barge_in_level_factor: float = DEFAULT_BARGE_IN_LEVEL_FACTOR
+    barge_in_min_speech_ms: float = DEFAULT_BARGE_IN_MIN_SPEECH_MS
+    # Turn accumulation: consecutive segments closer than this flush as one chunk.
+    turn_silence_timeout: float = DEFAULT_TURN_SILENCE_TIMEOUT
+    max_turn_secs: float = DEFAULT_MAX_TURN_SECS
     dept: str | None = "fun"
     callback_queue_capacity: int = 32
 
@@ -104,6 +132,33 @@ class AudioInputConfig:
             ),
             interrupt_on_vad=(
                 True if settings.interrupt_on_vad is None else settings.interrupt_on_vad
+            ),
+            # ponytail: PluginSettings is extra="allow", so barge_in_grace_ms
+            # can come from TOML; getattr keeps older configs working.
+            barge_in_grace_ms=(
+                DEFAULT_BARGE_IN_GRACE_MS
+                if getattr(settings, "barge_in_grace_ms", None) is None
+                else settings.barge_in_grace_ms
+            ),
+            barge_in_level_factor=(
+                DEFAULT_BARGE_IN_LEVEL_FACTOR
+                if getattr(settings, "barge_in_level_factor", None) is None
+                else settings.barge_in_level_factor
+            ),
+            barge_in_min_speech_ms=(
+                DEFAULT_BARGE_IN_MIN_SPEECH_MS
+                if getattr(settings, "barge_in_min_speech_ms", None) is None
+                else settings.barge_in_min_speech_ms
+            ),
+            turn_silence_timeout=(
+                DEFAULT_TURN_SILENCE_TIMEOUT
+                if getattr(settings, "turn_silence_timeout", None) is None
+                else settings.turn_silence_timeout
+            ),
+            max_turn_secs=(
+                DEFAULT_MAX_TURN_SECS
+                if getattr(settings, "max_turn_secs", None) is None
+                else settings.max_turn_secs
             ),
             dept=dept,
             callback_queue_capacity=(

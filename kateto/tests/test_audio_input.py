@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio  # noqa: ANYIO_OK
 from collections import deque
 from collections.abc import Callable
+from time import monotonic
 
 import pytest
 
@@ -115,13 +116,19 @@ def make_vad(scores: list[float]) -> SileroVad:
     return SileroVad(FixtureSileroModel(scores), threshold=0.5)
 
 
-def make_settings(*, device: str = "fixture", silence_timeout: float = 0.2) -> PluginSettings:
+def make_settings(
+    *,
+    device: str = "fixture",
+    silence_timeout: float = 0.2,
+    turn_silence_timeout: float = 0.2,
+) -> PluginSettings:
     return PluginSettings(
         device=device,
         sample_rate=16_000,
         silence_timeout=silence_timeout,
         vad_model="silero",
         interrupt_on_vad=True,
+        turn_silence_timeout=turn_silence_timeout,
     )
 
 
@@ -284,6 +291,14 @@ async def test_vad_interrupts_active_playback_once_per_playback_window() -> None
     await manager.enable_plugin(interrupts)
     await manager.enable_plugin(microphone)
     microphone.set_playback_active(True)
+    # Bug 94 fix: speech inside the barge-in grace window is treated as the
+    # speaker bleeding into the mic, so fast-forward the playback start past
+    # the grace to model a real user barge-in mid-response.
+    microphone._playback_started_at = monotonic() - 2.0
+    # Turn/barge-in fix: the level gate passes (no playback level tracked in
+    # this fixture) but sustained speech is required, so pre-date the speech
+    # onset to model a user that has been talking over the response.
+    microphone._speech_onset_at = monotonic() - 1.0
 
     # When: VAD sees repeated speech before the segment closes.
     capture = factory.captures[0]
