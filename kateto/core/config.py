@@ -165,6 +165,10 @@ class VoiceSettings(_ExtensibleConfigModel):
     # Reasoning effort (pydantic-ai Thinking capability). Disable for harnesses
     # like Hermes that manage thinking server-side, or for plain throughput.
     thinking: bool = True
+    # Reasoning effort for the HTTP voice_llm path (extra_body.reasoning_effort:
+    # none|minimal|low|medium|high; gateway aliases off|disabled|disable → none).
+    # Unset + thinking=False → "none"; thinking=True → not sent (model decides).
+    reasoning_effort: str | None = None
     # KV-cache prefill of the system prompt at startup. Disable for harnesses
     # that manage conversation state themselves.
     prefill: bool = True

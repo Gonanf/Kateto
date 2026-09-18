@@ -47,9 +47,11 @@ model = "KatetoTalker"
 [voice.jane]
 enabled = true
 stream = true          # streaming generation by default (VoiceSettings default is True)
-max_tokens = 4096
+max_tokens = 4096      # verbatim al proveedor (sin cap local; el gateway clampea por proveedor)
 retries = 2
 timeout = 600
+# thinking = true       # false → manda reasoning_effort="none" al proveedor
+# reasoning_effort = "none"  # none|minimal|low|medium|high (gateway: off|disabled|disable → none)
 ```
 
 ## Local (self-contained) mode

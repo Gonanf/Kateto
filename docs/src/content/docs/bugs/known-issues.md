@@ -113,6 +113,8 @@ description: "Known Issues — índice de bugs"
 | 103 | Describe periódico requiere `vision_periodic` por voz y backend | Media | `kateto/plugins/executor/static_vision_plugin.py` | [103-vision-periodica-requiere-optin-y-backend.md](./bugs/103-vision-periodica-requiere-optin-y-backend.md) |
 | 104 | Scheduler rutea el evento al target_voice y el plugin consumidor jamás lo recibe | Alta | `kateto/plugins/executor/scheduler.py` | [104-scheduler-target-voice-blackholes-plugin-events.md](./bugs/104-scheduler-target-voice-blackholes-plugin-events.md) |
 | 105 | Sospecha sin confirmar: el problema restante puede estar en el tool calling | Media | `kateto/voices/tools.py` | [105-sospecha-tool-calling-vision-mcp.md](./bugs/105-sospecha-tool-calling-vision-mcp.md) |
+| 109 | `max_tokens` de la voz capado silenciosamente a 384 | Media | `kateto/voices/base.py` | [109-max-tokens-voz-capado-384.md](./bugs/109-max-tokens-voz-capado-384.md) |
+| 110 | `thinking=false` no llega al proveedor (no se manda reasoning_effort) | Media | `kateto/voices/base.py` | [110-thinking-false-no-llega-al-proveedor.md](./bugs/110-thinking-false-no-llega-al-proveedor.md) |
 
 ---
 

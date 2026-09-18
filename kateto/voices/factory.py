@@ -308,6 +308,8 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             retries=settings.retries,
             timeout=settings.timeout,
             session_headers=headers,
+            reasoning_effort=getattr(settings, "reasoning_effort", None),
+            thinking=settings.thinking,
         )
     voice = VoiceAgent(
         profile=profile,
@@ -394,7 +396,7 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
                 system_prompt=profile.system_prompt,
                 toolsets=[kateto_toolset.toolset],
                 capabilities=capabilities,
-                model_settings=ModelSettings(max_tokens=min(settings.max_tokens or 256, 384)),
+                model_settings=ModelSettings(max_tokens=settings.max_tokens or 256),
             )
             voice.set_pydantic_agent(pydantic_agent)
         except ImportError:
