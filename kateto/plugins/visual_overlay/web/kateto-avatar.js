@@ -12,9 +12,16 @@
 
 // 1. Pure jaw kinematics formula (Kateto visual overlay standard)
 //
-// SHARED CONVENTION (única para los dos paths, ver bug 112):
-// - jawOffsetY POSITIVO = mandíbula baja = boca que abre (translateY+ en CSS).
-// - Neutro = boca cerrada = transform 0. Con silencio, todo vuelve a 0.
+// SHARED CONVENTION (única para los dos paths, ver bugs 112 y 125):
+// - La capa que se anima (.layer-jaw, avatar_jaw.png) es la de ARRIBA de la
+//   cabeza (pelo/frente/ojos/nariz/boca con dientes); .layer-head
+//   (avatar_head.png) es la de ABAJO (labios/mentón/barba/cuello) y queda fija.
+// - jawOffsetY NEGATIVO = capa de arriba que SUBE = boca que abre
+//   (translateY- en CSS). Neutro = boca cerrada = transform 0.
+//   ¡NO invertir: positivo baja la pieza de arriba y la boca se cierra/hunde!
+// - headOffsetY POSITIVO = pieza de abajo que baja = ayuda a abrir. Nunca
+//   negativo al hablar (subir la pieza de abajo cierra la boca).
+// - Con silencio, todo vuelve a 0 exacto, sin piso fijo.
 // - El movimiento es un ciclo real abre/cierra: la amplitud escala con la
 //   energía de la voz y el flap silábico (~9 Hz) la multiplica entre 0 y el
 //   máximo, así la mandíbula cruza el neutro varias veces por segundo.
@@ -24,10 +31,10 @@
 // move sideways (that was the card-level `transform` bug, fixed with the
 // independent CSS `scale` property). Primary animation path for both
 // synthetic TTS (pulseWord) and live audio (setRms).
-// Amplitud alta y agresiva (bug 122): el tope teórico es 32 px pero el máximo
-// medido real ronda ~28 px (el flap rara vez pica justo en el muestreo) con
-// media ~10 px en habla normal — el recorrido anterior (16 px, media ~4.8 px)
-// se veía poco y sin punch.
+// Amplitud alta y agresiva (bugs 122 y 125): el tope teórico es 32 px pero el
+// máximo medido real ronda ~28 px (el flap rara vez pica justo en el muestreo)
+// con media ~10 px en habla normal — el recorrido anterior (16 px, media
+// ~4.8 px) se veía poco y sin punch. Todo en NEGATIVO (hacia arriba).
 export const JAW_MAX_TRAVEL_PX = 32.0;
 export const JAW_MAX_TILT_DEG = 6.5;
 export const JAW_MAX_SHAKE_PX = 12.0;
@@ -48,7 +55,8 @@ export function computeJawKinematics(rms, nowMs) {
   // tiempo, abre con más punch) sin dejar de volver a 0 varias veces por s.
   const flap = 0.5 + 0.5 * Math.sin((t / 1000) * 2 * Math.PI * FLAP_HZ);
   const shapedFlap = Math.pow(flap, 1.25);
-  const openMovement = Number((factor * JAW_MAX_TRAVEL_PX * shapedFlap).toFixed(2));
+  // Signo en un solo lugar (bug 125): negativo = la capa de ARRIBA sube = abre.
+  const openMovement = Number((-factor * JAW_MAX_TRAVEL_PX * shapedFlap).toFixed(2));
   const sideDir = (Math.random() * 2 - 1);
   const sideShake = Number((sideDir * factor * JAW_MAX_SHAKE_PX).toFixed(2));
   // Tilt acotado al mismo máximo del backend (antes llegaba a ±40°).
@@ -63,15 +71,17 @@ export function computeJawKinematics(rms, nowMs) {
 
 // Backend-authoritative kinematics (deterministic, no jitter).
 // rms expected already normalized 0..1 (RMSProcessor output).
-// Misma convención y mismos topes que computeJawKinematics (bug 112).
+// Misma convención y mismos topes que computeJawKinematics (bugs 112 y 125):
+// jaw NEGATIVO (sube, abre), head POSITIVO leve (baja, ayuda a abrir).
+// Tilt sin invertir: es simétrico alrededor del pivote y se lee como boca.
 export function computeBackendKinematics(rms) {
   if (typeof rms !== 'number' || rms < 0.05) {
     return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0, headOffsetY: 0 };
   }
   const factor = Math.min(1.0, Math.max(0.0, (rms - 0.05) / 0.95));
-  const jawOffsetY = Number((factor * JAW_MAX_TRAVEL_PX).toFixed(2));
+  const jawOffsetY = Number((-factor * JAW_MAX_TRAVEL_PX).toFixed(2));
   const jawRotation = Number((factor * JAW_MAX_TILT_DEG).toFixed(2));
-  const headOffsetY = Number((-factor * HEAD_BOB_PX).toFixed(2));
+  const headOffsetY = Number((factor * HEAD_BOB_PX).toFixed(2));
   return { jawOffsetX: 0, jawOffsetY, jawRotation, headOffsetY };
 }
 

@@ -54,11 +54,12 @@ def map_rms_to_jaw_transform(
 ) -> tuple[float, float]:
     """Map normalized RMS to jaw kinematics (translateY in px, rotate in deg).
 
-    Spec:
+    Spec (bugs 112, 122, 125):
     - rms < 0.05 -> (0.0, 0.0)
     - factor = clamp((rms - 0.05) / 0.95, 0.0, 1.0)
-    - jawOffsetY = factor * 32.0
-    - jawRotation = factor * 6.5
+    - jawOffsetY = -factor * 32.0 (NEGATIVO = la capa de ARRIBA sube = abre;
+      ver SHARED CONVENTION en kateto-avatar.js — ¡no invertir!)
+    - jawRotation = factor * 6.5 (magnitud; gesto simétrico, sin invertir)
     Mismos topes que el JS (JAW_MAX_TRAVEL_PX / JAW_MAX_TILT_DEG, bug 122).
     """
     if rms < noise_floor:
@@ -66,7 +67,7 @@ def map_rms_to_jaw_transform(
     denominator = 1.0 - noise_floor
     factor = (rms - noise_floor) / denominator if denominator > 0 else 0.0
     factor = max(0.0, min(1.0, factor))
-    offset_y = factor * max_offset_y
+    offset_y = -factor * max_offset_y
     rotation = factor * max_rotation_deg
     return (round(offset_y, 4), round(rotation, 4))
 
@@ -82,17 +83,18 @@ def map_rms_to_puppet_transform(
     """Backend-authoritative puppet kinematics for 2-image puppet.
 
     Returns dict with jawOffsetY, jawRotation, jawOffsetX, headOffsetY.
-    jawOffsetX is deterministic (no per-frame jitter); headOffsetY is subtle
-    opposite bob (~10% of jaw) so head moves sutilmente.
+    Convención (bug 125, ver kateto-avatar.js): jaw NEGATIVO = capa de arriba
+    que sube = abre; head POSITIVO leve = pieza de abajo que baja = ayuda a
+    abrir (subirla cerraría la boca). jawOffsetX determinista (sin jitter).
     """
     if rms < noise_floor:
         return {"jawOffsetX": 0.0, "jawOffsetY": 0.0, "jawRotation": 0.0, "headOffsetY": 0.0}
     denominator = 1.0 - noise_floor
     factor = (rms - noise_floor) / denominator if denominator > 0 else 0.0
     factor = max(0.0, min(1.0, factor))
-    jaw_offset_y = round(factor * max_offset_y, 4)
+    jaw_offset_y = round(-factor * max_offset_y, 4)
     jaw_rotation = round(factor * max_rotation_deg, 4)
-    head_offset_y = round(-factor * max_head_offset_y, 4)
+    head_offset_y = round(factor * max_head_offset_y, 4)
     return {
         "jawOffsetX": 0.0,
         "jawOffsetY": jaw_offset_y,

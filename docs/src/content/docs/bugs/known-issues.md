@@ -56,6 +56,7 @@ description: "Known Issues — índice de bugs"
 | 23 | Nuevo plugin VoiceSOULManager: gestión centralizada de SOUL/JOURNAL/workflows | Media | `kateto/plugins/voice_soul_manager/` | [23-plugin-soul-journal-manager.md](./bugs/23-plugin-soul-journal-manager.md) |
 | 112 | Jaw del overlay sólo se mueve hacia arriba (sin ciclo abre/cierra) | Media | `kateto/plugins/visual_overlay/web/kateto-avatar.js` | [112-jaw-overlay-solo-arriba-sin-ciclo.md](./bugs/112-jaw-overlay-solo-arriba-sin-ciclo.md) |
 | 122 | Jaw quedó corto tras la corrección de dirección: subir amplitud y agresividad | Media | `kateto/plugins/visual_overlay/web/kateto-avatar.js` | [122-jaw-corto-subir-amplitud-agresividad.md](./bugs/122-jaw-corto-subir-amplitud-agresividad.md) |
+| 125 | La capa animada es la de arriba: al hablar tiene que subir, no bajar | Media | `kateto/plugins/visual_overlay/web/kateto-avatar.js` | [125-jaw-capa-arriba-tiene-que-subir.md](./bugs/125-jaw-capa-arriba-tiene-que-subir.md) |
 | 113 | Segfault en libasound al interrumpir: close del stream con un write en vuelo | Crítica | `kateto/plugins/audio_output/player.py` | [113-segfault-libasound-close-con-write-en-vuelo.md](./bugs/113-segfault-libasound-close-con-write-en-vuelo.md) |
 
 | # | Bug | Severidad | Componente | Archivo |
