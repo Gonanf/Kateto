@@ -14,6 +14,7 @@ from kateto.core.event import (
     GenerateData,
     InterruptData,
 )
+from kateto.core.plugin import Plugin
 from kateto.plugins.system.turn_gate import Decision, TurnGate
 from kateto.voices.base import VoiceAgent
 
@@ -30,6 +31,86 @@ async def _with_gate() -> tuple[PluginManager, TurnGate]:
     gate = manager.get_plugin("turn_gate")
     assert isinstance(gate, TurnGate)
     return manager, gate
+
+
+class _DrainRecorder(Plugin):
+    """Test-only sink named like a voice so targeted drains reach it."""
+
+    def __init__(self) -> None:
+        super().__init__("doktor")
+        self.seen: list[str] = []
+
+    async def initialize(self) -> None:
+        self.required_manager.register_event("generate", GenerateData)
+
+    async def on_generate(self, data: GenerateData) -> None:
+        self.seen.append(data.prompt or "")
+
+
+@pytest.mark.asyncio
+async def test_user_interrupt_drops_queued_turns_and_nothing_drains() -> None:
+    # Given: gate holding jane's turn with 2 queued turns + a drain recorder
+    manager, gate = await _with_gate()
+    recorder = _DrainRecorder()
+    await manager.enable_plugin(recorder)
+    assert gate.decide(voice="jane", prompt="first", origin="external") is Decision.EXECUTE
+    gate.enqueue(event="generate", data=GenerateData(prompt="second"), target="jane")
+    gate.enqueue(event="generate", data=GenerateData(prompt="third"), target="jane")
+    assert len(gate._pending) == 2
+    # When: the user barges in
+    await manager.emit("interrupt", InterruptData(reason="voice_activity"), source="vad")
+    await manager.wait_for_idle(timeout=5)
+    # Then: the queue is flushed...
+    assert not gate._pending
+    # ...and a later idle drain emits nothing
+    await manager.emit(
+        "audio_output_status",
+        AudioOutputStatusData(status=AudioOutputStatus.IDLE),
+        source="player",
+    )
+    await manager.wait_for_idle(timeout=5)
+    assert not gate._pending
+    assert recorder.seen == []
+
+
+@pytest.mark.asyncio
+async def test_non_user_interrupt_keeps_queue_and_drains_as_followup() -> None:
+    # Given: gate holding jane's turn with 1 queued turn + a drain recorder
+    manager, gate = await _with_gate()
+    recorder = _DrainRecorder()
+    await manager.enable_plugin(recorder)
+    assert gate.decide(voice="jane", prompt="first", origin="external") is Decision.EXECUTE
+    gate.enqueue(event="generate", data=GenerateData(prompt="segunda"), target="doktor")
+    # When: a non-user (inter-voice) interrupt arrives
+    await manager.emit(
+        "interrupt", InterruptData(reason="handoff", dept="planning"), source="doktor"
+    )
+    await manager.wait_for_idle(timeout=5)
+    # Then: the queue survives...
+    assert len(gate._pending) == 1
+    # ...and drains once a new user turn executes and the voice goes idle
+    assert gate.decide(voice="jane", prompt="nueva", origin="external") is Decision.EXECUTE
+    gate.release("jane")
+    await manager.emit(
+        "audio_output_status",
+        AudioOutputStatusData(status=AudioOutputStatus.IDLE),
+        source="player",
+    )
+    await manager.wait_for_idle(timeout=5)
+    assert recorder.seen == ["segunda"]
+
+
+@pytest.mark.asyncio
+async def test_new_user_generate_executes_after_user_interrupt_flush() -> None:
+    # Given: gate with a queued turn flushed by a user interrupt
+    manager, gate = await _with_gate()
+    assert gate.decide(voice="jane", prompt="first", origin="external") is Decision.EXECUTE
+    gate.enqueue(event="generate", data=GenerateData(prompt="second"), target="jane")
+    await manager.emit("interrupt", InterruptData(reason="user_turn"), source="listener")
+    await manager.wait_for_idle(timeout=5)
+    assert not gate._pending
+    # Then: a fresh user turn executes (not stuck behind _steering)
+    assert gate.decide(voice="jane", prompt="nueva", origin="external") is Decision.EXECUTE
 
 
 @pytest.mark.asyncio
@@ -166,9 +247,11 @@ async def test_two_generates_different_voices_queue_second_turn(tmp_path: Path) 
         target="jane",
     )
     await manager.wait_for_idle(timeout=5)
-    # Then: jane speaks once more and the queued doktor turn drains afterwards
+    # Then: jane speaks once more, but the user interrupt dropped the queued
+    # doktor turn (bug 108: queued turns are discarded on user barge-in),
+    # so it is NOT answered afterwards
     assert provider.calls == 2  # type: ignore[attr-defined]
-    assert len(doktor._provider.requests) == 1  # type: ignore[attr-defined]
+    assert len(doktor._provider.requests) == 0  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
