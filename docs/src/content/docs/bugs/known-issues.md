@@ -54,6 +54,7 @@ description: "Known Issues — índice de bugs"
 | 25 | Web sandbox: presentación interactiva del sistema Kateto | Media | `web/` (nuevo) | [25-web-sandbox-presentation.md](./bugs/25-web-sandbox-presentation.md) |
 | 24 | TUI: conflictos de nombres entre voces activadas y plugins auto-detectados | Media | `kateto/plugins/system/tui.py` | [24-tui-voice-name-conflict.md](./bugs/24-tui-voice-name-conflict.md) |
 | 23 | Nuevo plugin VoiceSOULManager: gestión centralizada de SOUL/JOURNAL/workflows | Media | `kateto/plugins/voice_soul_manager/` | [23-plugin-soul-journal-manager.md](./bugs/23-plugin-soul-journal-manager.md) |
+| 112 | Jaw del overlay sólo se mueve hacia arriba (sin ciclo abre/cierra) | Media | `kateto/plugins/visual_overlay/web/kateto-avatar.js` | [112-jaw-overlay-solo-arriba-sin-ciclo.md](./bugs/112-jaw-overlay-solo-arriba-sin-ciclo.md) |
 
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|

@@ -11,42 +11,58 @@
  */
 
 // 1. Pure jaw kinematics formula (Kateto visual overlay standard)
+//
+// SHARED CONVENTION (única para los dos paths, ver bug 112):
+// - jawOffsetY POSITIVO = mandíbula baja = boca que abre (translateY+ en CSS).
+// - Neutro = boca cerrada = transform 0. Con silencio, todo vuelve a 0.
+// - El movimiento es un ciclo real abre/cierra: la amplitud escala con la
+//   energía de la voz y el flap silábico (~8 Hz) la multiplica entre 0 y el
+//   máximo, así la mandíbula cruza el neutro varias veces por segundo.
+// - Recorrido máximo configurable en un solo lugar (JAW_MAX_TRAVEL_PX).
 // Muppet jaw: fast up/down flap PLUS random sideways shake and tilt via
 // Math.random(). The JAW layer alone may sway — the full character must never
 // move sideways (that was the card-level `transform` bug, fixed with the
 // independent CSS `scale` property). Primary animation path for both
 // synthetic TTS (pulseWord) and live audio (setRms).
+export const JAW_MAX_TRAVEL_PX = 16.0;
+export const JAW_MAX_TILT_DEG = 4.5;
+export const HEAD_BOB_PX = 1.8;
+export const FLAP_HZ = 8;
 export function computeJawKinematics(rms, nowMs) {
   if (typeof rms !== 'number' || rms < 0.015) {
     return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
   }
   const t = typeof nowMs === 'number' ? nowMs : Date.now();
-  // Punchy response curve with strong upward force
+  // Punchy response curve scaled by voice energy; -> 0 en silencio.
   const factor = Math.min(1.0, Math.max(0.0, Math.pow((rms - 0.015) / 0.985, 0.68)));
-  // Syllabic flap (~8Hz) scaled by voice energy, strong upward travel.
-  const flap = 0.5 + 0.5 * Math.sin((t / 1000) * 2 * Math.PI * 8);
-  const upMovement = -Number(((6.0 + 40.0 * flap) * (0.5 + 0.5 * factor)).toFixed(2));
+  // Syllabic flap (~8Hz): multiplica la amplitud (0..1), nunca suma un piso
+  // fijo — sin voz no hay desplazamiento (bug 112: el piso de 6px la dejaba
+  // pegada arriba con wobble entre ~-3 y ~-46px sin cruzar el neutro).
+  const flap = 0.5 + 0.5 * Math.sin((t / 1000) * 2 * Math.PI * FLAP_HZ);
+  const openMovement = Number((factor * JAW_MAX_TRAVEL_PX * flap).toFixed(2));
   const sideDir = (Math.random() * 2 - 1);
   const sideShake = Number((sideDir * factor * 9.0).toFixed(2));
-  const tilt = Number(((sideDir * 0.9 + (Math.random() * 0.2 - 0.1)) * factor * 40.0).toFixed(2));
+  // Tilt acotado al mismo máximo del backend (antes llegaba a ±40°).
+  const tilt = Number((sideDir * factor * JAW_MAX_TILT_DEG).toFixed(2));
 
   return {
     jawOffsetX: sideShake,
-    jawOffsetY: upMovement,
+    jawOffsetY: openMovement,
     jawRotation: tilt,
   };
 }
 
 // Backend-authoritative kinematics (deterministic, no jitter).
 // rms expected already normalized 0..1 (RMSProcessor output).
+// Misma convención y mismos topes que computeJawKinematics (bug 112).
 export function computeBackendKinematics(rms) {
   if (typeof rms !== 'number' || rms < 0.05) {
     return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0, headOffsetY: 0 };
   }
   const factor = Math.min(1.0, Math.max(0.0, (rms - 0.05) / 0.95));
-  const jawOffsetY = Number((factor * 16.0).toFixed(2));
-  const jawRotation = Number((factor * 4.5).toFixed(2));
-  const headOffsetY = Number((-factor * 1.8).toFixed(2));
+  const jawOffsetY = Number((factor * JAW_MAX_TRAVEL_PX).toFixed(2));
+  const jawRotation = Number((factor * JAW_MAX_TILT_DEG).toFixed(2));
+  const headOffsetY = Number((-factor * HEAD_BOB_PX).toFixed(2));
   return { jawOffsetX: 0, jawOffsetY, jawRotation, headOffsetY };
 }
 
