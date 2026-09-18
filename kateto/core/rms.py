@@ -48,8 +48,8 @@ def apply_ema(
 
 def map_rms_to_jaw_transform(
     rms: float,
-    max_offset_y: float = 16.0,
-    max_rotation_deg: float = 4.5,
+    max_offset_y: float = 32.0,
+    max_rotation_deg: float = 6.5,
     noise_floor: float = 0.05,
 ) -> tuple[float, float]:
     """Map normalized RMS to jaw kinematics (translateY in px, rotate in deg).
@@ -57,8 +57,9 @@ def map_rms_to_jaw_transform(
     Spec:
     - rms < 0.05 -> (0.0, 0.0)
     - factor = clamp((rms - 0.05) / 0.95, 0.0, 1.0)
-    - jawOffsetY = factor * 16.0
-    - jawRotation = factor * 4.5
+    - jawOffsetY = factor * 32.0
+    - jawRotation = factor * 6.5
+    Mismos topes que el JS (JAW_MAX_TRAVEL_PX / JAW_MAX_TILT_DEG, bug 122).
     """
     if rms < noise_floor:
         return (0.0, 0.0)
@@ -73,8 +74,8 @@ def map_rms_to_jaw_transform(
 def map_rms_to_puppet_transform(
     rms: float,
     *,
-    max_offset_y: float = 16.0,
-    max_rotation_deg: float = 4.5,
+    max_offset_y: float = 32.0,
+    max_rotation_deg: float = 6.5,
     max_head_offset_y: float = 1.8,
     noise_floor: float = 0.05,
 ) -> dict[str, float]:
