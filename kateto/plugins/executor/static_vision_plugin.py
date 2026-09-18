@@ -541,28 +541,68 @@ class StaticVisionPlugin(Plugin):
                     except Exception:
                         mcp = None
             if mcp is not None:
-                result = await mcp.try_call_tool(
-                    ["video_rag"], "describe_images", {"prompt": prompt, "images": images}
-                )
-                if result is not None:
-                    text = result if isinstance(result, str) else str(result)
-                    log.info("[vision] sidecar describe_images answered ({} chars)", len(text))
-                    if _is_sidecar_error(text):
-                        sidecar_error = text
-                        log.warning(
-                            "[vision] sidecar describe_images error (not a description): {}",
-                            text,
-                        )
-                    else:
-                        return text, "sidecar"
-                else:
-                    reason_fn = getattr(mcp, "sidecar_reason", None)
-                    detail = (
-                        reason_fn(["video_rag"], "describe_images")
-                        if callable(reason_fn)
-                        else "no client or no describe_images tool"
+                try_call_result = getattr(mcp, "try_call_tool_result", None)
+                if callable(try_call_result):
+                    result = await try_call_result(
+                        ["video_rag"], "describe_images", {"prompt": prompt, "images": images}
                     )
-                    log.warning("[vision] sidecar video_rag unreachable ({})", detail)
+                    if result is not None:
+                        text = result.text if hasattr(result, "text") else str(result)
+                        log.info(
+                            "[vision] sidecar describe_images answered ({} chars): {}",
+                            len(text),
+                            text[:300],
+                        )
+                        if len(text) > 300:
+                            log.debug("[vision] sidecar describe_images tail: {}", text[300:])
+                        flagged = bool(getattr(result, "is_error", False))
+                        if flagged or _is_sidecar_error(text):
+                            sidecar_error = text
+                            log.warning(
+                                "[vision] sidecar describe_images error (not a description, {}:{}): {}",
+                                getattr(result, "server", "video_rag"),
+                                getattr(result, "tool", "describe_images"),
+                                text,
+                            )
+                        else:
+                            return text, "sidecar"
+                    else:
+                        reason_fn = getattr(mcp, "sidecar_reason", None)
+                        detail = (
+                            reason_fn(["video_rag"], "describe_images")
+                            if callable(reason_fn)
+                            else "no client or no describe_images tool"
+                        )
+                        log.warning("[vision] sidecar video_rag unreachable ({})", detail)
+                else:
+                    result = await mcp.try_call_tool(
+                        ["video_rag"], "describe_images", {"prompt": prompt, "images": images}
+                    )
+                    if result is not None:
+                        text = result if isinstance(result, str) else str(result)
+                        log.info(
+                            "[vision] sidecar describe_images answered ({} chars): {}",
+                            len(text),
+                            text[:300],
+                        )
+                        if len(text) > 300:
+                            log.debug("[vision] sidecar describe_images tail: {}", text[300:])
+                        if _is_sidecar_error(text):
+                            sidecar_error = text
+                            log.warning(
+                                "[vision] sidecar describe_images error (not a description): {}",
+                                text,
+                            )
+                        else:
+                            return text, "sidecar"
+                    else:
+                        reason_fn = getattr(mcp, "sidecar_reason", None)
+                        detail = (
+                            reason_fn(["video_rag"], "describe_images")
+                            if callable(reason_fn)
+                            else "no client or no describe_images tool"
+                        )
+                        log.warning("[vision] sidecar video_rag unreachable ({})", detail)
             else:
                 log.warning("[vision] sidecar video_rag unavailable (no external MCP context)")
         except Exception as exc:

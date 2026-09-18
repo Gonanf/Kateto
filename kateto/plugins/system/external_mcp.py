@@ -8,6 +8,7 @@ Uses the already-installed ``mcp[1.28.1]`` library: ``stdio_client``,
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from loguru import logger
 from typing import Any
 
@@ -18,6 +19,19 @@ from openai.types.chat import ChatCompletionToolParam
 from kateto.core.config import McpServerSettings
 
 log = logger
+
+
+@dataclass(frozen=True)
+class ToolCallResult:
+    """Text plus the MCP `isError` flag the plain-text path used to drop.
+
+    `server`/`tool` name the call so callers can log the full reason.
+    """
+
+    text: str
+    is_error: bool
+    server: str
+    tool: str
 
 
 class ExternalMcpClient:
@@ -81,10 +95,15 @@ class ExternalMcpClient:
         tools = await self.list_tools()
         return any(t.name == name for t in tools)
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
-        """Execute a tool with a 30 s timeout. Returns text-only result."""
+    async def call_tool_result(self, name: str, arguments: dict[str, Any]) -> ToolCallResult:
+        """Execute a tool with a 30 s timeout, keeping the MCP `isError` flag."""
         if self._session is None:
-            return '{"error": "MCP client not started"}'
+            return ToolCallResult(
+                text='{"error": "MCP client not started"}',
+                is_error=True,
+                server=self.name,
+                tool=name,
+            )
         try:
             result = await asyncio.wait_for(
                 self._session.call_tool(name, arguments), timeout=30.0
@@ -93,9 +112,25 @@ class ExternalMcpClient:
             for content in result.content:
                 if hasattr(content, "text"):
                     texts.append(content.text)
-            return "\n".join(texts)
+            # ponytail: SDK spells it isError, fakes use is_error — accept both.
+            is_error = getattr(result, "is_error", getattr(result, "isError", False))
+            return ToolCallResult(
+                text="\n".join(texts),
+                is_error=bool(is_error),
+                server=self.name,
+                tool=name,
+            )
         except asyncio.TimeoutError:
-            return f'{{"error": "MCP tool timed out: {name}"}}'
+            return ToolCallResult(
+                text=f'{{"error": "MCP tool timed out: {name}"}}',
+                is_error=True,
+                server=self.name,
+                tool=name,
+            )
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
+        """Execute a tool with a 30 s timeout. Returns text-only result."""
+        return (await self.call_tool_result(name, arguments)).text
 
     async def stop(self) -> None:
         """Close session + subprocess cleanly."""
@@ -162,6 +197,21 @@ class ExternalMcpManager:
                 all_tools.extend(await client.list_chat_tools())
         return tuple(all_tools)
 
+    async def try_call_tool_result(
+        self,
+        server_names: list[str],
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> ToolCallResult | None:
+        """Try to call *tool_name* on any external server, keeping `isError`. ``None`` = not found."""
+        for name in server_names:
+            if name == "system":
+                continue
+            client = self._clients.get(name)
+            if client is not None and client.is_running and await client.has_tool(tool_name):
+                return await client.call_tool_result(tool_name, arguments)
+        return None
+
     async def try_call_tool(
         self,
         server_names: list[str],
@@ -169,13 +219,8 @@ class ExternalMcpManager:
         arguments: dict[str, Any],
     ) -> str | None:
         """Try to call *tool_name* on any external server. ``None`` = not found."""
-        for name in server_names:
-            if name == "system":
-                continue
-            client = self._clients.get(name)
-            if client is not None and client.is_running and await client.has_tool(tool_name):
-                return await client.call_tool(tool_name, arguments)
-        return None
+        result = await self.try_call_tool_result(server_names, tool_name, arguments)
+        return result.text if result is not None else None
 
     def get_servers_for_voice(self, voice_name: str) -> list[str]:
         return self._voice_servers.get(voice_name, [])

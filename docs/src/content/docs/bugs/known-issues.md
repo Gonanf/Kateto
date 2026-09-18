@@ -121,6 +121,7 @@ description: "Known Issues — índice de bugs"
 | 114 | El path pydantic ignora el SOUL: las voces suenan a asistente genérico | Alta | `kateto/voices/factory.py`, `kateto/voices/base.py` | [114-path-pydantic-ignora-soul-voces-asistente.md](./bugs/114-path-pydantic-ignora-soul-voces-asistente.md) |
 | 115 | Config por voz pisa al principal en silencio y el recap hace hablar a la voz cada 30 s | Alta | `kateto/core/config.py`, `kateto/plugins/executor/static_vision_plugin.py`, `kateto/plugins/system/external_mcp.py` | [115-precedencia-silenciosa-voz-y-recap-narra.md](./bugs/115-precedencia-silenciosa-voz-y-recap-narra.md) |
 | 116 | Describe de visión reporta ventanas de 0 s cuando la escena está quieta | Alta | `kateto/plugins/executor/static_vision_plugin.py` | [116-describe-vision-ventanas-0s-escena-quieta.md](./bugs/116-describe-vision-ventanas-0s-escena-quieta.md) |
+| 117 | El cliente MCP tiraba `isError` y un error del sidecar se narraba como descripción | Alta | `kateto/plugins/system/external_mcp.py`, `kateto/plugins/executor/static_vision_plugin.py` | [117-cliente-mcp-tiraba-iserror.md](./bugs/117-cliente-mcp-tiraba-iserror.md) |
 
 ---
 
