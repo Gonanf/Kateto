@@ -118,6 +118,7 @@ description: "Known Issues — índice de bugs"
 | 109 | `max_tokens` de la voz capado silenciosamente a 384 | Media | `kateto/voices/base.py` | [109-max-tokens-voz-capado-384.md](./bugs/109-max-tokens-voz-capado-384.md) |
 | 110 | `thinking=false` no llega al proveedor (no se manda reasoning_effort) | Media | `kateto/providers/agent.py` | [110-thinking-false-no-llega-al-proveedor.md](./bugs/110-thinking-false-no-llega-al-proveedor.md) |
 | 111 | Las skills bundled no se refrescan: la copia del usuario queda vieja | Media | `kateto/voices/skills.py` | [111-skills-bundled-no-se-refrescan.md](./bugs/111-skills-bundled-no-se-refrescan.md) |
+| 114 | El path pydantic ignora el SOUL: las voces suenan a asistente genérico | Alta | `kateto/voices/factory.py`, `kateto/voices/base.py` | [114-path-pydantic-ignora-soul-voces-asistente.md](./bugs/114-path-pydantic-ignora-soul-voces-asistente.md) |
 
 ---
 

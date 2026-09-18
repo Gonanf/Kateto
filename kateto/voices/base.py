@@ -507,6 +507,9 @@ class VoiceAgent(Plugin):
 
     def set_pydantic_agent(self, agent: Any) -> None:
         self._pydantic_agent = agent
+        # Stable prefix already frozen (late attach, e.g. in tests): push it
+        # now. Otherwise build_stable_prompt() syncs right after freezing.
+        self._sync_pydantic_system_prompt()
 
     @property
     def reference_wav(self) -> Path:
@@ -1228,8 +1231,14 @@ class VoiceAgent(Plugin):
                 source=self.name,
             )
 
-    async def _stable_prompt(self) -> str:
-        """Frozen stable system prompt for this voice spawn (built once)."""
+    async def build_stable_prompt(self) -> str:
+        """Frozen stable system prompt for this voice spawn (built once).
+
+        Same text the non-pydantic path sends as its system message; the
+        pydantic agent gets this text synced (no duplication: the loop keeps
+        skipping system messages from history). Cached: mid-session SOUL
+        writes apply next spawn.
+        """
         if self._stable_prompt_text is not None:
             return self._stable_prompt_text
         soul = await self._memory.read_soul()
@@ -1279,7 +1288,22 @@ class VoiceAgent(Plugin):
             skills=self._skills,
             memories=memories,
         )
+        self._sync_pydantic_system_prompt()
         return self._stable_prompt_text
+
+    async def _stable_prompt(self) -> str:
+        return await self.build_stable_prompt()
+
+    def _sync_pydantic_system_prompt(self) -> None:
+        # pydantic-ai resolves agent._system_prompts on every run
+        # (system_prompt_parts), so replacing the tuple once keeps the prefix
+        # stable all session. Duck-typed: doubles without it are left alone.
+        agent = self._pydantic_agent
+        text = self._stable_prompt_text
+        if agent is None or text is None:
+            return
+        if hasattr(agent, "_system_prompts"):
+            agent._system_prompts = (text,)
 
     async def _workflow_system_message(self, workflow: str | None, phase_id: str | None) -> str | None:
         if workflow is None or phase_id is None:
