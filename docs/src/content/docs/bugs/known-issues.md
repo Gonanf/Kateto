@@ -55,6 +55,7 @@ description: "Known Issues — índice de bugs"
 | 24 | TUI: conflictos de nombres entre voces activadas y plugins auto-detectados | Media | `kateto/plugins/system/tui.py` | [24-tui-voice-name-conflict.md](./bugs/24-tui-voice-name-conflict.md) |
 | 23 | Nuevo plugin VoiceSOULManager: gestión centralizada de SOUL/JOURNAL/workflows | Media | `kateto/plugins/voice_soul_manager/` | [23-plugin-soul-journal-manager.md](./bugs/23-plugin-soul-journal-manager.md) |
 | 112 | Jaw del overlay sólo se mueve hacia arriba (sin ciclo abre/cierra) | Media | `kateto/plugins/visual_overlay/web/kateto-avatar.js` | [112-jaw-overlay-solo-arriba-sin-ciclo.md](./bugs/112-jaw-overlay-solo-arriba-sin-ciclo.md) |
+| 113 | Segfault en libasound al interrumpir: close del stream con un write en vuelo | Crítica | `kateto/plugins/audio_output/player.py` | [113-segfault-libasound-close-con-write-en-vuelo.md](./bugs/113-segfault-libasound-close-con-write-en-vuelo.md) |
 
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|
