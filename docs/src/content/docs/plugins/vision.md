@@ -31,6 +31,11 @@ A look covers the window as a **sequence, not a moment**: frames are deduped
 (PIL dHash, hamming ≤ 8, keep-earliest, always ≥ 1 frame) and described in one
 multi-image call, oldest → newest with `t+<offset>s` labels.
 
+The describe prompt is in Spanish and asks for opinion-ready material: a brief
+timestamped description plus what stands out most and what changed between the
+first and the last frame — never inventing what is not in the images. The VLM
+brings the facts; the voice brings the opinion.
+
 ## look-at usage
 
 Bare requests with no source ("look at this", "what do you see?") mean
@@ -95,6 +100,8 @@ after N attempts (is executor_scheduler enabled?)`).
 | `vision_fallback_endpoint` | unset | Local VLM endpoint (llama-server style) |
 | `vision_fallback_model` | unset | Fallback model |
 | `device_index` | `0` | Webcam device |
+| `vision_repeat_hamming_max` | `6` | Max Hamming distance (of 64 dHash bits) to call a periodic window "same screen" and stay silent |
+| `vision_repeat_text_min_ratio` | `0.9` | Min caption similarity (difflib ratio) to call a periodic caption "same" and stay silent |
 
 No model name is hardcoded: unconfigured links are skipped, not guessed.
 
@@ -115,15 +122,32 @@ A periodic tick that lands on `via="recap"` stays silent: no `generate` is
 emitted (one warning, then quiet). A direct user ask still gets its "could not
 see" reply — that is an answer, not ambient narration.
 
-## Turn framing (bug 121)
+## Turn framing (bug 121, opinion in bug 123)
 
 The plugin emits the caption bare (`[look-at <source> <span>s]: …`) and the
 voice frames it: in `_messages_for` (ambient `generate`) and in
 `_remember_event` (requested `vision_describe_result`) the block is wrapped
 with a turn instruction in the voice's own `response_language` — own eyes,
-comment in 1-2 sentences in character, never ask what to do with it, don't
-invent. The frame rides the volatile turn (user message / history); the frozen
-stable prompt never changes.
+opinion in 1-2 sentences in character (what it thinks, what catches its eye,
+what it would do or ask), never repeat the literal description, never ask
+what to do with it, don't invent. The frame rides the volatile turn (user
+message / history); the frozen stable prompt never changes.
+
+## Repeat silence (bug 123)
+
+A periodic tick narrates only what is new. Per source the plugin keeps the
+last narrated window (representative frame dHash + caption text):
+
+- Same image: Hamming distance at or below `vision_repeat_hamming_max` →
+  no VLM/sidecar call, no narration (`[vision] periodic narration skipped
+  for <voice>: imagen repetida (<source>=hamming <d>/<max>)`).
+- Same caption with different frames: similarity at or above
+  `vision_repeat_text_min_ratio` → the describe result is still emitted but
+  no `generate` goes out (`... caption repetido (<source>=similitud
+  <r>>=<min>)` with the caption).
+- A user-requested look-at always answers, even when the image repeats, and
+  refreshes the last-seen window — so the next periodic tick on that same
+  screen stays silent.
 
 When the sidecar link misses, the log names the cause: no MCP client
 configured (with the startup error when the process failed: missing binary,

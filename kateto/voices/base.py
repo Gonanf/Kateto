@@ -124,14 +124,18 @@ def frame_look_at_turn(block: str, response_language: str | None) -> str:
     if lang.startswith("en"):
         instruction = (
             "[Your own look — you just saw this yourself, the user sent you nothing. "
-            "Comment on what you see in 1 or 2 sentences, in character and in English. "
+            "Give your opinion in 1 or 2 sentences, in character and in English: "
+            "what you think, what catches your eye, what you would do or ask. "
+            "Do not repeat the literal description nor list what is already in the caption. "
             "Never ask for instructions or ask what to do with this information. "
             "Do not invent anything not in the description.]"
         )
     else:
         instruction = (
             "[Tu propia mirada — vos acabás de ver esto, el usuario no te mandó nada. "
-            "Comentá lo que ves en 1 o 2 frases, en personaje y en español. "
+            "Opiná en 1 o 2 frases, en personaje y en español: "
+            "qué te parece, qué te llama la atención, qué harías o preguntarías. "
+            "No repitas la descripción literal ni enumeres lo que ya está en el caption. "
             "Nunca pidas instrucciones ni preguntes qué hacer con esta información. "
             "No inventes nada que no esté en la descripción.]"
         )

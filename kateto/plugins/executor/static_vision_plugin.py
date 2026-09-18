@@ -147,6 +147,50 @@ def _compress_for_sidecar(payload: bytes, *, max_width: int) -> bytes | None:
     return None
 
 
+def _dhash(payload: bytes, hash_bits: int = 64) -> int | None:
+    """Perceptual dHash (64 bits) of a frame payload; None when undecodable."""
+    try:
+        from PIL import Image
+    except Exception:
+        return None
+    side = math.isqrt(hash_bits)
+    try:
+        gray = Image.open(io.BytesIO(payload)).convert("L").resize((side + 1, side))
+    except Exception:
+        return None
+    px = gray.tobytes()
+    digest = 0
+    for y in range(side):
+        row = y * (side + 1)
+        for x in range(side):
+            digest = (digest << 1) | (1 if px[row + x] > px[row + x + 1] else 0)
+    return digest
+
+
+def _hamming(a: int, b: int) -> int:
+    """Hamming distance between two dHash digests."""
+    return (a ^ b).bit_count()
+
+
+def _caption_ratio(a: str, b: str) -> float:
+    """Case-insensitive similarity ratio between two captions (0..1)."""
+    import difflib
+
+    return difflib.SequenceMatcher(None, a.strip().casefold(), b.strip().casefold()).ratio()
+
+
+def _describe_prompt(count: int, name: str, labels: str) -> str:
+    """Opinion-ready VLM prompt in Spanish: brief facts + what stands out."""
+    return (
+        f"Describí en español lo que se ve en estas {count} imágenes de {name} "
+        f"(de la más vieja a la más nueva: {labels}). "
+        "Una descripción breve con marcas temporales. "
+        "Agregá qué es lo que más llama la atención y qué cambió "
+        "entre la primera y la última imagen. "
+        "No inventes nada que no se vea en las imágenes."
+    )
+
+
 # ponytail: 8/64 hamming bound borrowed from video-rag phash_dedupe; dense 1fps
 # frames stay conservative and the window always keeps >= 1 frame.
 def dedupe_window(
@@ -297,6 +341,10 @@ class StaticVisionPlugin(Plugin):
             settings, "vision_sidecar_max_width", vision_sidecar_max_width
         )
         self.device_index = _setting(settings, "device_index", 0)
+        self.vision_repeat_hamming_max = int(_setting(settings, "vision_repeat_hamming_max", 6))
+        self.vision_repeat_text_min_ratio = float(_setting(settings, "vision_repeat_text_min_ratio", 0.9))
+        # Last narrated window per source: {"dhash": int|None, "caption": str}.
+        self._last_narrated: dict[str, dict[str, Any]] = {}
         # Factory-built from the voice table (todo 9 consumes); never read here.
         self.opted_in = tuple(opted_in)
         self._opted_in = self.opted_in
@@ -632,10 +680,7 @@ class StaticVisionPlugin(Plugin):
                 continue
             t0 = kept[0][0]
             labels = ", ".join(f"t+{ts - t0:.1f}s" for ts, _ in kept)
-            prompt = (
-                f"Describe what happens across these {len(kept)} {name} frames "
-                f"(oldest to newest: {labels}). One short timestamped description."
-            )
+            prompt = _describe_prompt(len(kept), name, labels)
             content: list[Any] = [{"type": "text", "text": prompt}]
             content += [
                 {"type": "image_url", "image_url": {"url": _data_url(payload), "detail": "low"}}
@@ -645,6 +690,33 @@ class StaticVisionPlugin(Plugin):
         if not sections:
             await emit_result("no frames captured yet")
             return
+
+        is_periodic = requester.startswith("scheduler:")
+        cur_hash: dict[str, int | None] = {
+            name: _dhash(kept[-1][1]) for name, kept, _, _, _, _ in sections
+        }
+        if is_periodic:
+            voice = requester.split("scheduler:", 1)[1]
+            dists: dict[str, int] = {}
+            all_repeat = bool(self._last_narrated)
+            for name, _, _, _, _, _ in sections:
+                prev = self._last_narrated.get(name)
+                cur = cur_hash[name]
+                if prev is None or prev.get("dhash") is None or cur is None:
+                    all_repeat = False
+                    break
+                dist = _hamming(cur, prev["dhash"])
+                dists[name] = dist
+                if dist > self.vision_repeat_hamming_max:
+                    all_repeat = False
+                    break
+            if all_repeat and dists:
+                detail = ", ".join(f"{n}=hamming {d}/{self.vision_repeat_hamming_max}" for n, d in dists.items())
+                log.info(
+                    "[vision] periodic narration skipped for {}: imagen repetida ({})",
+                    voice, detail,
+                )
+                return
 
         headers = {"x-kateto-requester": requester}
         if self.vision_endpoint and self.vision_model:
@@ -694,6 +766,9 @@ class StaticVisionPlugin(Plugin):
             window_end=window_end,
             via=via,
         )
+        if via != "recap" and not is_periodic:
+            for name, _, _, _, _, _ in sections:
+                self._last_narrated[name] = {"dhash": cur_hash[name], "caption": texts[name]}
         if requester.startswith("scheduler:"):
             voice = requester.split("scheduler:", 1)[1]
             if voice and kept_count > 0:
@@ -709,8 +784,27 @@ class StaticVisionPlugin(Plugin):
                     else:
                         log.debug("[vision] periodic narration suppressed for {} (via=recap)", voice)
                     return
+                ratios = {
+                    name: _caption_ratio(texts[name], self._last_narrated[name]["caption"])
+                    for name, _, _, _, _, _ in sections
+                    if name in self._last_narrated and self._last_narrated[name].get("caption")
+                }
+                if ratios and all(r >= self.vision_repeat_text_min_ratio for r in ratios.values()):
+                    detail = ", ".join(
+                        f"{n}=similitud {r:.2f}>={self.vision_repeat_text_min_ratio:.2f}" for n, r in ratios.items()
+                    )
+                    log.info(
+                        "[vision] periodic narration skipped for {}: caption repetido ({}) caption={!r}",
+                        voice, detail, fused[:300],
+                    )
+                    return
+                for name, _, _, _, _, _ in sections:
+                    self._last_narrated[name] = {"dhash": cur_hash[name], "caption": texts[name]}
                 span = window_end - window_start
-                log.info("[vision] periodic narration -> {} ({}s window)", voice, f"{span:.0f}")
+                log.info(
+                    "[vision] periodic narration -> {} ({}s window) caption={!r}",
+                    voice, f"{span:.0f}", fused[:300],
+                )
                 frames_note = ", 1 frame" if kept_count == 1 else ""
                 await manager.emit(
                     "generate",
@@ -1079,5 +1173,7 @@ register_plugin_param("executor_vision", "vision_sidecar_max_width", 1024)
 register_plugin_param("executor_vision", "vision_fallback_endpoint", None)
 register_plugin_param("executor_vision", "vision_fallback_model", None)
 register_plugin_param("executor_vision", "device_index", 0)
+register_plugin_param("executor_vision", "vision_repeat_hamming_max", 6)
+register_plugin_param("executor_vision", "vision_repeat_text_min_ratio", 0.9)
 register_voice_param("vision_periodic", False)
 register_voice_param("vision_interval", "30s")
