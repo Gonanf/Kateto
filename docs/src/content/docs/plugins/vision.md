@@ -122,8 +122,32 @@ after N attempts (is executor_scheduler enabled?)`).
 | `device_index` | `0` | Webcam device |
 | `vision_repeat_hamming_max` | `6` | Max Hamming distance (of 64 dHash bits) to call a periodic window "same screen" and stay silent |
 | `vision_repeat_text_min_ratio` | `0.9` | Min caption similarity (difflib ratio) to call a periodic caption "same" and stay silent |
+| `vision_ocr` | `true` | Sidecar `ocr_images` per describe: real on-screen text travels under `OCR:` (~0.2s, highest-value signal) |
+| `vision_detect` | `false` | Sidecar `detect_objects` per describe under `OBJECTS:` — ~9s VLM backend per call; stays off unless a voice wants it |
 
 No model name is hardcoded: unconfigured links are skipped, not guessed.
+
+### OCR and object detection (fix-114)
+
+When a sidecar is present and `[plugin.executor_vision]` has `vision_ocr=true`
+(default), the plugin calls `ocr_images` with the same sidecar frames and the
+material carries the on-screen text:
+
+```
+--- screen (5s, 1/5 frames) ---
+VISUAL: <caption del VLM>
+OCR: <líneas del texto en pantalla>
+OBJECTS: <label score [box]> ... (via=vlm: best-effort)
+```
+
+Sections are optional (only included when there is content) and the voice is
+framed to read `OCR:` (see below) and speak with substance. OCR goes through the
+result-preserving MCP path (`call_tool_result`, keeps `is_error`, bug 106): a
+missing tool or an errored OCR degrades silently (log only) — it never replaces
+the caption nor is narrated as on-screen text. `vision_detect=true` adds object
+detection; when the backend answers `via=vlm` the list is flagged `best-effort`
+instead of being presented as fact. Detection is never invented when the flag is
+off, even for a user-requested look-at.
 
 ### Fallback chain and `via` values
 
@@ -150,13 +174,16 @@ voice frames it: in `_messages_for` (ambient `generate`) and in
 with a turn instruction in the voice's own `response_language` — own eyes,
 opinion in 1-2 sentences in character (what it thinks, what catches its eye,
 what it would do or ask), never repeat the literal description, never ask
-what to do with it, don't invent. The frame rides the volatile turn (user
-message / history); the frozen stable prompt never changes.
+what to do with it, don't invent. The instruction tells the voice that the
+literal on-screen text comes in the `OCR:` section of the material and to use
+it to speak with substance, without inventing what is in no section. The frame
+rides the volatile turn (user message / history); the frozen stable prompt
+never changes.
 
 ## Repeat silence (bug 123)
 
 A periodic tick narrates only what is new. Per source the plugin keeps the
-last narrated window (representative frame dHash + caption text):
+last narrated window (representative frame dHash + caption text + OCR text):
 
 - Same image: Hamming distance at or below `vision_repeat_hamming_max` →
   no VLM/sidecar call, no narration (`[vision] periodic narration skipped
@@ -165,6 +192,9 @@ last narrated window (representative frame dHash + caption text):
   `vision_repeat_text_min_ratio` → the describe result is still emitted but
   no `generate` goes out (`... caption repetido (<source>=similitud
   <r>>=<min>)` with the caption).
+- Same OCR as the previous window (identical on-screen text) is a second
+  signal of a repeated screen — complements the dHash and stays silent
+  (`... texto de pantalla idéntico a la ventana anterior (OCR)`).
 - A user-requested look-at always answers, even when the image repeats, and
   refreshes the last-seen window — so the next periodic tick on that same
   screen stays silent.

@@ -136,8 +136,10 @@ async def test_vision_passes_configured_timeout_floored_at_120(
         logger.remove(handler_id)
 
     # Then: el timeout que viaja no es el 30 s fijo sino max(45, 120), logueado
-    assert len(mcp.seen) == 1
-    assert mcp.seen[0]["timeout"] == 120.0
+    # (fix-114: OCR es una segunda llamada legítima al sidecar; asertamos la de describe)
+    describes = [s for s in mcp.seen if s["tool"] == "describe_images"]
+    assert len(describes) == 1
+    assert describes[0]["timeout"] == 120.0
     assert results.seen[0].via == "sidecar"
     joined = "\n".join(messages)
     assert "with timeout 120" in joined

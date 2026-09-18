@@ -130,6 +130,7 @@ description: "Known Issues — índice de bugs"
 | 121 | La voz recibe el caption de visión como dato pelado y pregunta qué hacer con él | Alta | `kateto/voices/base.py` | [121-caption-pelado-pregunta-que-hacer.md](./bugs/121-caption-pelado-pregunta-que-hacer.md) |
 | 123 | Narración de visión: que opine (no que describa literal) y que se calle si la pantalla es la misma | Alta | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/voices/base.py` | [123-narracion-opina-y-se-calla-si-es-lo-mismo.md](./bugs/123-narracion-opina-y-se-calla-si-es-lo-mismo.md) |
 | 124 | Visión periódica: intervalo aleatorio dentro de un rango | Media | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/plugins/executor/__init__.py` | [124-vision-periodica-intervalo-aleatorio-en-rango.md](./bugs/124-vision-periodica-intervalo-aleatorio-en-rango.md) |
+| 125 | La voz no consume el OCR ni la detección de objetos del sidecar | Media | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/voices/base.py` | [125-vision-consume-ocr-y-objetos.md](./bugs/125-vision-consume-ocr-y-objetos.md) |
 
 ---
 
