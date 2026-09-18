@@ -88,6 +88,8 @@ stream = true
 max_tokens = 4096
 retries = 2
 timeout = 600
+# thinking = true  # false → manda reasoning_effort="none" al proveedor
+# reasoning_effort = "none"  # none|minimal|low|medium|high (gateway: off|disabled|disable → none)
 
 [voice.doktor]
 enabled = true
@@ -97,6 +99,8 @@ stream = true
 max_tokens = 4096
 retries = 2
 timeout = 600
+# thinking = true  # false → manda reasoning_effort="none" al proveedor
+# reasoning_effort = "none"  # none|minimal|low|medium|high (gateway: off|disabled|disable → none)
 
 [voice.conquest]
 enabled = true
@@ -106,6 +110,8 @@ stream = true
 max_tokens = 4096
 retries = 2
 timeout = 600
+# thinking = true  # false → manda reasoning_effort="none" al proveedor
+# reasoning_effort = "none"  # none|minimal|low|medium|high (gateway: off|disabled|disable → none)
 
 [voice.whisperer]
 enabled = true
@@ -115,6 +121,8 @@ stream = true
 max_tokens = 4096
 retries = 2
 timeout = 600
+# thinking = true  # false → manda reasoning_effort="none" al proveedor
+# reasoning_effort = "none"  # none|minimal|low|medium|high (gateway: off|disabled|disable → none)
 
 [mcp_servers.system]
 command = "kateto"

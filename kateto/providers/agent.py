@@ -56,7 +56,7 @@ class OpenAIAgentProvider:
     def _base_kwargs(self, *, stream: bool) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "max_tokens": min(self._max_tokens or 256, 384),
+            "max_tokens": self._max_tokens or 256,
         }
         if stream:
             kwargs["stream"] = True

@@ -283,6 +283,15 @@ def _openai_client(
     return AsyncOpenAI(api_key=api_key, base_url=endpoint, max_retries=retries, timeout=timeout)
 
 
+def resolve_reasoning_effort(reasoning_effort: str | None, thinking: bool | None) -> str | None:
+    """Regla del cable: explícito gana; thinking=False apaga; thinking=True no manda."""
+    if reasoning_effort:
+        return reasoning_effort
+    if thinking is False:
+        return "none"
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class OpenAICompatibleProvider:
     model: str
@@ -292,8 +301,11 @@ class OpenAICompatibleProvider:
     retries: int | None = None
     timeout: float | None = None
     session_headers: Mapping[str, str] = field(default_factory=dict)
+    reasoning_effort: str | None = None
+    thinking: bool | None = None
     last_usage: dict[str, int] | None = field(default=None, init=False)
     last_stop_reason: str | None = field(default=None, init=False)
+    _reasoning_logged: bool = field(default=False, init=False)
 
     async def prefill(self, system_prompt: str) -> None:
         client = _openai_client(
@@ -355,12 +367,22 @@ class OpenAICompatibleProvider:
                 case unreachable:
                     assert_never(unreachable)
         try:
+            effort = resolve_reasoning_effort(self.reasoning_effort, self.thinking)
+            if not self._reasoning_logged:
+                log.info(
+                    "[provider] reasoning_effort={} thinking={} model={}",
+                    effort,
+                    self.thinking,
+                    self.model,
+                )
+                object.__setattr__(self, "_reasoning_logged", True)
             stream = await client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 stream=True,
-                max_tokens=min(self.max_tokens or 256, 384) if self.max_tokens else 256,
+                max_tokens=self.max_tokens or 256,
                 extra_headers=dict(self.session_headers) if self.session_headers else None,
+                extra_body={"reasoning_effort": effort} if effort is not None else None,
             )
             async for chunk in stream:
                 usage = getattr(chunk, "usage", None)
@@ -1032,7 +1054,7 @@ class VoiceAgent(Plugin):
         history = _to_pydantic_messages(dialogue_messages)
         user_prompt = messages[-1].content if messages else prompt
         from pydantic_ai.settings import ModelSettings
-        m_settings = ModelSettings(max_tokens=min(self._settings.max_tokens or 256, 384))
+        m_settings = ModelSettings(max_tokens=self._settings.max_tokens or 256)
         try:
             if self._settings.stream:
                 sequence = 0
