@@ -27,6 +27,7 @@ vad_model = "silero"
 # barge_in_min_speech_ms = 300.0
 # turn_silence_timeout = 2.0
 # max_turn_secs = 30.0
+# turn_hold_ms = 0.0
 
 [plugin.audio_processor_whisper]
 enabled = true

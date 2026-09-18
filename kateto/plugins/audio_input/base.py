@@ -39,6 +39,10 @@ DEFAULT_TURN_SILENCE_TIMEOUT: Final = 2.0
 DEFAULT_PLAYBACK_IDLE_TIMEOUT: Final = 1.5
 # ponytail: hard ceiling so a monologue cannot grow the turn buffer forever.
 DEFAULT_MAX_TURN_SECS: Final = 30.0
+# ponytail: extra hold after turn_silence_timeout before emitting. 0 keeps the
+# current latency; >0 waits that long so late resumed speech can still cancel.
+# Tune per UX; 0 disables the hold entirely.
+DEFAULT_TURN_HOLD_MS: Final = 0.0
 # ponytail: 0.5 is the upstream default, but it assumes loud/normalised
 # audio.  On typical consumer mics the Silero JIT model peaks at 0.3–0.6
 # for actual speech, while silence sits below 0.03.  0.2 gives reliable
@@ -91,6 +95,8 @@ class AudioInputConfig:
     # Turn accumulation: consecutive segments closer than this flush as one chunk.
     turn_silence_timeout: float = DEFAULT_TURN_SILENCE_TIMEOUT
     max_turn_secs: float = DEFAULT_MAX_TURN_SECS
+    # Extra hold after turn_silence_timeout before emitting (ms, 0 = no hold).
+    turn_hold_ms: float = DEFAULT_TURN_HOLD_MS
     # Playback watchdog: silence on audio_output longer than this clears the
     # playback window (final=True alone is unreliable, see bug 97).
     playback_idle_timeout: float = DEFAULT_PLAYBACK_IDLE_TIMEOUT
@@ -167,6 +173,11 @@ class AudioInputConfig:
                 DEFAULT_MAX_TURN_SECS
                 if getattr(settings, "max_turn_secs", None) is None
                 else settings.max_turn_secs
+            ),
+            turn_hold_ms=(
+                DEFAULT_TURN_HOLD_MS
+                if getattr(settings, "turn_hold_ms", None) is None
+                else settings.turn_hold_ms
             ),
             playback_idle_timeout=(
                 DEFAULT_PLAYBACK_IDLE_TIMEOUT

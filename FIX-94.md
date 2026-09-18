@@ -221,3 +221,74 @@ separados por menos que `turn_silence_timeout` → 1 `transcribe` + 1 `generate`
   1.3 es un punto de partida; si el bleed corta (falso positivo) subirlo, si
   cuesta cortar (falso negativo) bajarlo. Los logs `granted/denied` traen los
   RMS medidos para tunear por equipo.
+
+---
+
+# FIX-94e — El flush de turno disparaba mientras el usuario habla (bug 107)
+
+Bug: `docs/src/content/docs/bugs/107-flush-de-turno-dispara-mientras-el-usuario-habla.md`
+(Alta, `resolved` 2026-09-18).
+
+## Causa (verificada en el código, no hipótesis)
+
+`_rearm_turn_flush()` se llamaba sólo desde `_handle_closed_segment()` (al cerrar
+un segmento). Cuando el usuario retomaba el habla dentro de la ventana de
+`turn_silence_timeout`, el drain loop no cancelaba el task pendiente: el
+`voice_started` sólo logueaba, prendía el indicador de grabación y llamaba a
+`_interrupt_playback(mic_rms)`. El timer disparaba igual →
+`_flush_turn()` → `_emit_segment(parcial)` → whisper → transcription →
+classifier → generate. La voz contestaba un mensaje incompleto mientras el
+usuario seguía hablando.
+
+## Fix (`kateto/plugins/audio_input/listener.py`)
+
+- En `_drain_callback_queue`, al detectar habla con `_playback_active` en falso
+  (habla real, no bleed propio) y task pendiente: `self._cancel_turn_flush()` +
+  log `[mic] turn flush cancelled: user resumed speaking`. No se re-arma hasta
+  que cierra el próximo segmento (`_handle_closed_segment` ya lo re-arma).
+- No se rompe: el cap duro `max_turn_secs` sigue forzando el flush en
+  `_handle_closed_segment` (`reason=max_turn`); la cancelación en
+  `disable()`/`enable()` intacta; la guarda
+  `self._turn_flush_task is current_task()` en `_turn_flush_later()` se mantiene.
+- La cancelación se gatea con `not self._playback_active` (evaluado después de
+  `_interrupt_playback`, que limpia el flag en un barge-in concedido): el bleed
+  del parlante no cancela el turno pendiente — si lo hiciera, el buffer quedaría
+  varado porque los segmentos de bleed se descartan sin re-armar.
+
+## Diagnóstico
+
+- Al emitir (`_flush_turn`): `[mic] turn flush reason=silence|max_turn
+  segments=N buffered_ms=M` — N = segmentos acumulados (`_turn_segments`), M =
+  `int(duration_ms(buffer))`. Distingue fragmentación de ASR de corte por pausa
+  genuina.
+- Al cancelar por habla nueva: `[mic] turn flush cancelled: user resumed speaking`.
+
+## Knob nuevo
+
+| Knob | Default | Efecto |
+|---|---|---|
+| `turn_hold_ms` | `0.0` (`DEFAULT_TURN_HOLD_MS`, `base.py`) | Vencido `turn_silence_timeout`, espera ese extra (ms) antes de emitir; si vuelve el habla en ese extra, cancela y sigue acumulando. `0` = comportamiento actual, sin cambio de latencia. |
+
+`AudioInputConfig.turn_hold_ms` leído de `PluginSettings` vía `getattr`
+(compatible con configs viejas, igual que los knobs anteriores).
+
+## Tests (`kateto/tests/test_audio_turn_flush.py`, 5 tests)
+
+| Test | Cubre |
+|---|---|
+| `test_turn_hold_ms_default_is_zero_and_configurable` | Default 0 + override |
+| `test_resumed_speech_cancels_pending_flush_and_merges` | Habla reanudada en ventana → 0 emits + merge en un único emit + logs cancelled/silence |
+| `test_genuine_silence_flushes_single_chunk` | Silencio real → 1 emit + `reason=silence segments=1` |
+| `test_max_turn_secs_still_forces_emit_despite_resumed_speech` | Cap duro fuerza el emit aunque el habla cancele el timer |
+| `test_turn_hold_ms_retains_and_cancels_on_speech_within_hold` | Hold retiene el extra; habla dentro del hold cancela y acumula |
+
+Regresión: los 36 tests de `test_audio_barge_in.py` + `test_audio_input.py` +
+`test_audio_turn_chain.py` siguen verdes sin modificarlos.
+
+## Qué NO se puede verificar sin audio real
+
+- El valor de `turn_hold_ms` contra habla real con pausas (el 0 neutro no cambia
+  latencia; subirlo solo si el usuario hace pausas largas intra-frase que hoy
+  cortan el turno).
+- Que el `reason=silence` corresponda a pausa genuina y no a VAD que sub-segmenta
+  por ruido: el log trae `segments` + `buffered_ms` para decidirlo en campo.
