@@ -5,9 +5,12 @@ import base64
 import io
 import math
 import os
+import random
+import re
 import subprocess
 import time
 from collections import deque
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +35,23 @@ from loguru import logger
 from openai import APIStatusError, BadRequestError
 
 log = logger
+
+
+# Scheduler-style durations ("30s", "5m", "1h"); the vision tick reuses this
+# shape so per-voice ranges stay compatible with scheduler INTERVAL jobs.
+_DURATION_RE = re.compile(r"^(\d+)(s|m|h)$")
+
+
+def _parse_interval_secs(expression: str) -> int:
+    """Parse a scheduler-style duration to whole seconds (raises ValueError)."""
+    match = _DURATION_RE.match(str(expression).strip().lower())
+    if match is None:
+        raise ValueError(
+            f"invalid duration expression: {expression!r} (use e.g. 30s, 5m, 1h)"
+        )
+    value = int(match.group(1))
+    unit = match.group(2)
+    return {"s": value, "m": value * 60, "h": value * 3600}[unit]
 
 
 def _setting(settings: PluginSettings | None, key: str, default: Any) -> Any:
@@ -314,7 +334,17 @@ class StaticVisionPlugin(Plugin):
         config_dir: Path | None = None,
         max_frames_per_describe: int = 2,
         vision_sidecar_max_width: int = 1024,
+        rng: random.Random | Callable[[int, int], int] | None = None,
     ) -> None:
+        """Static vision frames plus optional ambient narration.
+
+        rng is the only randomness source for the periodic narration draw:
+        pass random.Random(seed) for deterministic tests, or a callable
+        (1, slots) -> int where slots = max(1, max // min). None builds a
+        fresh random.Random(); the global random module is never touched.
+        The draw is quantized to tick multiples (k * min) so the real wait
+        never exceeds max.
+        """
         super().__init__(name=name, capabilities=("vision", "static_vision"))
         self._settings = settings
         # Backward-compat kwargs stay the default; a settings key overrides when present.
@@ -346,8 +376,26 @@ class StaticVisionPlugin(Plugin):
         # Last narrated window per source: {"dhash": int|None, "caption": str}.
         self._last_narrated: dict[str, dict[str, Any]] = {}
         # Factory-built from the voice table (todo 9 consumes); never read here.
+        # Entries are (voice, interval) for a fixed cadence or
+        # (voice, min, max) for a random wait drawn from [min, max].
         self.opted_in = tuple(opted_in)
         self._opted_in = self.opted_in
+        self._rng = rng if rng is not None else random.Random()
+        self._vision_range: dict[str, tuple[int, int]] = {}
+        self._vision_elapsed: dict[str, float] = {}
+        self._vision_next: dict[str, int] = {}
+        for entry in self._opted_in:
+            voice = entry[0]
+            if len(entry) >= 3:
+                self._init_range(voice, entry[1], entry[2])
+            else:
+                try:
+                    secs = _parse_interval_secs(entry[1])
+                except ValueError:
+                    secs = 30
+                if secs <= 0:
+                    secs = 30
+                self._vision_range[voice] = (secs, secs)
         # ponytail: unknown opt-in voices land here with a reason instead of a job.
         self._periodic_skipped: dict[str, str] = {}
         # Recap carries no real description: periodic ticks stay silent after
@@ -396,7 +444,10 @@ class StaticVisionPlugin(Plugin):
         else:
             log.info(
                 "[vision] periodic describe opted in: {}",
-                ", ".join(f"{voice}@{interval}" for voice, interval in self._opted_in),
+                ", ".join(
+                    f"{entry[0]}@{entry[1]}..{entry[2]}" if len(entry) >= 3 else f"{entry[0]}@{entry[1]}"
+                    for entry in self._opted_in
+                ),
             )
         if not (self.vision_endpoint and self.vision_model) and not (
             self.vision_fallback_endpoint and self.vision_fallback_model
@@ -418,17 +469,91 @@ class StaticVisionPlugin(Plugin):
             self._capture_loop(), name=f"kateto-vision-capture-{self.name}"
         )
 
+    def _init_range(self, voice: str, min_raw: str, max_raw: str) -> None:
+        try:
+            lo = _parse_interval_secs(min_raw)
+            hi = _parse_interval_secs(max_raw)
+        except ValueError as exc:
+            log.warning("[vision] invalid range for {}: {}; using 30s fixed", voice, exc)
+            self._vision_range[voice] = (30, 30)
+            return
+        if lo <= 0 or hi <= 0:
+            valid = lo if lo > 0 else hi
+            fixed = valid if valid > 0 else 30
+            log.warning(
+                "[vision] invalid range for {}: min={!r} max={!r} must be > 0; using {}s fixed",
+                voice, min_raw, max_raw, fixed,
+            )
+            self._vision_range[voice] = (fixed, fixed)
+            return
+        if lo > hi:
+            log.warning(
+                "[vision] invalid range for {}: min {}s > max {}s; using {}s fixed",
+                voice, lo, hi, hi,
+            )
+            self._vision_range[voice] = (hi, hi)
+            return
+        self._vision_range[voice] = (lo, hi)
+        if hi > lo:
+            self._vision_next[voice] = self._draw_next(lo, hi)
+
+    def _draw_next(self, lo: int, hi: int) -> int:
+        slots = max(1, hi // lo)
+        randint = getattr(self._rng, "randint", None)
+        if callable(randint):
+            return int(randint(1, slots)) * lo
+        if callable(self._rng):
+            return int(self._rng(1, slots)) * lo
+        raise TypeError(f"rng must be random.Random or (lo, hi) -> int, got {self._rng!r}")
+
+    def _log_next(self, voice: str) -> None:
+        lo, hi = self._vision_range.get(voice, (0, 0))
+        if hi <= lo:
+            return
+        target = self._vision_next.get(voice)
+        if target is None:
+            target = self._vision_next[voice] = self._draw_next(lo, hi)
+        log.info("[vision] next {} narration in {}s (range {}-{}s)", voice, target, lo, hi)
+
+    def _periodic_time_due(self, voice: str) -> bool:
+        lo, hi = self._vision_range.get(voice, (0, 0))
+        if hi <= lo:
+            return True
+        self._vision_elapsed[voice] = self._vision_elapsed.get(voice, 0.0) + lo
+        target = self._vision_next.get(voice)
+        if target is None:
+            target = self._vision_next[voice] = self._draw_next(lo, hi)
+        elapsed = self._vision_elapsed[voice]
+        if elapsed < target:
+            log.info(
+                "[vision] periodic narration deferred for {}: {:.0f}/{}s (range {}-{}s)",
+                voice, elapsed, target, lo, hi,
+            )
+            return False
+        return True
+
+    def _after_narration(self, voice: str) -> None:
+        lo, hi = self._vision_range.get(voice, (0, 0))
+        if hi <= lo:
+            return
+        self._vision_elapsed[voice] = 0.0
+        self._vision_next[voice] = self._draw_next(lo, hi)
+        self._log_next(voice)
+
     async def _schedule_periodic(self) -> None:
         pairs = tuple(self._opted_in)
         if not pairs or self.manager is None:
             return
-        for voice, interval in pairs:
+        for entry in pairs:
+            voice = entry[0]
+            interval = entry[1]
             job_id = f"vision-describe-{voice}"
             if job_id in self._periodic_jobs or voice in self._periodic_pending:
                 continue
             self._periodic_pending[voice] = interval
             await self._try_emit_schedule(voice, interval)
             self._spawn_retry(voice)
+            self._log_next(voice)
 
     async def _try_emit_schedule(self, voice: str, interval: str) -> bool:
         manager = self.manager
@@ -554,6 +679,7 @@ class StaticVisionPlugin(Plugin):
                 "schedule_cancel", ScheduleCancelData(job_id=job_id), source=self.name
             )
         self._periodic_jobs.clear()
+        self._vision_elapsed.clear()
         pending_tasks = list(self._periodic_retry_tasks.values())
         self._periodic_retry_tasks.clear()
         self._periodic_pending.clear()
@@ -692,6 +818,10 @@ class StaticVisionPlugin(Plugin):
             return
 
         is_periodic = requester.startswith("scheduler:")
+        if is_periodic:
+            voice = requester.split("scheduler:", 1)[1]
+            if not self._periodic_time_due(voice):
+                return
         cur_hash: dict[str, int | None] = {
             name: _dhash(kept[-1][1]) for name, kept, _, _, _, _ in sections
         }
@@ -812,6 +942,7 @@ class StaticVisionPlugin(Plugin):
                     source=self.name,
                     target=voice,
                 )
+                self._after_narration(voice)
 
     def _lookup_sidecar_mcp(self) -> Any | None:
         try:
@@ -1177,3 +1308,5 @@ register_plugin_param("executor_vision", "vision_repeat_hamming_max", 6)
 register_plugin_param("executor_vision", "vision_repeat_text_min_ratio", 0.9)
 register_voice_param("vision_periodic", False)
 register_voice_param("vision_interval", "30s")
+register_voice_param("vision_interval_min", None)
+register_voice_param("vision_interval_max", None)

@@ -4,6 +4,10 @@ from .scheduler import SchedulerPlugin
 from .todo_list import TodoListExecutor
 from .workflow_router import WorkflowRouter
 
+from loguru import logger
+
+log = logger
+
 __all__ = [
     "ClassifierExecutor",
     "InterruptExecutor",
@@ -41,7 +45,15 @@ def create_plugins(ctx):
     # Static vision is dead code without its section; enabled flag respected.
     vision_settings = ctx.config.settings.plugin.get("executor_vision")
     if vision_settings is not None and vision_settings.enabled:
-        opted_in: list[tuple[str, str]] = []
+        from .static_vision_plugin import _parse_interval_secs
+
+        def _voice_opt(voice_settings, key, default=None):
+            value = getattr(voice_settings, key, None)
+            if value is None:
+                value = voice_settings.get(key, None)
+            return default if value is None else value
+
+        opted_in: list[tuple[str, ...]] = []
         for voice_name, voice_settings in ctx.config.settings.voice.items():
             periodic = getattr(voice_settings, "vision_periodic", None)
             if periodic is None:
@@ -51,6 +63,33 @@ def create_plugins(ctx):
             interval = getattr(voice_settings, "vision_interval", None)
             if interval is None:
                 interval = voice_settings.get("vision_interval", "30s")
-            opted_in.append((voice_name, interval))
+            min_raw = _voice_opt(voice_settings, "vision_interval_min")
+            max_raw = _voice_opt(voice_settings, "vision_interval_max")
+            if min_raw is None and max_raw is None:
+                opted_in.append((voice_name, interval))
+                continue
+            lo_raw = min_raw if min_raw is not None else max_raw
+            hi_raw = max_raw if max_raw is not None else min_raw
+            try:
+                lo = _parse_interval_secs(lo_raw)
+                hi = _parse_interval_secs(hi_raw)
+            except ValueError as exc:
+                log.warning(
+                    "[vision] invalid range for {}: {}; using vision_interval {!r} fixed",
+                    voice_name, exc, interval,
+                )
+                opted_in.append((voice_name, interval))
+                continue
+            if lo <= 0 or hi <= 0 or lo > hi:
+                log.warning(
+                    "[vision] invalid range for {}: min={!r} max={!r}; using vision_interval {!r} fixed",
+                    voice_name, lo_raw, hi_raw, interval,
+                )
+                opted_in.append((voice_name, interval))
+                continue
+            if lo == hi:
+                opted_in.append((voice_name, f"{lo}s"))
+            else:
+                opted_in.append((voice_name, f"{lo}s", f"{hi}s"))
         plugins.append(StaticVisionPlugin(vision_settings, opted_in=tuple(opted_in), config_dir=ctx.config.paths.config_dir))
     return plugins
