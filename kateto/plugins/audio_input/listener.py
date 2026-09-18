@@ -65,6 +65,7 @@ class AudioInputPlugin(Plugin):
         self._playback_rms = 0.0
         self._speech_onset_at: float | None = None
         self._turn_buffer = bytearray()
+        self._turn_segments = 0
         self._turn_flush_task: Task[None] | None = None
         self._recording_status_emitted = False
         self._recording = False
@@ -101,6 +102,7 @@ class AudioInputPlugin(Plugin):
         self._speech_onset_at = None
         self._cancel_turn_flush()
         self._turn_buffer.clear()
+        self._turn_segments = 0
         self._capture_session += 1
         session = self._capture_session
         self._loop = get_running_loop()
@@ -149,6 +151,7 @@ class AudioInputPlugin(Plugin):
         self._speech_onset_at = None
         self._cancel_turn_flush()
         self._turn_buffer.clear()
+        self._turn_segments = 0
         self._loop = None
 
     async def on_audio_output(self, data: AudioOutput) -> None:
@@ -235,6 +238,9 @@ class AudioInputPlugin(Plugin):
                     # Speech continues while our own voice is out: re-check every
                     # frame so a real barge-in fires as soon as it qualifies.
                     await self._interrupt_playback(mic_rms)
+                if speech and not self._playback_active and self._turn_flush_task is not None:
+                    self._cancel_turn_flush()
+                    log.info("[mic] turn flush cancelled: user resumed speaking")
                 if update.samples is not None:
                     await self._set_recording(False)
                     await self._handle_closed_segment(update.samples)
@@ -324,6 +330,7 @@ class AudioInputPlugin(Plugin):
             return
         is_new_turn = not self._turn_buffer
         self._turn_buffer.extend(samples)
+        self._turn_segments += 1
         if is_new_turn and not self._config.interrupt_on_vad:
             await self._require_manager().interrupt(
                 reason="user_turn",
@@ -332,7 +339,7 @@ class AudioInputPlugin(Plugin):
             )
         if duration_ms(bytes(self._turn_buffer)) >= self._config.max_turn_secs * 1_000:
             self._cancel_turn_flush()
-            await self._flush_turn()
+            await self._flush_turn(reason="max_turn")
             return
         self._rearm_turn_flush()
 
@@ -354,18 +361,25 @@ class AudioInputPlugin(Plugin):
     async def _turn_flush_later(self) -> None:
         try:
             await sleep(self._config.turn_silence_timeout)
+            hold_ms = self._config.turn_hold_ms
+            if hold_ms > 0:
+                await sleep(hold_ms / 1_000.0)
         except CancelledError:
             return
         if self._turn_flush_task is not current_task():
             return
         self._turn_flush_task = None
-        await self._flush_turn()
+        await self._flush_turn(reason="silence")
 
-    async def _flush_turn(self) -> None:
+    async def _flush_turn(self, *, reason: str = "silence") -> None:
         if not self._turn_buffer:
             return
+        segments = self._turn_segments
+        buffered_ms = int(duration_ms(bytes(self._turn_buffer)))
+        log.info(f"[mic] turn flush reason={reason} segments={segments} buffered_ms={buffered_ms}")
         await self._emit_segment(bytes(self._turn_buffer))
         self._turn_buffer.clear()
+        self._turn_segments = 0
 
     async def _emit_segment(self, samples: bytes) -> None:
         dur = duration_ms(samples)
