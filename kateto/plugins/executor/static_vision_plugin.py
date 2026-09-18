@@ -373,6 +373,11 @@ class StaticVisionPlugin(Plugin):
         self.device_index = _setting(settings, "device_index", 0)
         self.vision_repeat_hamming_max = int(_setting(settings, "vision_repeat_hamming_max", 6))
         self.vision_repeat_text_min_ratio = float(_setting(settings, "vision_repeat_text_min_ratio", 0.9))
+        # Sidecar additions to the mock material: OCR is cheap (~0.2s) and the
+        # highest-value signal (real on-screen text); object detection costs a
+        # ~9s VLM backend per call, so it stays off unless a voice wants it.
+        self.vision_ocr = bool(_setting(settings, "vision_ocr", True))
+        self.vision_detect = bool(_setting(settings, "vision_detect", False))
         # Last narrated window per source: {"dhash": int|None, "caption": str}.
         self._last_narrated: dict[str, dict[str, Any]] = {}
         # Factory-built from the voice table (todo 9 consumes); never read here.
@@ -878,10 +883,24 @@ class StaticVisionPlugin(Plugin):
             for name, kept, _, _, _, frames in sections
         }
         start_of = {name: frames[0][0] for name, _, _, _, _, frames in sections}
-        fused = "\n".join(
-            f"--- {name} ({span_of[name]:.0f}s, {len(kept)}/{total} frames) ---\n{texts[name]}"
-            for name, kept, total, _, _, _ in sections
-        )
+        # Mock material: sidecar OCR (real on-screen text) + optional object
+        # detection. Both are best-effort and optional — OCR travels under
+        # `OCR:`, detection under `OBJECTS:` (flagged when via=vlm). An errored
+        # OCR never replaces the caption and is never narrated as screen text.
+        ocr_text, objects_text, objects_best_effort = await self._sidecar_ocr_detect(sections)
+        blocks: list[str] = []
+        for index, (name, kept, total, _prompt, _content, _frames) in enumerate(sections):
+            caption = f"VISUAL: {texts[name]}"
+            if index == 0:
+                if ocr_text:
+                    caption += f"\nOCR: {ocr_text}"
+                if objects_text:
+                    suffix = " (via=vlm: best-effort)" if objects_best_effort else ""
+                    caption += f"\nOBJECTS: {objects_text}{suffix}"
+            blocks.append(
+                f"--- {name} ({span_of[name]:.0f}s, {len(kept)}/{total} frames) ---\n{caption}"
+            )
+        fused = "\n".join(blocks)
         frame_count = sum(total for _, _, total, _, _, _ in sections)
         kept_count = sum(len(kept) for _, kept, _, _, _, _ in sections)
         dropped = sum(self._dropped.get(name, 0) for name, _, _, _, _, _ in sections)
@@ -898,7 +917,11 @@ class StaticVisionPlugin(Plugin):
         )
         if via != "recap" and not is_periodic:
             for name, _, _, _, _, _ in sections:
-                self._last_narrated[name] = {"dhash": cur_hash[name], "caption": texts[name]}
+                self._last_narrated[name] = {
+                    "dhash": cur_hash[name],
+                    "caption": texts[name],
+                    "ocr": ocr_text,
+                }
         if requester.startswith("scheduler:"):
             voice = requester.split("scheduler:", 1)[1]
             if voice and kept_count > 0:
@@ -913,6 +936,19 @@ class StaticVisionPlugin(Plugin):
                         )
                     else:
                         log.debug("[vision] periodic narration suppressed for {} (via=recap)", voice)
+                    return
+                # Bonus (fix-114): el OCR idéntico al de la ventana anterior es una
+                # segunda señal de pantalla repetida — complementa el dHash.
+                if ocr_text and all(
+                    name in self._last_narrated
+                    and self._last_narrated[name].get("ocr") == ocr_text
+                    for name, _, _, _, _, _ in sections
+                ):
+                    log.info(
+                        "[vision] periodic narration skipped for {}: texto de pantalla "
+                        "idéntico a la ventana anterior (OCR)",
+                        voice,
+                    )
                     return
                 ratios = {
                     name: _caption_ratio(texts[name], self._last_narrated[name]["caption"])
@@ -929,7 +965,11 @@ class StaticVisionPlugin(Plugin):
                     )
                     return
                 for name, _, _, _, _, _ in sections:
-                    self._last_narrated[name] = {"dhash": cur_hash[name], "caption": texts[name]}
+                    self._last_narrated[name] = {
+                        "dhash": cur_hash[name],
+                        "caption": texts[name],
+                        "ocr": ocr_text,
+                    }
                 span = window_end - window_start
                 log.info(
                     "[vision] periodic narration -> {} ({}s window) caption={!r}",
@@ -985,6 +1025,122 @@ class StaticVisionPlugin(Plugin):
                 else:
                     urls.append(_data_url(squeezed))
         return urls, dropped
+
+    async def _sidecar_ocr_detect(
+        self,
+        sections: list[
+            tuple[str, list[tuple[float, bytes]], int, str, list[Any], list[tuple[float, bytes]]]
+        ],
+    ) -> tuple[str, str, bool]:
+        """OCR + detect material from the sidecar (best-effort additions).
+
+        Returns ``(ocr_text, objects_text, objects_best_effort)``. Empty strings
+        mean unavailable/errored — both degrade silently so the caption and the
+        recap are never replaced nor narrated as on-screen text (bug 106 rule).
+        """
+        if not (self.vision_ocr or self.vision_detect):
+            return "", "", False
+        mcp = self._lookup_sidecar_mcp()
+        if mcp is None:
+            return "", "", False
+        images, _dropped = self._sidecar_images(sections)
+        if not images:
+            log.debug("[vision] sidecar OCR/detect skipped: no usable frames")
+            return "", "", False
+        ocr = ""
+        objects = ""
+        best_effort = False
+        if self.vision_ocr:
+            ocr = await self._call_ocr(mcp, images)
+        if self.vision_detect:
+            objects, best_effort = await self._call_detect(mcp, images)
+        return ocr, objects, best_effort
+
+    async def _call_ocr(self, mcp: Any, images: list[str]) -> str:
+        """Sidecar ``ocr_images``, keeping ``is_error`` (bug 106). ``''`` on any miss.
+
+        Only the result-preserving path is used — never a call that drops the
+        ``is_error`` flag. A missing tool or an errored OCR logs its reason and
+        returns empty; it is never presented as on-screen text.
+        """
+        try_call_result = getattr(mcp, "try_call_tool_result", None)
+        if not callable(try_call_result):
+            log.debug("[vision] sidecar ocr_images skipped: no result-preserving path")
+            return ""
+        timeout = self._sidecar_timeout
+        log.info(
+            "[vision] sidecar ocr_images sending {} frame(s) with timeout {}s",
+            len(images), timeout,
+        )
+        try:
+            result = await try_call_result(
+                ["video_rag"], "ocr_images", {"images": images}, timeout=timeout
+            )
+        except Exception as exc:
+            log.debug("[vision] sidecar ocr_images failed: {}", exc)
+            return ""
+        if result is None:
+            log.debug("[vision] sidecar ocr_images unavailable (no tool / no client)")
+            return ""
+        text = result.text if hasattr(result, "text") else str(result)
+        if bool(getattr(result, "is_error", False)) or _is_sidecar_error(text):
+            log.warning(
+                "[vision] sidecar ocr_images error (not screen text, {}:{}): {}",
+                getattr(result, "server", "video_rag"),
+                getattr(result, "tool", "ocr_images"),
+                text,
+            )
+            return ""
+        if text and text.strip():
+            log.info(
+                "[vision] sidecar ocr_images answered ({} chars): {}",
+                len(text), text[:300],
+            )
+            return text.strip()
+        return ""
+
+    async def _call_detect(self, mcp: Any, images: list[str]) -> tuple[str, bool]:
+        """Sidecar ``detect_objects``; ``(text, best_effort)``. ``('', False)`` on any miss.
+
+        ``best_effort`` is True when the backend answered ``via=vlm`` — the list
+        is an estimate, so the material flags it instead of presenting it as fact.
+        """
+        try_call_result = getattr(mcp, "try_call_tool_result", None)
+        if not callable(try_call_result):
+            log.debug("[vision] sidecar detect_objects skipped: no result-preserving path")
+            return "", False
+        timeout = self._sidecar_timeout
+        log.info(
+            "[vision] sidecar detect_objects sending {} frame(s) with timeout {}s",
+            len(images), timeout,
+        )
+        try:
+            result = await try_call_result(
+                ["video_rag"], "detect_objects", {"images": images}, timeout=timeout
+            )
+        except Exception as exc:
+            log.debug("[vision] sidecar detect_objects failed: {}", exc)
+            return "", False
+        if result is None:
+            log.debug("[vision] sidecar detect_objects unavailable (no tool / no client)")
+            return "", False
+        text = result.text if hasattr(result, "text") else str(result)
+        if bool(getattr(result, "is_error", False)) or _is_sidecar_error(text):
+            log.warning(
+                "[vision] sidecar detect_objects error ({}:{}): {}",
+                getattr(result, "server", "video_rag"),
+                getattr(result, "tool", "detect_objects"),
+                text,
+            )
+            return "", False
+        best_effort = "via=vlm" in text
+        if text and text.strip():
+            log.info(
+                "[vision] sidecar detect_objects answered ({} chars): {}",
+                len(text), text[:300],
+            )
+            return text.strip(), best_effort
+        return "", False
 
     async def _prewarm_vlm(self) -> None:
         """One minimal describe so the first real tick skips the model load.
@@ -1306,6 +1462,8 @@ register_plugin_param("executor_vision", "vision_fallback_model", None)
 register_plugin_param("executor_vision", "device_index", 0)
 register_plugin_param("executor_vision", "vision_repeat_hamming_max", 6)
 register_plugin_param("executor_vision", "vision_repeat_text_min_ratio", 0.9)
+register_plugin_param("executor_vision", "vision_ocr", True)
+register_plugin_param("executor_vision", "vision_detect", False)
 register_voice_param("vision_periodic", False)
 register_voice_param("vision_interval", "30s")
 register_voice_param("vision_interval_min", None)
