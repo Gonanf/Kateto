@@ -348,3 +348,107 @@ async def test_hermes_merges_conversation_id_and_reasoning(
         "reasoning_effort": "none",
     }
     assert captured["max_tokens"] == 4096
+
+
+def _pydantic_ctx(tmp_path: Path):  # type: ignore[no-untyped-def]
+    from kateto.core.config import (
+        CliSettings,
+        ConfigPaths,
+        KatetoConfig,
+        KatetoSettings,
+        LoadedConfig,
+        PluginSettings,
+    )
+    from kateto.core.discovery import DiscoveryContext
+
+    config = LoadedConfig(
+        settings=KatetoConfig(
+            kateto=KatetoSettings(),
+            plugin={
+                "voice_llm": PluginSettings(
+                    model="nemotron-test", endpoint="http://localhost:8000/v1"
+                )
+            },
+            cli=CliSettings(),
+        ),
+        paths=ConfigPaths(
+            config_dir=tmp_path,
+            config_file=tmp_path / "config.toml",
+            dotenv_file=tmp_path / ".env",
+            secrets_dir=tmp_path / "secrets",
+        ),
+    )
+    return DiscoveryContext(config=config, shared={})
+
+
+def _pydantic_settings(tmp_path: Path, **kwargs: object):  # type: ignore[no-untyped-def]
+    from kateto.core.config import VoiceSettings
+    from kateto.voices.factory import create_voice
+
+    voice = create_voice(
+        _pydantic_ctx(tmp_path),
+        VoiceSettings(enabled=True, **kwargs),  # type: ignore[arg-type]
+        voice_name="jane",
+    )
+    assert voice._pydantic_agent is not None
+    return voice._pydantic_agent.model_settings
+
+
+def test_pydantic_thinking_false_sends_reasoning_none(tmp_path: Path) -> None:
+    # Given: voz con thinking=false sin knob explícito (todas hoy).
+
+    # When: se construye el agente pydantic (el camino que corre).
+    model_settings = _pydantic_settings(tmp_path, thinking=False)
+
+    # Then: el Agent lleva extra_body con reasoning_effort=none.
+    assert model_settings["extra_body"] == {"reasoning_effort": "none"}
+
+
+def test_pydantic_thinking_true_sends_no_reasoning(tmp_path: Path) -> None:
+    # Given: thinking=true sin knob explícito.
+
+    # When: se construye el agente pydantic.
+    model_settings = _pydantic_settings(tmp_path, thinking=True)
+
+    # Then: ni la clave ni un extra_body vacío.
+    assert model_settings.get("extra_body") is None
+
+
+def test_pydantic_explicit_reasoning_wins_over_thinking(tmp_path: Path) -> None:
+    # Given: reasoning_effort explícito con thinking=false.
+
+    # When: se construye el agente pydantic.
+    model_settings = _pydantic_settings(
+        tmp_path, thinking=False, reasoning_effort="low"
+    )
+
+    # Then: va low tal cual.
+    assert model_settings["extra_body"] == {"reasoning_effort": "low"}
+
+
+def test_pydantic_logs_reasoning_once(tmp_path: Path) -> None:
+    # Given: captura del log de construcción.
+    from loguru import logger
+
+    from kateto.core.config import VoiceSettings
+    from kateto.voices.factory import create_voice
+
+    records: list[str] = []
+    sink = logger.add(records.append, format="{message}")
+
+    # When: se construye el agente con thinking=false.
+    try:
+        create_voice(
+            _pydantic_ctx(tmp_path),
+            VoiceSettings(enabled=True, thinking=False),
+            voice_name="jane",
+        )
+    finally:
+        logger.remove(sink)
+
+    # Then: una sola línea con el formato común + sufijo (pydantic).
+    lines = [r for r in records if "(pydantic)" in r]
+    assert len(lines) == 1
+    assert "reasoning_effort=none" in lines[0]
+    assert "thinking=False" in lines[0]
+    assert "model=nemotron-test" in lines[0]

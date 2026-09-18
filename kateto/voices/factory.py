@@ -7,8 +7,15 @@ from typing import Any
 from uuid import uuid4
 
 from kateto.core.config import VoiceSettings
-from kateto.voices.base import OpenAICompatibleProvider, VoiceAgent, VoiceProfile, VoiceRole
+from kateto.voices.base import (
+    OpenAICompatibleProvider,
+    VoiceAgent,
+    VoiceProfile,
+    VoiceRole,
+    resolve_reasoning_effort,
+)
 from kateto.voices.context import session_headers
+from loguru import logger
 
 
 _VOICE_CONSTRAINT = (
@@ -403,12 +410,32 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             # so both generation paths share one prefix from spawn on.
             # _pydantic_agent_loop keeps skipping system messages from
             # history: the stable text lives ONLY in the agent.
+            # Misma regla que los otros dos caminos: explícito gana,
+            # thinking=False → "none", thinking=True → no se manda. El
+            # m_settings por-request del loop mergea (run > agent) sin la
+            # clave, así que este extra_body llega al wire.
+            effort = resolve_reasoning_effort(
+                getattr(settings, "reasoning_effort", None), settings.thinking
+            )
+            logger.info(
+                "[provider] reasoning_effort={} thinking={} model={} (pydantic)",
+                effort,
+                settings.thinking,
+                voice_settings.model,
+            )
+            if effort is not None:
+                pydantic_settings = ModelSettings(
+                    max_tokens=settings.max_tokens or 256,
+                    extra_body={"reasoning_effort": effort},
+                )
+            else:
+                pydantic_settings = ModelSettings(max_tokens=settings.max_tokens or 256)
             pydantic_agent = Agent(
                 model=model,
                 system_prompt=profile.system_prompt,
                 toolsets=[kateto_toolset.toolset],
                 capabilities=capabilities,
-                model_settings=ModelSettings(max_tokens=settings.max_tokens or 256),
+                model_settings=pydantic_settings,
             )
             voice.set_pydantic_agent(pydantic_agent)
         except ImportError:

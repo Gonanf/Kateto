@@ -78,3 +78,39 @@ providers. Log una vez por instancia con el mismo formato `[provider]
 reasoning_effort={} thinking={} model={}`.
 
 **Archivos (addendum):** `kateto/providers/agent.py`, `kateto/voices/factory.py`
+
+### Addendum 2026-09-18 (2): el que corre es el agente pydantic
+
+Ninguno de los dos caminos anteriores corre en el runtime del usuario: sus
+voces van por el **agente de pydantic-ai** (`_pydantic_agent_loop`), que arma
+su propio modelo (`OpenAIChatModel` + `OpenAIProvider`) y sus settings en
+`kateto/voices/factory.py`. Ahí el `Agent` se construía con
+`ModelSettings(max_tokens=...)` sin reasoning, así que `thinking=false`
+tampoco llegaba al proveedor por este camino.
+
+Evidencia del runtime: la línea `[provider] reasoning_effort=...` **nunca**
+aparece en el log del usuario (sólo se logueaba desde los otros dos
+providers, que en este path nunca corren); primer chunk a ~5 s con
+`nemotron-3.5-lightning-30b-a3b` contra **1.85 s** con
+`reasoning_effort="none"` en la misma máquina y prompt del mismo tamaño.
+Todas las voces tienen `thinking = false`, así que la regla esperada es
+mandar `"none"`.
+
+Fix aplicado: `factory.py` calcula el esfuerzo con la misma
+`kateto.voices.base::resolve_reasoning_effort` (importada, sin duplicar la
+regla) y lo pasa por `extra_body` de `ModelSettings`
+(`extra_body={"reasoning_effort": effort}` sólo si hay effort; con
+`thinking=True` no se agrega la clave ni un `extra_body` vacío). Log una vez
+al construir el agente con el mismo formato más sufijo `(pydantic)`:
+`[provider] reasoning_effort={} thinking={} model={} (pydantic)`. No hizo
+falta tocar `_pydantic_agent_loop`: su `m_settings` por-request mergea sobre
+los settings del Agent (precedencia run > agent, `merge_model_settings` hace
+`base | overrides`) sin la clave `extra_body`, así que el valor del Agent
+sobrevive; y `OpenAIChatModel` manda `model_settings.get('extra_body')` al
+request (verificado en el venv, pydantic-ai 2.26).
+
+Quedan así **tres** caminos cableados con la misma regla: `OpenAICompatibleProvider`
+(`base.py`), `OpenAIAgentProvider`/`HermesProvider` (`providers/agent.py`) y
+el agente pydantic (`voices/factory.py`) — este último es el que corre.
+
+**Archivos (addendum 2):** `kateto/voices/factory.py`, `kateto/tests/test_voice_llm_params.py`
