@@ -63,6 +63,19 @@ One stable job per voice (`vision-describe-<voice>`), canceled on disable;
 re-enable never duplicates. Ticks deferred while the voice is talking wait
 for the next interval — never re-queued.
 
+Registration is ack-driven: the job counts as scheduled only when the
+scheduler's `schedule_result` ack arrives (the `[vision] scheduled ...` line
+logs at ack time, never at emit). If vision boots before `executor_scheduler`,
+the first request has no subscriber yet and is lost — pending voices retry
+with a short backoff until the ack lands, then stop. If the retries run out,
+one WARNING names the job (`[vision] vision-describe-<voice> NOT registered
+after N attempts (is executor_scheduler enabled?)`).
+
+> Boot-order trap: `PluginManager.enable_plugin` calls `plugin.enable()`
+> **before** subscribing its handlers, so any event emitted from `enable()`
+> reaches zero receivers and is dropped silently. Never assert side effects
+> at emit time — wait for the ack.
+
 ## Settings
 
 `[plugin.executor_vision]` keys:

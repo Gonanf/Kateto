@@ -445,3 +445,202 @@ async def test_periodic_scheduler_request_emits_targeted_generate(
 
     manager.remove_event_observer(envelopes.append)
     await asyncio.wait_for(manager.disable_plugin(plugin.name), timeout=5.0)
+
+
+# --- Ack + retry: vision enabled BEFORE the scheduler (real boot-order race) ---
+
+
+def _make_retry_plugin(**kwargs) -> StaticVisionPlugin:
+    plugin = StaticVisionPlugin(capture_fps=20.0, config_dir=None, **kwargs)
+    plugin.capture_frame = lambda target_pid=None: b""  # type: ignore[method-assign]
+    plugin._RETRY_DELAYS = (0.05, 0.05, 0.05, 0.05, 0.05, 0.05)
+    return plugin
+
+
+@pytest.mark.asyncio
+async def test_periodic_vision_before_scheduler_registers_on_retry():
+    # Given: voice + vision boot BEFORE the scheduler (the reported race)
+    manager = PluginManager()
+    await manager.enable_plugin(_Voice("jane"))
+    plugin = _make_retry_plugin(opted_in=(("jane", "30s"),))
+    await manager.enable_plugin(plugin)
+    await manager.wait_for_idle()
+
+    # Then: the first emit had no subscriber -> no ack, no job, still pending
+    assert plugin._periodic_jobs == []
+    assert plugin._periodic_pending == {"jane": "30s"}
+
+    # When: the scheduler boots late
+    scheduler = SchedulerPlugin()
+    await manager.enable_plugin(scheduler)
+
+    # Then: a retry lands on a live subscriber, the ack registers the job
+    await _wait_for(lambda: "vision-describe-jane" in scheduler._jobs, timeout=5.0)
+    await manager.wait_for_idle()
+    assert plugin._periodic_jobs == ["vision-describe-jane"]
+    assert plugin._periodic_pending == {}
+
+    # And: no duplicates after settling past the whole retry window
+    await asyncio.sleep(0.4)
+    await manager.wait_for_idle()
+    assert plugin._periodic_jobs == ["vision-describe-jane"]
+    assert list(scheduler._jobs) == ["vision-describe-jane"]
+
+    await asyncio.wait_for(manager.disable_plugin(plugin.name), timeout=5.0)
+    await asyncio.wait_for(manager.disable_plugin(scheduler.name), timeout=5.0)
+
+
+@pytest.mark.asyncio
+async def test_periodic_scheduler_first_single_emit_no_extra_retries():
+    # Given: the scheduler already listening when vision boots
+    manager = PluginManager()
+    scheduler = SchedulerPlugin()
+    await manager.enable_plugin(scheduler)
+    requests = _ScheduleRequestRecorder()
+    await manager.enable_plugin(requests)
+    results = _ScheduleResultRecorder()
+    await manager.enable_plugin(results)
+    await manager.enable_plugin(_Voice("jane"))
+    plugin = _make_retry_plugin(opted_in=(("jane", "30s"),))
+    await manager.enable_plugin(plugin)
+    await manager.wait_for_idle()
+
+    # When: settling past the whole retry window
+    await asyncio.sleep(0.4)
+    await manager.wait_for_idle()
+
+    # Then: exactly ONE emit, ONE ack, no retries, no duplicates
+    vision_requests = [r for r in requests.seen if r.event_name == "vision_describe_request"]
+    assert len(vision_requests) == 1
+    job_results = [r for r in results.seen if r.job_id == "vision-describe-jane"]
+    assert len(job_results) == 1 and job_results[0].error is None
+    assert plugin._periodic_jobs == ["vision-describe-jane"]
+    assert plugin._periodic_pending == {}
+
+    await asyncio.wait_for(manager.disable_plugin(plugin.name), timeout=5.0)
+    await asyncio.wait_for(manager.disable_plugin(scheduler.name), timeout=5.0)
+
+
+@pytest.mark.asyncio
+async def test_periodic_disable_cancels_job_and_pending():
+    # Given: a registered job (scheduler first)
+    manager = PluginManager()
+    scheduler = SchedulerPlugin()
+    await manager.enable_plugin(scheduler)
+    await manager.enable_plugin(_Voice("jane"))
+    plugin = _make_retry_plugin(opted_in=(("jane", "30s"),))
+    await manager.enable_plugin(plugin)
+    await manager.wait_for_idle()
+    await _wait_for(lambda: "vision-describe-jane" in scheduler._jobs, timeout=5.0)
+
+    # When: vision disables -> job canceled on both sides, nothing pending
+    await asyncio.wait_for(manager.disable_plugin(plugin.name), timeout=5.0)
+    await manager.wait_for_idle()
+    assert plugin._periodic_jobs == []
+    assert "vision-describe-jane" not in scheduler._jobs
+    assert plugin._periodic_pending == {}
+    assert not plugin._periodic_retry_tasks
+    await asyncio.wait_for(manager.disable_plugin(scheduler.name), timeout=5.0)
+
+    # Given: a pending-only plugin (vision first, scheduler never boots)
+    manager2 = PluginManager()
+    await manager2.enable_plugin(_Voice("jane"))
+    pending = _make_retry_plugin(opted_in=(("jane", "30s"),))
+    await manager2.enable_plugin(pending)
+    await manager2.wait_for_idle()
+    assert pending._periodic_pending == {"jane": "30s"}
+
+    # When: disabled while pending -> retries canceled, nothing leaks
+    await asyncio.wait_for(manager2.disable_plugin(pending.name), timeout=5.0)
+    assert pending._periodic_pending == {}
+    assert not pending._periodic_retry_tasks
+
+
+@pytest.mark.asyncio
+async def test_periodic_error_ack_no_retry_loop():
+    # Given: vision pending with no scheduler, recording every schedule_request
+    manager = PluginManager()
+    requests = _ScheduleRequestRecorder()
+    await manager.enable_plugin(requests)
+    await manager.enable_plugin(_Voice("jane"))
+    plugin = _make_retry_plugin(opted_in=(("jane", "30s"),))
+    await manager.enable_plugin(plugin)
+    await manager.wait_for_idle()
+    assert plugin._periodic_pending == {"jane": "30s"}
+
+    # When: an error ack arrives
+    await manager.emit(
+        "schedule_result",
+        ScheduleResultData(job_id="vision-describe-jane", error="boom"),
+        source="test",
+    )
+    await manager.wait_for_idle()
+
+    # Then: logged as skipped, pending dropped, no retry loop
+    assert plugin._periodic_jobs == []
+    assert plugin._periodic_pending == {}
+    assert plugin._periodic_skipped.get("jane") == "boom"
+    assert not plugin._periodic_retry_tasks
+    await asyncio.sleep(0.4)
+    await manager.wait_for_idle()
+    vision_requests = [r for r in requests.seen if r.event_name == "vision_describe_request"]
+    assert len(vision_requests) == 1
+
+    await asyncio.wait_for(manager.disable_plugin(plugin.name), timeout=5.0)
+
+
+@pytest.mark.asyncio
+async def test_periodic_exhaustion_warns_once_and_stops():
+    # Given: vision pending with no scheduler and a loguru sink
+    from loguru import logger as _logger
+
+    messages: list[str] = []
+    sink = _logger.add(messages.append, format="{message}")
+    try:
+        manager = PluginManager()
+        await manager.enable_plugin(_Voice("jane"))
+        plugin = _make_retry_plugin(opted_in=(("jane", "30s"),))
+        plugin._RETRY_DELAYS = (0.02, 0.02, 0.02, 0.02, 0.02, 0.02)
+        await manager.enable_plugin(plugin)
+        await manager.wait_for_idle()
+
+        # When: every retry also finds no subscriber
+        await _wait_for(lambda: plugin._periodic_pending == {}, timeout=5.0)
+
+        # Then: ONE warning naming the job, no job, no further retries
+        assert plugin._periodic_jobs == []
+        assert [m for m in messages if "NOT registered" in m and "vision-describe-jane" in m] != []
+        await asyncio.sleep(0.2)
+        assert plugin._periodic_pending == {}
+        await asyncio.wait_for(manager.disable_plugin(plugin.name), timeout=5.0)
+    finally:
+        _logger.remove(sink)
+
+
+@pytest.mark.asyncio
+async def test_periodic_unknown_voice_resolves_on_retry():
+    # Given: opt-in for a voice that does not exist yet, no scheduler
+    manager = PluginManager()
+    await manager.enable_plugin(_Voice("jane"))
+    plugin = _make_retry_plugin(opted_in=(("ghost", "30s"),))
+    await manager.enable_plugin(plugin)
+    await manager.wait_for_idle()
+
+    # Then: skipped with reason, kept pending (not dropped)
+    assert plugin._periodic_jobs == []
+    assert plugin._periodic_pending == {"ghost": "30s"}
+    assert "ghost" in plugin._periodic_skipped
+
+    # When: the voice AND the scheduler appear late
+    await manager.enable_plugin(_Voice("ghost"))
+    scheduler = SchedulerPlugin()
+    await manager.enable_plugin(scheduler)
+
+    # Then: the re-evaluated retry registers the job
+    await _wait_for(lambda: "vision-describe-ghost" in scheduler._jobs, timeout=5.0)
+    await manager.wait_for_idle()
+    assert plugin._periodic_jobs == ["vision-describe-ghost"]
+    assert plugin._periodic_pending == {}
+
+    await asyncio.wait_for(manager.disable_plugin(plugin.name), timeout=5.0)
+    await asyncio.wait_for(manager.disable_plugin(scheduler.name), timeout=5.0)
