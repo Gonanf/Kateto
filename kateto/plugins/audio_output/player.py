@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from typing import override
 
@@ -22,50 +23,83 @@ class SoundDeviceOutputStream:
     _stream: sounddevice.RawOutputStream
     _device: str | None
 
-    def __init__(self, stream: sounddevice.RawOutputStream, *, device: str | None) -> None:
+    def __init__(
+        self,
+        stream: sounddevice.RawOutputStream,
+        *,
+        device: str | None,
+        lock: threading.RLock | None = None,
+    ) -> None:
         self._stream = stream
         self._device = device
+        # ponytail: one RLock per stream serializes a blocking C write (run in
+        # a to_thread worker, NOT cancellable) against stop()/close() from the
+        # event loop, so the ALSA mmap area is never torn down mid-write
+        # (bug 113 segfault). RLock: write()'s error path re-enters stop().
+        self._lock: threading.RLock = lock if lock is not None else threading.RLock()
 
     @property
     def active(self) -> bool:
         return getattr(self._stream, "active", False)
 
     def start(self) -> None:
-        try:
-            if not self.active:
-                self._stream.start()
-        except (sounddevice.PortAudioError, ValueError) as error:
-            raise AudioOutputDeviceError(device=self._device, reason=str(error)) from error
+        with self._lock:
+            try:
+                if not self.active:
+                    self._stream.start()
+            except (sounddevice.PortAudioError, ValueError) as error:
+                raise AudioOutputDeviceError(device=self._device, reason=str(error)) from error
 
     def stop(self) -> None:
-        try:
-            self._stream.stop()
-        except Exception:
-            pass
-
-    def abort(self) -> None:
-        try:
-            self._stream.abort()
-        except Exception:
-            pass
-
-    def close(self) -> None:
-        try:
-            self._stream.close()
-        except Exception:
-            pass
-
-    def write(self, data: bytes) -> object:
-        try:
-            if not self.active:
-                self.start()
-            return self._stream.write(data)
-        except (sounddevice.PortAudioError, ValueError):
+        with self._lock:
             try:
                 self._stream.stop()
             except Exception:
                 pass
-            raise
+
+    def abort(self) -> None:
+        with self._lock:
+            try:
+                self._stream.abort()
+            except Exception:
+                pass
+
+    def close(self) -> None:
+        with self._lock:
+            try:
+                self._stream.close()
+            except Exception:
+                pass
+
+    def shutdown(self) -> None:
+        """Graceful stop()+close() held under ONE lock acquisition.
+
+        A write cannot slip between stop and close (nor overlap either):
+        the closer waits out at most one in-flight block (tens of ms at
+        blocksize 1024), which is what keeps barge-in immediate.
+        """
+        with self._lock:
+            try:
+                self._stream.stop()
+            except Exception:
+                pass
+            try:
+                self._stream.close()
+            except Exception:
+                pass
+
+    def write(self, data: bytes) -> object:
+        with self._lock:
+            try:
+                if not self.active:
+                    self._stream.start()
+                return self._stream.write(data)
+            except (sounddevice.PortAudioError, ValueError):
+                try:
+                    self._stream.stop()
+                except Exception:
+                    pass
+                raise
 
 
 class SoundDeviceOutputFactory:
@@ -149,10 +183,10 @@ class AudioOutputPlayer(Plugin):
 
     @override
     async def disable(self) -> None:
+        # Cancel the mixer BEFORE closing: no new write may start, and the
+        # close below waits out the abandoned in-flight write under the lock.
+        await self._cancel_mixer_task()
         self._close_stream()
-        if self._mixer_task is not None and not self._mixer_task.done():
-            self._mixer_task.cancel()
-        self._mixer_task = None
         self._active_pipelines.clear()
         self._pipeline_queues.clear()
         self._raw_lanes.clear()
@@ -449,10 +483,10 @@ class AudioOutputPlayer(Plugin):
                     self._pop_lane(lane_key, rescue=False)
             if not self._pipeline_queues:
                 self._playing_speaker = None
+                # Cancel first so no new write starts; the close then waits
+                # out the abandoned in-flight write under the stream lock.
+                await self._cancel_mixer_task()
                 self._close_stream()
-                if self._mixer_task is not None and not self._mixer_task.done():
-                    self._mixer_task.cancel()
-                self._mixer_task = None
                 await self._set_playing(False)
         else:
             self._interrupted = True
@@ -464,11 +498,12 @@ class AudioOutputPlayer(Plugin):
                     self.queue.task_done()
                 except Exception:
                     break
-            # Graceful stop+close (never abort — see _close_stream)
+            # Graceful stop+close (never abort — see _close_stream).
+            # Cancel the mixer BEFORE closing so no new write can start; the
+            # close then waits out the abandoned in-flight write under the
+            # stream lock. Audible tail is at most one block (tens of ms).
+            await self._cancel_mixer_task()
             self._close_stream()
-            if self._mixer_task is not None and not self._mixer_task.done():
-                self._mixer_task.cancel()
-            self._mixer_task = None
             self._active_pipelines.clear()
             self._pipeline_queues.clear()
             self._raw_lanes.clear()
@@ -482,6 +517,18 @@ class AudioOutputPlayer(Plugin):
             await self._set_playing(False)
             self._idle_event.set()
 
+    async def _cancel_mixer_task(self, *, timeout: float = 2.0) -> None:
+        task, self._mixer_task = self._mixer_task, None
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            pass
+        except Exception:  # pragma: no cover - defensive
+            pass
+
     def _close_stream(self, *, abort: bool = False) -> None:
         stream = self._stream
         self._stream = None
@@ -491,14 +538,13 @@ class AudioOutputPlayer(Plugin):
             # ponytail: never call abort() — on xrun-corrupted streams, abort()
             # triggers double-free in PortAudio's ALSA mmap path. Use graceful
             # stop() + close() even when abort was requested.
-            try:
-                stream.stop()
-            except Exception:
-                pass
-            try:
-                stream.close()
-            except Exception:
-                pass
+            # The shutdown holds the stream lock, so a to_thread write that was
+            # abandoned by _cancel_mixer_task (its worker thread is NOT
+            # cancellable) finishes before the ALSA mapping is torn down.
+            # Mixer-internal callers (idle timeout, write failure, reopen) run
+            # in the mixer task itself with no write in flight, so they never
+            # block here; only interrupt/disable can stall for one block.
+            stream.shutdown()
 
     async def _set_playing(self, playing: bool) -> None:
         if self.manager is None:
