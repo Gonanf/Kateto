@@ -16,6 +16,17 @@ enabled = true
 sample_rate = 16000
 silence_timeout = 1.5
 vad_model = "silero"
+# Barge-in vs self-bleed (no AEC): VAD inside this window after playback start
+# is treated as the speaker bleeding into the mic. Real barge-in must also be
+# louder than the smoothed playback level (x barge_in_level_factor) and sustain
+# that for barge_in_min_speech_ms. Turn accumulation: consecutive segments
+# closer than turn_silence_timeout merge into one audio_chunk (one Whisper
+# pass); max_turn_secs caps the turn buffer.
+# barge_in_grace_ms = 800.0
+# barge_in_level_factor = 1.3
+# barge_in_min_speech_ms = 300.0
+# turn_silence_timeout = 2.0
+# max_turn_secs = 30.0
 
 [plugin.audio_processor_whisper]
 enabled = true
