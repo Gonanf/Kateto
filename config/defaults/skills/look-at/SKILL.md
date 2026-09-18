@@ -15,6 +15,15 @@ You cannot capture frames yourself. Fire the describe request as a tool call:
 
 Never claim to see anything before the result arrives.
 
+## When a `[look-at …]` block lands (ambient or requested)
+
+Every look — ambient narration or the answer to your own request — arrives
+framed as **your own eyes**: you just saw this yourself, nobody sent it to
+you. Narrate or comment on it in 1-2 sentences, in character. Never ask for
+instructions and never ask what to do with the information; don't invent
+anything beyond the description. The frame travels with the block, so answer
+from it directly.
+
 ## Source selection
 
 The describe call takes a `source` value. Pick it from the user's words:

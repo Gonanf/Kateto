@@ -125,6 +125,7 @@ description: "Known Issues — índice de bugs"
 | 118 | Mensajes ignorados por el clasificador: quedan sin marca y el LLM los contesta en el turno siguiente | Alta | `kateto/voices/base.py` | [118-mensajes-ignorados-sin-marca-llm-contesta-despues.md](./bugs/118-mensajes-ignorados-sin-marca-llm-contesta-despues.md) |
 | 119 | Visión periódica: el job nunca se registra cuando el plugin se habilita antes que el scheduler | Alta | `kateto/plugins/executor/static_vision_plugin.py` | [119-vision-periodica-job-no-registrado-orden-arranque.md](./bugs/119-vision-periodica-job-no-registrado-orden-arranque.md) |
 | 120 | El describe de una captura real supera el timeout de 30 s del cliente MCP: la narración llega tarde y con un error de timeout | Alta | `kateto/plugins/system/external_mcp.py`, `kateto/plugins/executor/static_vision_plugin.py` | [120-describe-captura-real-supera-timeout-mcp.md](./bugs/120-describe-captura-real-supera-timeout-mcp.md) |
+| 121 | La voz recibe el caption de visión como dato pelado y pregunta qué hacer con él | Alta | `kateto/voices/base.py` | [121-caption-pelado-pregunta-que-hacer.md](./bugs/121-caption-pelado-pregunta-que-hacer.md) |
 
 ---
 
