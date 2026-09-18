@@ -120,6 +120,10 @@ class TurnGate(Plugin):
         if self._active is not None:
             self._active = None
             self._active_prompt = None
+        if data.reason in ("voice_activity", "user_turn"):
+            dropped = len(self._pending)
+            self._pending.clear()
+            log.info("turn_gate: dropped {} queued turn(s) on user interrupt", dropped)
         self._steering = True
 
     async def on_transcription(self, data: TranscriptionData) -> None:
@@ -182,6 +186,7 @@ class TurnGate(Plugin):
             self._pending.appendleft(item)
         else:
             self._pending.append(item)
+        log.info("turn_gate: queued {}({}) pending={}", event, target, len(self._pending))
 
     def release(self, voice: str) -> None:
         if self._active == voice:

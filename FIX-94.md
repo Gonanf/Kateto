@@ -292,3 +292,54 @@ Regresión: los 36 tests de `test_audio_barge_in.py` + `test_audio_input.py` +
   cortan el turno).
 - Que el `reason=silence` corresponda a pausa genuina y no a VAD que sub-segmenta
   por ruido: el log trae `segments` + `buffered_ms` para decidirlo en campo.
+
+---
+
+# FIX-94f — TurnGate: los turnos encolados no se descartan tras un barge-in del usuario (bug 108)
+
+Bug: `docs/src/content/docs/bugs/108-turnos-encolados-no-se-descartan-tras-barge-in.md`
+(Alta, `resolved` 2026-09-18).
+
+## Causa (verificada leyendo el código, no hipótesis)
+
+`TurnGate.decide()` devuelve `Decision.QUEUE` cuando `self._active is not None`;
+`VoiceAgent` entonces encola el turno en `TurnGate._pending` (`gate.enqueue(...)`
+en `voices/base.py:_pass_turn_gate`) y `_drain()` lo re-emite cuando la voz queda
+idle (`on_voice_idle` / `on_voice_status(IDLE)` / `on_audio_output_status` sin
+PLAYING). `on_interrupt()` limpiaba `_active`/`_active_prompt` y ponía
+`_steering = True`, pero **no tocaba `_pending`**. Secuencia del síntoma: el
+usuario interrumpe → la voz se calla → los fragmentos siguientes del usuario
+generan más `generate` → el primero ejecuta y los demás se encolan → cuando la
+voz queda idle, `_drain()` los emite de a uno → "me habló después" con los
+mensajes acumulados. El `_steering` bloquea el drenado inmediato, pero el próximo
+`decide` externo lo limpia (`_steering = False`) y el idle siguiente drena la
+cola vieja.
+
+## Fix (`kateto/plugins/system/turn_gate.py`, sin cambios de firmas ni contratos)
+
+- `on_interrupt`: si el interrupt viene del **usuario** (reason en
+  `{"voice_activity", "user_turn"}`), descarta la cola (`_pending.clear()`) y
+  loguea `turn_gate: dropped N queued turn(s) on user interrupt`. Los follow-ups
+  entre voces (otro reason/dept) mantienen el comportamiento actual: la cola sobrevive.
+- Diagnóstico de cola: al encolar, `turn_gate: queued <event>(<target>) pending=<n>`
+  (el log de `draining` ya existía). El próximo log muestra si se acumula.
+
+## Tests (`kateto/tests/test_turn_gate.py`, 3 nuevos)
+
+| Test | Cubre |
+|---|---|
+| `test_user_interrupt_drops_queued_turns_and_nothing_drains` | Cola con 2 pendientes + interrupt de usuario → `_pending` vacío y ningún drenado posterior (recorder no recibe nada) |
+| `test_non_user_interrupt_keeps_queue_and_drains_as_followup` | Interrupt no-usuario (`handoff`) → la cola sobrevive y drena como hoy (regresión del follow-up) |
+| `test_new_user_generate_executes_after_user_interrupt_flush` | Tras el flush, un `generate` nuevo del usuario **ejecuta** (no bloqueado por `_steering`) |
+
+Cambio intencional en 1 test existente: `test_two_generates_different_voices_queue_second_turn`
+esperaba que el turno encolado de doktor drenara tras un interrupt de usuario — eso
+**era** el bug (turno de usuario acumulado contestado después). Ahora espera 0
+llamadas de doktor; el drenado de follow-ups queda cubierto por la regresión nueva.
+Ningún otro test existente se tocó.
+
+## Qué NO se puede verificar sin audio real
+
+- Que la razón del interrupt en campo sea siempre `voice_activity`/`user_turn` para
+  habla real del usuario: si algún path emite otro reason para habla de usuario, la
+  cola sobreviviría. El log `dropped N ...` lo muestra en cada barge-in.
