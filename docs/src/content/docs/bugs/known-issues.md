@@ -127,6 +127,7 @@ description: "Known Issues — índice de bugs"
 | 119 | Visión periódica: el job nunca se registra cuando el plugin se habilita antes que el scheduler | Alta | `kateto/plugins/executor/static_vision_plugin.py` | [119-vision-periodica-job-no-registrado-orden-arranque.md](./bugs/119-vision-periodica-job-no-registrado-orden-arranque.md) |
 | 120 | El describe de una captura real supera el timeout de 30 s del cliente MCP: la narración llega tarde y con un error de timeout | Alta | `kateto/plugins/system/external_mcp.py`, `kateto/plugins/executor/static_vision_plugin.py` | [120-describe-captura-real-supera-timeout-mcp.md](./bugs/120-describe-captura-real-supera-timeout-mcp.md) |
 | 121 | La voz recibe el caption de visión como dato pelado y pregunta qué hacer con él | Alta | `kateto/voices/base.py` | [121-caption-pelado-pregunta-que-hacer.md](./bugs/121-caption-pelado-pregunta-que-hacer.md) |
+| 123 | Narración de visión: que opine (no que describa literal) y que se calle si la pantalla es la misma | Alta | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/voices/base.py` | [123-narracion-opina-y-se-calla-si-es-lo-mismo.md](./bugs/123-narracion-opina-y-se-calla-si-es-lo-mismo.md) |
 
 ---
 
