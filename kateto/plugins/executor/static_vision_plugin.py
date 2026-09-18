@@ -47,6 +47,22 @@ def _setting(settings: PluginSettings | None, key: str, default: Any) -> Any:
 # ponytail: JPEG floor-accept — q60→q40→q30, then accept whatever remains; never raise.
 _FRAME_BYTE_CAP = 128 * 1024
 
+# Sidecar describe budget floor: a native 1920x1080 frame costs the VLM
+# ~2350 vision tokens at ~66 tok/s prefill (~36 s) plus generation, so the
+# 30 s MCP default always loses. The vision timeout applies, never below this.
+_SIDECAR_TIMEOUT_FLOOR = 120.0
+
+# video-rag rejects oversized frames (`image {i} exceeds ~1.5MB data-URL cap`):
+# never send a data-URL longer than this; drop the frame with a log instead.
+_SIDECAR_URL_CAP = 1_500_000
+
+# 1x1 red pixel PNG: capture fallback headless + VLM prewarm payload.
+_PREWARM_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0"
+    b"\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
 
 def _encode_bounded(img: Any) -> bytes:
     """Encode a PIL image to bounded JPEG bytes (max side 640, 128KB cap, floor-accept)."""
@@ -67,6 +83,68 @@ def _encode_bounded(img: Any) -> bytes:
         if len(encoded) <= _FRAME_BYTE_CAP:
             return encoded
     return encoded
+
+
+def _cap_frames(
+    kept: list[tuple[float, bytes]], limit: int
+) -> list[tuple[float, bytes]]:
+    """Trim a deduped window to *limit* frames, oldest + newest first.
+
+    Each frame costs the VLM ~2350 vision tokens (~36 s prefill at ~66 tok/s),
+    so periodic narration sends 2 by default: the oldest and the newest, which
+    is what shows the change. Wider limits keep evenly-spaced frames; a limit
+    of 1 keeps the newest.
+    """
+    if limit <= 0 or len(kept) <= limit:
+        return list(kept)
+    if limit == 1:
+        return [kept[-1]]
+    return [kept[round(i * (len(kept) - 1) / (limit - 1))] for i in range(limit)]
+
+
+def _compress_for_sidecar(payload: bytes, *, max_width: int) -> bytes | None:
+    """Fit a frame under the sidecar data-URL cap at `max_width`, aspect kept.
+
+    Passthrough when already small (never upscale or re-encode for fun).
+    Otherwise downscale to `max_width` JPEG with a quality ladder, shrinking
+    further while over the cap. `None` = never fits: the caller drops it.
+    Small URL but over-wide images still go through the ladder: byte size is
+    not the only cost, pixel count is what the VLM prefills (~2350 tokens for
+    a native 1920x1080 frame).
+    """
+    try:
+        from PIL import Image
+    except Exception:
+        return payload if len(_data_url(payload)) <= _SIDECAR_URL_CAP else None
+
+    small_url = len(_data_url(payload)) <= _SIDECAR_URL_CAP
+    try:
+        with Image.open(io.BytesIO(payload)) as probe:
+            narrow = probe.size[0] <= max_width
+            if small_url and narrow:
+                return payload
+            orig = probe.convert("RGB")
+            ow, oh = orig.size
+    except Exception:
+        return payload if small_url else None
+    widths = [max_width]
+    width = max_width
+    while width > 640:
+        width = int(width * 0.75)
+        widths.append(width)
+    for target in widths:
+        frame = orig
+        if ow > target:
+            frame = orig.resize(
+                (target, max(1, round(oh * target / ow))), Image.Resampling.LANCZOS
+            )
+        for quality in (70, 55, 40):
+            buf = io.BytesIO()
+            frame.save(buf, format="JPEG", quality=quality)
+            out = buf.getvalue()
+            if len(_data_url(out)) <= _SIDECAR_URL_CAP:
+                return out
+    return None
 
 
 # ponytail: 8/64 hamming bound borrowed from video-rag phash_dedupe; dense 1fps
@@ -163,6 +241,19 @@ class StaticVisionPlugin(Plugin):
     # at exhaustion, never a loop. Tests shrink this via instance override.
     _RETRY_DELAYS: tuple[float, ...] = (2.0, 5.0, 10.0, 20.0, 30.0, 30.0)
 
+    # Grace before the VLM prewarm fires: plugins enable before
+    # external_mcp.start_all(), so an immediate sidecar call would always miss.
+    _PREWARM_DELAY_SECS: float = 10.0
+
+    @property
+    def _sidecar_timeout(self) -> float:
+        """Sidecar describe budget: `vision_timeout`, never below the floor."""
+        try:
+            base = float(self.vision_timeout)
+        except (TypeError, ValueError):
+            base = 60.0
+        return max(base, _SIDECAR_TIMEOUT_FLOOR)
+
     def __init__(
         self,
         settings: PluginSettings | None = None,
@@ -177,6 +268,8 @@ class StaticVisionPlugin(Plugin):
         window_secs: float = 5.0,
         # Config dir for the look-at skill backfill; None disables it (tests).
         config_dir: Path | None = None,
+        max_frames_per_describe: int = 2,
+        vision_sidecar_max_width: int = 1024,
     ) -> None:
         super().__init__(name=name, capabilities=("vision", "static_vision"))
         self._settings = settings
@@ -197,6 +290,12 @@ class StaticVisionPlugin(Plugin):
         self.vision_timeout = _setting(settings, "vision_timeout", 60.0)
         self.vision_fallback_endpoint = _setting(settings, "vision_fallback_endpoint", None)
         self.vision_fallback_model = _setting(settings, "vision_fallback_model", None)
+        self.max_frames_per_describe = _setting(
+            settings, "max_frames_per_describe", max_frames_per_describe
+        )
+        self.vision_sidecar_max_width = _setting(
+            settings, "vision_sidecar_max_width", vision_sidecar_max_width
+        )
         self.device_index = _setting(settings, "device_index", 0)
         # Factory-built from the voice table (todo 9 consumes); never read here.
         self.opted_in = tuple(opted_in)
@@ -215,6 +314,7 @@ class StaticVisionPlugin(Plugin):
         self._periodic_pending: dict[str, str] = {}
         self._periodic_retry_tasks: dict[str, asyncio.Task[None]] = {}
         self._capture_task: asyncio.Task[None] | None = None
+        self._prewarm_task: asyncio.Task[None] | None = None
         # ponytail: todo-5 lane opens the webcam handle; disable releases it.
         self._webcam_handle: Any | None = None
         self._webcam_unavailable: str | None = None
@@ -258,6 +358,12 @@ class StaticVisionPlugin(Plugin):
                 "describes fall back to the video-rag sidecar if present, else a text recap"
             )
         await self._schedule_periodic()
+        if self._opted_in and (
+            self._prewarm_task is None or self._prewarm_task.done()
+        ):
+            self._prewarm_task = asyncio.create_task(
+                self._prewarm_vlm(), name=f"kateto-vision-prewarm-{self.name}"
+            )
         if self._capture_task is not None and not self._capture_task.done():
             return
         self._capture_task = asyncio.create_task(
@@ -378,6 +484,13 @@ class StaticVisionPlugin(Plugin):
             task.cancel()
             try:
                 await task
+            except asyncio.CancelledError:
+                pass
+        prewarm, self._prewarm_task = self._prewarm_task, None
+        if prewarm is not None and not prewarm.done():
+            prewarm.cancel()
+            try:
+                await prewarm
             except asyncio.CancelledError:
                 pass
         handle, self._webcam_handle = self._webcam_handle, None
@@ -502,11 +615,19 @@ class StaticVisionPlugin(Plugin):
         sections: list[
             tuple[str, list[tuple[float, bytes]], int, str, list[Any], list[tuple[float, bytes]]]
         ] = []
+        per_describe = self.max_frames_per_describe
+        frame_limit = (
+            min(max_images, per_describe)
+            if per_describe and per_describe > 0
+            else max_images
+        )
         for name in wanted:
             frames = snapshots[name]
             if not frames:
                 continue
-            kept = dedupe_window(frames, fallback_keep=max_images)[:max_images]
+            kept = _cap_frames(
+                dedupe_window(frames, fallback_keep=max_images), frame_limit
+            )
             if not kept:
                 continue
             t0 = kept[0][0]
@@ -598,6 +719,106 @@ class StaticVisionPlugin(Plugin):
                     target=voice,
                 )
 
+    def _lookup_sidecar_mcp(self) -> Any | None:
+        try:
+            context = discovery_context_for((self,))
+        except Exception:
+            return None
+        mcp = getattr(context, "external_mcp", None) if context is not None else None
+        if mcp is None and context is not None:
+            # The manager lives in shared services, not on the context field.
+            get_shared = getattr(context, "get_shared", None)
+            if callable(get_shared):
+                try:
+                    mcp = get_shared("external_mcp")
+                except Exception:
+                    mcp = None
+        return mcp
+
+    def _sidecar_images(
+        self,
+        sections: list[
+            tuple[str, list[tuple[float, bytes]], int, str, list[Any], list[tuple[float, bytes]]]
+        ],
+    ) -> tuple[list[str], int]:
+        """Compressed data-URLs for the sidecar plus the over-cap drop count."""
+        width = self.vision_sidecar_max_width or 1024
+        width = max(320, width)
+        urls: list[str] = []
+        dropped = 0
+        for sec in sections:
+            name, kept = sec[0], sec[1]
+            for _ts, payload in kept:
+                squeezed = _compress_for_sidecar(payload, max_width=width)
+                if squeezed is None:
+                    dropped += 1
+                    log.warning(
+                        "[vision] sidecar frame dropped ({}): over the ~1.5MB "
+                        "data-URL cap even after recompression",
+                        name,
+                    )
+                else:
+                    urls.append(_data_url(squeezed))
+        return urls, dropped
+
+    async def _prewarm_vlm(self) -> None:
+        """One minimal describe so the first real tick skips the model load.
+
+        Best-effort: any failure logs and never surfaces (no error event,
+        no narration, no exception out of this task).
+        """
+        try:
+            await asyncio.sleep(self._PREWARM_DELAY_SECS)
+            tiny_url = _data_url(_PREWARM_PNG)
+            if self.vision_endpoint and self.vision_model:
+                await _openai_client(
+                    self.vision_endpoint, _vision_api_key(), 1, self.vision_timeout
+                ).chat.completions.create(
+                    model=self.vision_model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "warmup"},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": tiny_url, "detail": "low"},
+                                },
+                            ],
+                        }
+                    ],
+                    max_tokens=1,
+                    timeout=self.vision_timeout,
+                    extra_headers={"x-kateto-requester": "prewarm"},
+                )
+                log.info("[vision] VLM prewarm answered (primary)")
+                return
+            mcp = self._lookup_sidecar_mcp()
+            if mcp is None:
+                log.debug("[vision] VLM prewarm skipped: no VLM link configured")
+                return
+            try_call_result = getattr(mcp, "try_call_tool_result", None)
+            if callable(try_call_result):
+                result = await try_call_result(
+                    ["video_rag"],
+                    "describe_images",
+                    {"prompt": "warmup", "images": [tiny_url]},
+                    timeout=self._sidecar_timeout,
+                )
+            else:
+                result = await mcp.try_call_tool(
+                    ["video_rag"], "describe_images", {"prompt": "warmup", "images": [tiny_url]}
+                )
+            if result is None:
+                log.debug("[vision] VLM prewarm skipped: sidecar not up yet")
+            else:
+                text = result.text if hasattr(result, "text") else str(result)
+                log.info("[vision] VLM prewarm answered (sidecar, {} chars)", len(text))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("[vision] VLM prewarm failed (best-effort, ignoring): {}", exc)
+
     async def _fallback_texts(
         self,
         headers: dict[str, str],
@@ -621,29 +842,35 @@ class StaticVisionPlugin(Plugin):
         sections: list[tuple],
         window_secs: float | None = None,
     ) -> tuple[str, str]:
-        images = [
-            part["image_url"]["url"] for part in content if part.get("type") == "image_url"
-        ]
+        images, dropped = self._sidecar_images(sections)
         # ponytail: error text is not a description — it falls through to the
         # next link, and only the recap names it (so ambient narration, which
         # suppresses recaps, never voices an error as what it saw).
         sidecar_error: str | None = None
+        if not images and dropped:
+            sidecar_error = (
+                f"all {dropped} frame(s) exceeded the sidecar ~1.5MB data-URL cap "
+                "even after recompression (dropped, see warnings)"
+            )
+            log.warning("[vision] sidecar describe_images skipped: {}", sidecar_error)
         try:
-            context = discovery_context_for((self,))
-            mcp = getattr(context, "external_mcp", None) if context is not None else None
-            if mcp is None and context is not None:
-                # The manager lives in shared services, not on the context field.
-                get_shared = getattr(context, "get_shared", None)
-                if callable(get_shared):
-                    try:
-                        mcp = get_shared("external_mcp")
-                    except Exception:
-                        mcp = None
-            if mcp is not None:
+            mcp = self._lookup_sidecar_mcp()
+            if mcp is not None and images:
+                timeout = self._sidecar_timeout
+                log.info(
+                    "[vision] sidecar describe_images sending {} frame(s) "
+                    "({} dropped over cap) with timeout {}s",
+                    len(images),
+                    dropped,
+                    timeout,
+                )
                 try_call_result = getattr(mcp, "try_call_tool_result", None)
                 if callable(try_call_result):
                     result = await try_call_result(
-                        ["video_rag"], "describe_images", {"prompt": prompt, "images": images}
+                        ["video_rag"],
+                        "describe_images",
+                        {"prompt": prompt, "images": images},
+                        timeout=timeout,
                     )
                     if result is not None:
                         text = result.text if hasattr(result, "text") else str(result)
@@ -702,7 +929,7 @@ class StaticVisionPlugin(Plugin):
                             else "no client or no describe_images tool"
                         )
                         log.warning("[vision] sidecar video_rag unreachable ({})", detail)
-            else:
+            elif mcp is None:
                 log.warning("[vision] sidecar video_rag unavailable (no external MCP context)")
         except Exception as exc:
             log.warning("[vision] sidecar describe_images failed: {}", exc)
@@ -790,11 +1017,7 @@ class StaticVisionPlugin(Plugin):
             pass
 
         # 3. Fallback dummy PNG bytes (1x1 red pixel PNG)
-        return (
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-            b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0"
-            b"\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
+        return _PREWARM_PNG
 
     def _capture_webcam(self) -> bytes | None:
         try:
@@ -851,6 +1074,8 @@ register_plugin_param("executor_vision", "vision_endpoint", None)
 register_plugin_param("executor_vision", "vision_model", None)
 register_plugin_param("executor_vision", "vision_max_tokens", 300)
 register_plugin_param("executor_vision", "vision_timeout", 60.0)
+register_plugin_param("executor_vision", "max_frames_per_describe", 2)
+register_plugin_param("executor_vision", "vision_sidecar_max_width", 1024)
 register_plugin_param("executor_vision", "vision_fallback_endpoint", None)
 register_plugin_param("executor_vision", "vision_fallback_model", None)
 register_plugin_param("executor_vision", "device_index", 0)

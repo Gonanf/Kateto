@@ -151,12 +151,13 @@ def _image_parts(call_kwargs: dict) -> list[dict]:
 @pytest.mark.asyncio
 async def test_describe_single_call_ordered_parts(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: 3 distinct frames + a primary client returning canned text
+    # (cap lifted to 5: this test proves 3-frame oldest→newest ordering)
     calls: list = []
     _install_fake_vision(monkeypatch, {}, calls)
     manager = PluginManager()
     results = _ResultRecorder()
     await manager.enable_plugin(results)
-    plugin = await _make_plugin(manager)
+    plugin = await _make_plugin(manager, max_frames_per_describe=5)
     frames = [_noise_frame(seed) for seed in (1, 2, 3)]
     for i, payload in enumerate(frames):
         plugin._append_frame("screen", payload, 10.0 + i)

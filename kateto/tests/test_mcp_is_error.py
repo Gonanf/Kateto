@@ -95,6 +95,29 @@ async def test_timeout_marks_is_error_with_timeout_text() -> None:
 
 
 @pytest.mark.asyncio
+async def test_call_tool_result_respects_per_call_timeout() -> None:
+    # Given: una sesión lenta (0.15 s) con texto válido
+    class _SlowSession:
+        async def call_tool(self, name: str, arguments: dict):
+            await asyncio.sleep(0.15)
+            return _session_result("slow but fine")
+
+    # When: el timeout pasado es más corto que la llamada
+    short = await _client_with(_SlowSession()).call_tool_result("describe_images", {}, timeout=0.05)
+
+    # Then: timeout marcado como error con el texto histórico
+    assert short.is_error is True
+    assert short.text == '{"error": "MCP tool timed out: describe_images"}'
+
+    # When: el timeout pasado alcanza
+    long = await _client_with(_SlowSession()).call_tool_result("describe_images", {}, timeout=5.0)
+
+    # Then: la respuesta lenta llega intacta y sin flag
+    assert long.is_error is False
+    assert long.text == "slow but fine"
+
+
+@pytest.mark.asyncio
 async def test_client_not_started_marks_is_error() -> None:
     # Given: cliente sin sesión
     client = _client_with(None)
@@ -118,7 +141,7 @@ async def test_manager_try_call_tool_result_keeps_flag_and_text_compat() -> None
     async def has_tool(name: str) -> bool:
         return name == "describe_images"
 
-    async def call_tool_result(name: str, arguments: dict) -> ToolCallResult:
+    async def call_tool_result(name: str, arguments: dict, timeout: float = 30.0) -> ToolCallResult:
         return ToolCallResult(text=err, is_error=True, server="video_rag", tool=name)
 
     manager._clients["video_rag"] = SimpleNamespace(  # type: ignore[assignment]
@@ -147,7 +170,7 @@ class _FlaggedMCP:
     def __init__(self, result: ToolCallResult) -> None:
         self._result = result
 
-    async def try_call_tool_result(self, servers, tool, args):
+    async def try_call_tool_result(self, servers, tool, args, timeout: float = 30.0):
         return self._result
 
 
