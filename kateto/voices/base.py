@@ -774,14 +774,16 @@ class VoiceAgent(Plugin):
         # ponytail: is_relevant removed — classification plugin handles intent filtering now
         if prompt is None or not prompt.strip():
             return
-        origin = "followup" if self._followup_pending else "external"
+        origin = data.origin or ("followup" if self._followup_pending else "external")
         decision = await self._pass_turn_gate(prompt, data, origin=origin, event="generate")
         if decision is not Decision.EXECUTE:
             if decision is Decision.DISCARD:
                 self._followup_pending = False
             return
         self._followup_pending = False
-        self._interrupted = False
+        if origin != "ambient":
+            # Ambient narration must never clear a user barge-in state.
+            self._interrupted = False
         await self._set_status(VoiceStatus.THINKING)
         generation = asyncio.create_task(
             self._stream_response(

@@ -18,6 +18,7 @@ from kateto.core.config import PluginSettings
 from kateto.core.discovery import discovery_context_for
 from kateto.core.event import (
     GenerateData,
+    InterruptData,
     PluginErrorData,
     ScheduleCancelData,
     ScheduleRequestData,
@@ -414,6 +415,11 @@ class StaticVisionPlugin(Plugin):
         # Pending voice -> interval until the schedule_result ack lands.
         self._periodic_pending: dict[str, str] = {}
         self._periodic_retry_tasks: dict[str, asyncio.Task[None]] = {}
+        # Barge-in epoch per requester voice: bumped on user interrupt; a
+        # describe that started in an older epoch is discarded when it returns.
+        self._user_epoch: dict[str, int] = {}
+        # In-flight describe tasks per requester voice (cancelled on interrupt).
+        self._describe_tasks: dict[str, asyncio.Task[None]] = {}
         self._capture_task: asyncio.Task[None] | None = None
         self._prewarm_task: asyncio.Task[None] | None = None
         # ponytail: todo-5 lane opens the webcam handle; disable releases it.
@@ -428,6 +434,7 @@ class StaticVisionPlugin(Plugin):
             self.manager.register_event("vision_describe_request", VisionDescribeRequestData)
             self.manager.register_event("vision_describe_result", VisionDescribeResultData)
             self.manager.register_event("schedule_result", ScheduleResultData)
+            self.manager.register_event("interrupt", InterruptData)
         if self._config_dir is not None:
             # ponytail: narrow backfill exception — bootstrap skips existing config
             # dirs, so the skill file is copied here; failures degrade silently and
@@ -688,11 +695,20 @@ class StaticVisionPlugin(Plugin):
         pending_tasks = list(self._periodic_retry_tasks.values())
         self._periodic_retry_tasks.clear()
         self._periodic_pending.clear()
+        describe_tasks = list(self._describe_tasks.values())
+        self._describe_tasks.clear()
         for retry in pending_tasks:
             retry.cancel()
         for retry in pending_tasks:
             try:
                 await retry
+            except asyncio.CancelledError:
+                pass
+        for task in describe_tasks:
+            task.cancel()
+        for task in describe_tasks:
+            try:
+                await task
             except asyncio.CancelledError:
                 pass
         await super().disable()
@@ -731,10 +747,48 @@ class StaticVisionPlugin(Plugin):
             await asyncio.sleep(interval)
 
     async def on_vision_describe_request(self, data: Any = None) -> None:
-        manager = self.required_manager
         if isinstance(data, dict):
             data = VisionDescribeRequestData.model_validate(data)
-        requester: str = data.requester
+        requester: str = data.requester if data is not None else "auto"
+        voice = self._voice_of(requester)
+        # La narración captura la época ANTES de pedir el describe: si el
+        # usuario habla mientras el VLM contesta, el resultado vuelve viejo.
+        epoch = self._user_epoch.get(voice, 0)
+        key = voice or "__auto__"
+        task = asyncio.create_task(self._run_describe(data, epoch))
+        self._describe_tasks[key] = task
+        try:
+            await task
+        except asyncio.CancelledError:
+            log.info(
+                "[vision] describe in-flight for {} cancelled by user interrupt", voice or requester
+            )
+        finally:
+            if self._describe_tasks.get(key) is task:
+                self._describe_tasks.pop(key, None)
+
+    @staticmethod
+    def _voice_of(requester: str) -> str:
+        return requester.split("scheduler:", 1)[1] if requester.startswith("scheduler:") else requester
+
+    async def on_interrupt(self, data: Any = None) -> None:
+        if isinstance(data, dict):
+            data = InterruptData.model_validate(data)
+        if not isinstance(data, InterruptData):
+            return
+        if data.reason not in ("voice_activity", "user_turn"):
+            return
+        for voice, task in list(self._describe_tasks.items()):
+            if task.done():
+                continue
+            self._user_epoch[voice] = self._user_epoch.get(voice, 0) + 1
+            task.cancel()
+            log.info("[vision] user interrupt: cancelling in-flight describe for {}", voice)
+
+    async def _run_describe(self, data: Any, epoch: int) -> None:
+        manager = self.required_manager
+        requester: str = data.requester if data is not None else "auto"
+        voice = self._voice_of(requester)
         source: str = data.source or "auto"
         max_images = data.max_images if data.max_images and data.max_images > 0 else 5
         correlation_id = data.correlation_id
@@ -915,6 +969,19 @@ class StaticVisionPlugin(Plugin):
             window_end=window_end,
             via=via,
         )
+        if self._user_epoch.get(voice, 0) != epoch:
+            # El usuario habló mientras el describe estaba en vuelo: su turno
+            # nuevo gana. No se narra ni se emite generate; el ciclo se
+            # reprograma respetando el rango aleatorio.
+            log.info(
+                "[vision] describe result discarded for {}: usuario habló durante "
+                "el describe (época {} != {})",
+                voice or requester,
+                epoch,
+                self._user_epoch.get(voice, 0),
+            )
+            self._after_narration(voice)
+            return
         if via != "recap" and not is_periodic:
             for name, _, _, _, _, _ in sections:
                 self._last_narrated[name] = {
@@ -978,7 +1045,10 @@ class StaticVisionPlugin(Plugin):
                 frames_note = ", 1 frame" if kept_count == 1 else ""
                 await manager.emit(
                     "generate",
-                    GenerateData(prompt=f"[look-at {source} {span:.0f}s{frames_note}]: {fused}"),
+                    GenerateData(
+                        prompt=f"[look-at {source} {span:.0f}s{frames_note}]: {fused}",
+                        origin="ambient",
+                    ),
                     source=self.name,
                     target=voice,
                 )

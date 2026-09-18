@@ -293,4 +293,125 @@ async def test_followup_executes_while_mixer_busy_but_queues_while_turn_held() -
     # Then: the follow-up is queued until the active turn is released
     assert gate.decide(voice="doktor", prompt="followup", origin="followup") is Decision.QUEUE
     gate.release("jane")
+
+
+# --- Barge-in fix: narración ambiental (video-rag) nunca le gana al usuario ---
+
+
+@pytest.mark.asyncio
+async def test_ambient_discards_with_active_turn_and_never_queues_or_claims() -> None:
+    # Given: un turno externo activo de jane
+    _manager, gate = await _with_gate()
+    assert gate.decide(voice="jane", prompt="hola", origin="external") is Decision.EXECUTE
+    # When: la narración ambiental intenta pasar
+    decision = gate.decide(voice="doktor", prompt="[look-at ...]: narración", origin="ambient")
+    # Then: DISCARD; no se encola ni se reclama el turno
+    assert decision is Decision.DISCARD
+    assert not gate._pending
+    assert gate._active == "jane"
+    assert "doktor" not in gate._barge_in
+
+
+@pytest.mark.asyncio
+async def test_ambient_discards_with_pending_turns() -> None:
+    # Given: un gate sin turno activo pero con turns pendientes
+    _manager, gate = await _with_gate()
+    gate.enqueue(event="generate", data=GenerateData(prompt="segundo"), target="doktor")
+    # When: la narración ambiental intenta pasar
+    decision = gate.decide(voice="doktor", prompt="[look-at ...]: narración", origin="ambient")
+    # Then: DISCARD y la cola queda intacta
+    assert decision is Decision.DISCARD
+    assert len(gate._pending) == 1
+
+
+@pytest.mark.asyncio
+async def test_ambient_discards_after_barge_in_and_never_touches_barge_in() -> None:
+    # Given: un turno externo activo de jane y luego el usuario interrumpe
+    manager, gate = await _with_gate()
+    assert gate.decide(voice="jane", prompt="hola", origin="external") is Decision.EXECUTE
+    await manager.emit("interrupt", InterruptData(reason="voice_activity"), source="vad")
+    await manager.wait_for_idle(timeout=5)
+    assert "jane" in gate._barge_in
+    # When: la narración ambiental intenta pasar
+    decision = gate.decide(voice="jane", prompt="[look-at ...]: narración", origin="ambient")
+    # Then: DISCARD y _barge_in sigue intacto (no se borra la marca del usuario)
+    assert decision is Decision.DISCARD
+    assert "jane" in gate._barge_in
+
+
+@pytest.mark.asyncio
+async def test_ambient_executes_only_when_nobody_spoke_and_no_active_turn() -> None:
+    # Given: un gate limpio (nadie habló, sin turno activo)
+    _manager, gate = await _with_gate()
+    # When: la narración ambiental pasa
+    decision = gate.decide(voice="jane", prompt="[look-at ...]: narración", origin="ambient")
+    # Then: EXECUTE sin reclamar _active ni tocar _barge_in
+    assert decision is Decision.EXECUTE
+    assert gate._active is None
+    assert not gate._barge_in
+
+
+@pytest.mark.asyncio
+async def test_ambient_generate_does_not_reset_interrupted(tmp_path: Path) -> None:
+    # Given: jane con estado de barge-in (_interrupted=True)
+    manager = PluginManager()
+    await manager.enable_plugin(TurnGate())
+    write_references(tmp_path)
+    from kateto.voices.factory import _PROFILES
+
+    jane = VoiceAgent(
+        profile=_PROFILES["jane"],
+        config_dir=tmp_path,
+        provider=StreamingFixtureProvider(),
+    )
+    await manager.enable_plugin(jane)
+    # Marca de barge-in directa: el interrupt de voz limpiaría el estado
+    # THINKING por carrera, y lo que importa aquí es la marca en el gate.
+    gate = manager.get_plugin("turn_gate")
+    assert isinstance(gate, TurnGate)
+    gate._barge_in.add("jane")
+    jane._interrupted = True
+    # When: la narración ambiental llega
+    await manager.emit(
+        "generate",
+        GenerateData(prompt="[look-at screen 5s]: narración", origin="ambient"),
+        source="static_vision",
+        target="jane",
+    )
+    await manager.wait_for_idle(timeout=5)
+    # Then: el gate la descarta, NO resetea _interrupted y no toca _barge_in
+    assert jane._interrupted is True
+    assert "jane" in gate._barge_in
+    assert len(jane._provider.requests) == 0  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_external_generate_still_resets_interrupted(tmp_path: Path) -> None:
+    # Given: jane con estado de barge-in
+    manager = PluginManager()
+    await manager.enable_plugin(TurnGate())
+    write_references(tmp_path)
+    from kateto.voices.factory import _PROFILES
+
+    jane = VoiceAgent(
+        profile=_PROFILES["jane"],
+        config_dir=tmp_path,
+        provider=StreamingFixtureProvider(),
+    )
+    await manager.enable_plugin(jane)
+    # Marca de barge-in directa en el gate (ver test anterior: carrera del interrupt)
+    gate = manager.get_plugin("turn_gate")
+    assert isinstance(gate, TurnGate)
+    gate._barge_in.add("jane")
+    jane._interrupted = True
+    # When: un generate externo (sin origin => external) llega
+    await manager.emit(
+        "generate", GenerateData(prompt="hola"), source="user", target="jane"
+    )
+    await manager.wait_for_idle(timeout=5)
+    # Then: comportamiento intacto: external resetea _interrupted, borra la marca
+    # de barge-in y genera
+    assert jane._interrupted is False
+    assert "jane" not in gate._barge_in
+    assert len(jane._provider.requests) == 1  # type: ignore[attr-defined]
     assert gate.decide(voice="doktor", prompt="followup", origin="followup") is Decision.EXECUTE

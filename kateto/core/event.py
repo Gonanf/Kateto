@@ -178,6 +178,11 @@ class GenerateData(EventModel):
     prompt: str | None = None
     workflow: str | None = None
     phase_id: str | None = None
+    # Turn priority at the TurnGate: "external" (user/system), "followup"
+    # (inter-voice) or "ambient" (video-rag narration; never outranks the user).
+    # None = el emisor no opina: la voz resuelve el origen como siempre
+    # (followup si hay un followup pendiente, si no external).
+    origin: str | None = None
 
 
 GENERATE_REQUEST_MAX_DEPTH: int = 3
