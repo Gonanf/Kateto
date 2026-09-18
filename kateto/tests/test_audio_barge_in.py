@@ -102,6 +102,7 @@ def make_settings(
     barge_in_min_speech_ms: float | None = None,
     turn_silence_timeout: float | None = None,
     max_turn_secs: float | None = None,
+    playback_idle_timeout: float | None = None,
     silence_timeout: float = 0.2,
 ) -> PluginSettings:
     return PluginSettings(
@@ -115,6 +116,7 @@ def make_settings(
         barge_in_min_speech_ms=barge_in_min_speech_ms,
         turn_silence_timeout=turn_silence_timeout,
         max_turn_secs=max_turn_secs,
+        playback_idle_timeout=playback_idle_timeout,
     )
 
 
@@ -126,6 +128,7 @@ def make_microphone(
     barge_in_min_speech_ms: float | None = None,
     turn_silence_timeout: float | None = None,
     max_turn_secs: float | None = None,
+    playback_idle_timeout: float | None = None,
     silence_timeout: float = 0.2,
     vad_scores: list[float] = (0.9, 0.9, 0.9, 0.1, 0.1, 0.1, 0.9, 0.1, 0.1),
     cycle_last: bool = False,
@@ -139,6 +142,7 @@ def make_microphone(
             barge_in_min_speech_ms=barge_in_min_speech_ms,
             turn_silence_timeout=turn_silence_timeout,
             max_turn_secs=max_turn_secs,
+            playback_idle_timeout=playback_idle_timeout,
             silence_timeout=silence_timeout,
         ),
         vad=make_vad(list(vad_scores), cycle_last=cycle_last),
@@ -553,4 +557,246 @@ async def test_max_turn_secs_flushes_accumulated_buffer() -> None:
     # Then: the cap flushed what was accumulated (one chunk, >= cap duration).
     assert len(recorder.chunks) == 1
     assert recorder.chunks[0].duration_ms >= 250.0
+    await manager.close()
+
+
+def test_playback_idle_timeout_default_and_override() -> None:
+    # Given: default settings and an explicit idle-window override.
+    defaults = AudioInputConfig.from_settings(make_settings(), source="mic", require_device=False)
+    tuned = AudioInputConfig.from_settings(
+        make_settings(playback_idle_timeout=0.2), source="mic", require_device=False
+    )
+
+    # Then: the watchdog knob defaults to 1.5 s and honors overrides.
+    assert defaults.playback_idle_timeout == 1.5
+    assert tuned.playback_idle_timeout == 0.2
+
+
+@pytest.mark.asyncio
+async def test_playback_without_final_expires_after_idle_timeout() -> None:
+    # Given: TTS streamed chunks but its final sentinel was lost (bug 97).
+    manager = PluginManager()
+    recorder = RecordingAudioPlugin()
+    microphone, factory = make_microphone(
+        playback_idle_timeout=0.15,
+        turn_silence_timeout=0.2,
+        silence_timeout=0.1,
+        vad_scores=[0.1, 0.9, 0.1, 0.1, 0.1],
+    )
+    await manager.enable_plugin(recorder)
+    await manager.enable_plugin(microphone)
+    for _ in range(2):
+        await microphone.on_audio_output(
+            AudioOutput(
+                samples=PLAYBACK_CHUNK,
+                sample_rate=24_000,
+                channels=1,
+                format="pcm_s16le",
+                final=False,
+            )
+        )
+    assert microphone._playback_active
+    assert microphone._playback_rms > 0.0
+
+    # When: no audio_output arrives for longer than the idle window, then the
+    # mic pumps one frame through the drain loop.
+    await asyncio.sleep(0.3)
+    factory.captures[0].emit(SILENCE_FRAME)
+    await manager.wait_for_idle()
+
+    # Then: the stale window expired and the barge-in baseline is reset.
+    assert not microphone._playback_active
+    assert microphone._playback_rms == 0.0
+
+    # And: the next user segment flows to ASR instead of being dropped.
+    factory.captures[0].emit(SPEECH_FRAME)
+    factory.captures[0].emit(SILENCE_FRAME)
+    await asyncio.wait_for(recorder.chunk_received.wait(), timeout=2)
+    await manager.wait_for_idle()
+    assert len(recorder.chunks) == 1
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_bleed_segment_dropped_when_interrupt_on_vad_false() -> None:
+    # Given: the documented workaround (no VAD interrupts) while our own
+    # voice is playing through the speakers.
+    manager = PluginManager()
+    interrupts = InterruptRecorder()
+    recorder = RecordingAudioPlugin()
+    microphone, factory = make_microphone(
+        interrupt_on_vad=False,
+        turn_silence_timeout=0.2,
+        silence_timeout=0.1,
+        vad_scores=[0.9, 0.1, 0.1],
+    )
+    await manager.enable_plugin(recorder)
+    await manager.enable_plugin(interrupts)
+    await manager.enable_plugin(microphone)
+    microphone.set_playback_active(True)
+    capture = LogCapture()
+    try:
+        # When: one full utterance (speaker bleed, not the user) is captured.
+        factory.captures[0].emit(SPEECH_FRAME)
+        factory.captures[0].emit(SILENCE_FRAME)
+        factory.captures[0].emit(SILENCE_FRAME)
+        await manager.wait_for_idle()
+        await asyncio.sleep(0.4)
+
+        # Then: bleed never reaches ASR, and our own echo never cancels
+        # the turn that is still playing.
+        assert recorder.chunks == []
+        assert interrupts.interrupts == []
+        assert any("attributed to own playback, dropped" in line for line in capture.lines)
+    finally:
+        capture.stop()
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_new_user_turn_emits_user_turn_interrupt_when_vad_interrupt_disabled() -> None:
+    # Given: the workaround config, no playback, and a fresh turn.
+    manager = PluginManager()
+    interrupts = InterruptRecorder()
+    recorder = RecordingAudioPlugin()
+    microphone, factory = make_microphone(
+        interrupt_on_vad=False,
+        turn_silence_timeout=0.2,
+        silence_timeout=0.1,
+        vad_scores=[0.9, 0.1, 0.1, 0.1],
+    )
+    await manager.enable_plugin(recorder)
+    await manager.enable_plugin(interrupts)
+    await manager.enable_plugin(microphone)
+
+    # When: the user opens a new turn (first closed segment).
+    factory.captures[0].emit(SPEECH_FRAME)
+    factory.captures[0].emit(SILENCE_FRAME)
+    factory.captures[0].emit(SILENCE_FRAME)
+    await asyncio.wait_for(interrupts.received.wait(), timeout=1)
+    await asyncio.wait_for(recorder.chunk_received.wait(), timeout=2)
+    await manager.wait_for_idle()
+
+    # Then: downstream generation/TTS is cut via the shared interrupt
+    # contract, and the user audio still flows to ASR.
+    assert [item.reason for item in interrupts.interrupts] == ["user_turn"]
+    assert len(recorder.chunks) == 1
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_playback_idle_timeout_zero_disables_watchdog() -> None:
+    # Given: the watchdog disabled (0) with stale playback and no final sentinel.
+    manager = PluginManager()
+    recorder = RecordingAudioPlugin()
+    microphone, factory = make_microphone(
+        playback_idle_timeout=0,
+        turn_silence_timeout=0.2,
+        silence_timeout=0.1,
+        vad_scores=[0.9, 0.1, 0.1],
+    )
+    await manager.enable_plugin(recorder)
+    await manager.enable_plugin(microphone)
+    await microphone.on_audio_output(
+        AudioOutput(
+            samples=PLAYBACK_CHUNK,
+            sample_rate=24_000,
+            channels=1,
+            format="pcm_s16le",
+            final=False,
+        )
+    )
+    assert microphone._playback_active
+    # Silence far longer than any watchdog window.
+    microphone._last_playback_chunk_at = monotonic() - 60.0
+    capture = LogCapture()
+    try:
+        # When: frames pump through the drain loop + one closed segment.
+        factory.captures[0].emit(SILENCE_FRAME)
+        await manager.wait_for_idle()
+        factory.captures[0].emit(SPEECH_FRAME)
+        factory.captures[0].emit(SILENCE_FRAME)
+        factory.captures[0].emit(SILENCE_FRAME)
+        await manager.wait_for_idle()
+        await asyncio.sleep(0.4)
+
+        # Then: the window stays open (disabled), nothing reopens the mic,
+        # and the segment is still attributed to playback (dropped).
+        assert microphone._playback_active
+        assert not any("reopening mic" in line for line in capture.lines)
+        assert recorder.chunks == []
+        assert any("attributed to own playback, dropped" in line for line in capture.lines)
+    finally:
+        capture.stop()
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_new_user_turn_cancels_inflight_generation_and_purges_queues(tmp_path) -> None:
+    # Given: a real voice with a generation stuck in flight, and a listener
+    # in workaround mode (no VAD interrupts) on the same bus.
+    from kateto.core.config import VoiceSettings
+    from kateto.core.event import GenerateData
+    from kateto.voices.base import VoiceAgent, VoiceProfile, VoiceRole, get_pipeline
+
+    class BlockingProvider:
+        def __init__(self) -> None:
+            self.entered = asyncio.Event()
+            self.cancelled = asyncio.Event()
+
+        def stream(self, request):
+            return self._gen()
+
+        async def _gen(self):
+            self.entered.set()
+            yield "hello "
+            try:
+                await asyncio.sleep(3600.0)
+            except asyncio.CancelledError:
+                self.cancelled.set()
+                raise
+
+    manager = PluginManager()
+    interrupts = InterruptRecorder()
+    provider = BlockingProvider()
+    profile = VoiceProfile(
+        voice_id="jane",
+        display_name="Jane",
+        role=VoiceRole.SITUATIONAL_ABSURD,
+        system_prompt="Be brief.",
+        relevance_terms=frozenset(),
+        depts=("fun",),
+    )
+    voice = VoiceAgent(
+        profile=profile,
+        config_dir=tmp_path,
+        provider=provider,
+        settings=VoiceSettings(stream=True, tts_provider="edge_tts"),
+    )
+    microphone, factory = make_microphone(
+        interrupt_on_vad=False,
+        silence_timeout=0.1,
+        turn_silence_timeout=10.0,
+        vad_scores=[0.9, 0.1, 0.1, 0.1],
+    )
+    await manager.enable_plugin(interrupts)
+    await manager.enable_plugin(voice)
+    await manager.enable_plugin(microphone)
+    await manager.emit("generate", GenerateData(prompt="hola"), source="test", target="jane")
+    await asyncio.wait_for(provider.entered.wait(), timeout=2)
+    assert voice._generation_task is not None
+
+    # When: the user opens a new turn while that generation is in flight.
+    factory.captures[0].emit(SPEECH_FRAME)
+    factory.captures[0].emit(SILENCE_FRAME)
+    await asyncio.wait_for(provider.cancelled.wait(), timeout=2)
+    await manager.wait_for_idle()
+
+    # Then: the generation task is cancelled and the streaming queues purged.
+    assert [item.reason for item in interrupts.interrupts] == ["user_turn"]
+    assert voice._generation_task is None
+    pipeline = get_pipeline("jane")
+    assert pipeline is not None
+    assert pipeline.token_queue.empty()
+    assert pipeline.pcm_queue.empty()
     await manager.close()

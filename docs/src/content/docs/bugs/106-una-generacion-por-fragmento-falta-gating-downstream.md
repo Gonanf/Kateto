@@ -2,8 +2,9 @@
 id: 106
 title: "Una generación por fragmento de Whisper — falta cancelación/gating downstream del turno"
 severity: Alta
-status: open
+status: resolved
 component: kateto/plugins/audio_input/listener.py
+resolved: 2026-09-18
 ---
 
 ## 106. Una generación por fragmento de Whisper — falta cancelación/gating downstream del turno
@@ -38,6 +39,25 @@ classifier → generate → speak`, una vez por fragmento. Ver bug 58
   cap `max_turn_secs`, default 30 s) → una sola pasada de Whisper por turno.
 - Mientras el playback propio está activo sin barge-in real, el segmento se
   atribuye al bleed y se descarta (no entra al buffer de turno).
+
+### Solución aplicada (2026-09-18, detalle en `FIX-94.md` sección "Segunda pasada")
+
+- Acumulación de turno en el listener: los segmentos consecutivos se anexan al
+  `_turn_buffer` y se emite **un solo** `audio_chunk` por turno (fin de turno =
+  silencio ≥ `turn_silence_timeout`, default 2.0 s; cap `max_turn_secs`, default
+  30 s) → una sola pasada de Whisper por turno, un solo `generate` downstream.
+  Cubierto por `kateto/tests/test_audio_turn_chain.py` (3 segmentos cercanos →
+  1 `transcribe` + 1 `generate`; 2 turnos separados → 2 + 2; bleed en playback
+  → 0 `transcribe`).
+- Señal `interrupt(reason="user_turn")` al abrir un turno de usuario (solo cuando
+  `interrupt_on_vad` es false, donde antes no había ninguna señal de corte;
+  con VAD el `voice_activity` ya cubre el caso). Reusa los handlers existentes
+  sin cambiar firmas ni contratos: `VoiceAgent.on_interrupt` cancela
+  `_generation_task` y purga `token_queue`/`pcm_queue` (las reemplaza por vacías);
+  EdgeTTS `on_interrupt` corta el stream (`_cancel_stream`) y purga su cola;
+  el player `on_interrupt` limpia las lanes del turno (`_pop_lane(rescue=False)`).
+  Cubierto por `test_new_user_turn_emits_user_turn_interrupt_when_vad_interrupt_disabled`
+  y `test_new_user_turn_cancels_inflight_generation_and_purges_queues`.
 
 ### Posible solución (pendiente, downstream)
 

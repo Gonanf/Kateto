@@ -60,6 +60,7 @@ class AudioInputPlugin(Plugin):
         self._accepting_audio = False
         self._playback_active = False
         self._playback_started_at: float | None = None
+        self._last_playback_chunk_at: float | None = None
         self._deferred_barge_in = False
         self._playback_rms = 0.0
         self._speech_onset_at: float | None = None
@@ -94,6 +95,7 @@ class AudioInputPlugin(Plugin):
         self._recording_status_emitted = False
         self._last_resume_gap_ms = None
         self._playback_started_at = None
+        self._last_playback_chunk_at = None
         self._deferred_barge_in = False
         self._playback_rms = 0.0
         self._speech_onset_at = None
@@ -141,6 +143,7 @@ class AudioInputPlugin(Plugin):
         await self._set_recording(False)
         self._playback_active = False
         self._playback_started_at = None
+        self._last_playback_chunk_at = None
         self._deferred_barge_in = False
         self._playback_rms = 0.0
         self._speech_onset_at = None
@@ -151,6 +154,7 @@ class AudioInputPlugin(Plugin):
     async def on_audio_output(self, data: AudioOutput) -> None:
         if data.samples:
             self._playback_rms = apply_ema(calculate_raw_rms(data.samples), self._playback_rms)
+            self._last_playback_chunk_at = monotonic()
         self.set_playback_active(not data.final)
 
     def set_playback_active(self, active: bool) -> None:
@@ -159,13 +163,30 @@ class AudioInputPlugin(Plugin):
                 return
             self._playback_active = True
             self._playback_started_at = monotonic()
+            if self._last_playback_chunk_at is None:
+                self._last_playback_chunk_at = self._playback_started_at
             self._playback_rms = 0.0
         else:
             self._playback_active = False
             self._playback_started_at = None
+            self._last_playback_chunk_at = None
             self._deferred_barge_in = False
             self._playback_rms = 0.0
             self._speech_onset_at = None
+
+    def _refresh_playback_idle(self) -> None:
+        if not self._playback_active:
+            return
+        # ponytail: 0 disables the watchdog (documented default comment in
+        # base.py); without this guard 0 would expire on the first frame.
+        if self._config.playback_idle_timeout <= 0:
+            return
+        last = self._last_playback_chunk_at
+        if last is None:
+            return
+        if (monotonic() - last) >= self._config.playback_idle_timeout:
+            log.info("[mic] playback idle timeout ({:.1f}s without audio_output), reopening mic", self._config.playback_idle_timeout)
+            self.set_playback_active(False)
 
     def _callback_for(self, session: int) -> Callable:
         def callback(
@@ -200,6 +221,7 @@ class AudioInputPlugin(Plugin):
                 samples = self._callback_queue.pop()
                 if samples is None:
                     break
+                self._refresh_playback_idle()
                 speech = await to_thread(self._vad.is_speech, samples)
                 mic_rms = calculate_raw_rms(samples)
                 update = self._segmenter.consume(samples, speech=speech)
@@ -296,10 +318,18 @@ class AudioInputPlugin(Plugin):
         )
 
     async def _handle_closed_segment(self, samples: bytes) -> None:
-        if self._config.interrupt_on_vad and self._playback_active:
+        self._refresh_playback_idle()
+        if self._playback_active:
             log.info("[mic] segment attributed to own playback, dropped")
             return
+        is_new_turn = not self._turn_buffer
         self._turn_buffer.extend(samples)
+        if is_new_turn and not self._config.interrupt_on_vad:
+            await self._require_manager().interrupt(
+                reason="user_turn",
+                source=self._event_source,
+                dept=self._config.dept,
+            )
         if duration_ms(bytes(self._turn_buffer)) >= self._config.max_turn_secs * 1_000:
             self._cancel_turn_flush()
             await self._flush_turn()

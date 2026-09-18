@@ -25,3 +25,14 @@ mic/listener (VAD Silero) → audio_chunk
 ## Interrupción
 
 El `interrupt` NO cancela tareas ya encoladas — solo frena el consumidor. Para purgar: reemplazar las colas del pipeline por vacías en `on_interrupt` (`pcm_queue = asyncio.Queue()`).
+
+## Knobs del listener (`audio_input_mic`)
+
+| Knob | Default | Efecto |
+|---|---|---|
+| `barge_in_grace_ms` | `800.0` | VAD dentro de la ventana de playback propio se difiere |
+| `barge_in_level_factor` | `1.3` | El mic debe superar `playback_rms × factor` para cortar |
+| `barge_in_min_speech_ms` | `300.0` | Habla sostenida mínima para el barge-in real |
+| `playback_idle_timeout` | `1.5` (`0` lo deshabilita) | Sin `audio_output` en esa ventana → playback terminado (el `final=True` no es fiable, bug 97) |
+| `turn_silence_timeout` | `2.0` | Silencio continuo que cierra el turno (un `audio_chunk` por turno) |
+| `max_turn_secs` | `30.0` | Techo del buffer de turno |

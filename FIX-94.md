@@ -154,3 +154,70 @@ en 1 chunk, flush único tras silencio, cap por `max_turn_secs`, defaults/overri
   amplitud con el frame del mic: ambos usan `calculate_raw_rms` (independiente del
   sample rate), pero la ganancia relativa parlante/mic es física y varía por equipo.
 - Latencia percibida del corte con `barge_in_min_speech_ms=300` + gracia 800 ms.
+
+---
+
+# Segunda pasada (2026-09-18) — A/B/C/D: watchdog, desacople, user_turn, cadena e2e
+
+Los dos síntomas originales seguían: (1) Kateto habla encima del usuario,
+(2) una generación por fragmento de Whisper. Cuatro fixes, todos con causa
+verificable en código.
+
+## A. `_playback_active` no dependía solo del sentinel `final` (quedaba sordo para siempre)
+
+`on_audio_output` prendía/apagaba la ventana con `not data.final`, pero ese
+`final=True` no es confiable (bug 97: el player pierde oraciones en cola tras
+el final). Si se perdía, `_playback_active` quedaba True para siempre: todo
+segmento se descartaba como bleed (el usuario nunca se transcribía) y el
+barge-in comparaba contra un `_playback_rms` obsoleto.
+
+Fix (`listener.py`): watchdog con knob nuevo `playback_idle_timeout` (default
+**1.5 s**). Se guarda `_last_playback_chunk_at` en cada `on_audio_output` con
+samples; `_refresh_playback_idle()` (llamada desde el drain loop y desde
+`_handle_closed_segment`, sin threads) cierra la ventana si no llega ningún
+`audio_output` en ese lapso (`reopening mic`, `_playback_rms=0.0`).
+`0` deshabilita el watchdog (early-return, si no el `>= 0` expiraría en el
+primer frame).
+
+## B. El descarte de bleed dependía de `interrupt_on_vad` (el workaround auto-transcribía)
+
+`_handle_closed_segment` solo descartaba si `interrupt_on_vad` era True. Ese
+flag gobierna si se **interrumpe**, no si el audio es del usuario o del
+parlante: con `interrupt_on_vad=false` el bleed entraba al turno.
+
+Fix: el descarte depende solo de `_playback_active` + ausencia de barge-in
+concedido. Con el workaround el eco propio tampoco entra a Whisper.
+
+## C. Bug 106 — cancelación downstream del turno anterior
+
+Si arrancaba un turno nuevo con generación/TTS en vuelo, nada garantizaba el
+corte. Al abrir un turno de usuario (primer segmento con buffer vacío y
+`interrupt_on_vad=false`, donde antes no había señal alguna) el listener emite
+`interrupt(reason="user_turn")` vía `manager.interrupt` — sin cambiar firmas
+ni contratos, reusando handlers existentes: `VoiceAgent.on_interrupt` cancela
+`_generation_task` y purga `token_queue`/`pcm_queue`; EdgeTTS corta el stream;
+el player limpia las lanes. (Con `interrupt_on_vad=true` el `voice_activity`
+ya cubre el corte, por eso la señal solo se emite en modo workaround.)
+
+## D. Test end-to-end de la cadena (`kateto/tests/test_audio_turn_chain.py`)
+
+Listener → whisper (fake) → classifier (fake) → `generate`: 3 segmentos
+separados por menos que `turn_silence_timeout` → 1 `transcribe` + 1 `generate`;
+2 turnos separados por más → 2 + 2; playback con bleed → 0 `transcribe`.
+
+## Knobs nuevos de la pasada
+
+| Knob | Default | Efecto |
+|---|---|---|
+| `playback_idle_timeout` | `1.5` (`0` lo deshabilita) | Sin `audio_output` en esa ventana → playback terminado |
+| `barge_in_level_factor` | `1.3` | El mic debe superar `playback_rms × factor` |
+| `barge_in_min_speech_ms` | `300.0` | Habla sostenida mínima para cortar |
+| `turn_silence_timeout` | `2.0` | Silencio continuo que cierra el turno |
+| `max_turn_secs` | `30.0` | Techo del buffer de turno |
+
+## Qué queda sin verificar (requiere hardware real)
+
+- Calibración de `barge_in_level_factor` con micrófono y parlantes reales: el
+  1.3 es un punto de partida; si el bleed corta (falso positivo) subirlo, si
+  cuesta cortar (falso negativo) bajarlo. Los logs `granted/denied` traen los
+  RMS medidos para tunear por equipo.

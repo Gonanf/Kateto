@@ -22,7 +22,6 @@ description: "Known Issues — índice de bugs"
 | 99 | Subtítulos pelean entre texto LLM y texto TTS (z-fighting de captions) | Baja | `kateto/plugins/visual_overlay/web/index.html` | [99-subtitulos-pelean-llm-vs-tts.md](./bugs/99-subtitulos-pelean-llm-vs-tts.md) |
 | 100 | Warning `returncode 255` en cada teardown de ffmpeg | Baja | `kateto/providers/edgetts.py` | [100-warning-returncode-255-teardown.md](./bugs/100-warning-returncode-255-teardown.md) |
 | 101 | Whisper en Iris Xe vía Vulkan: primera inferencia lenta | Media | `kateto/providers/whisper.py` | [101-whisper-lento-en-iris-xe.md](./bugs/101-whisper-lento-en-iris-xe.md) |
-| 106 | Una generación por fragmento de Whisper — falta cancelación/gating downstream del turno | Alta | `kateto/plugins/audio_input/listener.py` | [106-una-generacion-por-fragmento-falta-gating-downstream.md](./bugs/106-una-generacion-por-fragmento-falta-gating-downstream.md) |
 
 
 ## Resueltos (✅)
@@ -49,6 +48,7 @@ description: "Known Issues — índice de bugs"
 | 38 | Doktor falla en generate — 'dict' no tiene conversation_id | Alta | `kateto/voices/base.py` | [38-doktor-generate-dict-conversation_id.md](./bugs/38-doktor-generate-dict-conversation_id.md) |
 | 27 | TUI se congela durante streaming de TTS y eventos de audio | Crítica | `tui.py`, `edgetts.py`, `player.py`, `whisper.py` | [27-tui-freeze-tts-streaming.md](./bugs/27-tui-freeze-tts-streaming.md) |
 | 94 | El micrófono escucha el propio parlante y el VAD auto-interrumpe el habla | Alta | `kateto/plugins/audio_input/listener.py` | [94-auto-barge-in-por-vad-escucha-propio-parlante.md](./bugs/94-auto-barge-in-por-vad-escucha-propio-parlante.md) |
+| 106 | Una generación por fragmento de Whisper — falta cancelación/gating downstream del turno | Alta | `kateto/plugins/audio_input/listener.py` | [106-una-generacion-por-fragmento-falta-gating-downstream.md](./bugs/106-una-generacion-por-fragmento-falta-gating-downstream.md) |
 | 25 | Web sandbox: presentación interactiva del sistema Kateto | Media | `web/` (nuevo) | [25-web-sandbox-presentation.md](./bugs/25-web-sandbox-presentation.md) |
 | 24 | TUI: conflictos de nombres entre voces activadas y plugins auto-detectados | Media | `kateto/plugins/system/tui.py` | [24-tui-voice-name-conflict.md](./bugs/24-tui-voice-name-conflict.md) |
 | 23 | Nuevo plugin VoiceSOULManager: gestión centralizada de SOUL/JOURNAL/workflows | Media | `kateto/plugins/voice_soul_manager/` | [23-plugin-soul-journal-manager.md](./bugs/23-plugin-soul-journal-manager.md) |

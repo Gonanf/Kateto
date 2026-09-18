@@ -45,3 +45,12 @@ Respuestas truncadas a una palabra de forma intermitente; el `255` enmascara la 
 4. Atribución de bleed: segmentos durante playback propio sin barge-in se
    descartan (no entran a Whisper); acumulación de turno (un `audio_chunk` por
    turno, `turn_silence_timeout` 2.0 s, `max_turn_secs` 30 s).
+5. Segunda pasada (2026-09-18, detalle en `FIX-94.md` sección "Segunda pasada"):
+   watchdog `playback_idle_timeout` (default 1.5 s, `0` lo deshabilita) — el
+   `final=True` no es fiable (bug 97: el player pierde oraciones en cola tras
+   el final), así que sin chunks de `audio_output` en esa ventana el listener
+   reabre el mic (`reopening mic`) en vez de quedar sordo para siempre; y
+   desacople del descarte respecto de `interrupt_on_vad` — el descarte depende
+   solo de `_playback_active` + ausencia de barge-in, así con el workaround
+   `interrupt_on_vad=false` el bleed tampoco entra al turno (antes Kateto se
+   transcribía a sí misma).

@@ -32,6 +32,11 @@ DEFAULT_BARGE_IN_MIN_SPEECH_MS: Final = 300.0
 # closer than this merge into one turn (one Whisper pass); silence longer than
 # this flushes the turn.  silence_timeout stays the intra-turn cut.
 DEFAULT_TURN_SILENCE_TIMEOUT: Final = 2.0
+# ponytail: the player drops queued sentences after a lost final sentinel
+# (bug 97), so final=True is not a reliable end-of-playback signal.  Without
+# a watchdog the listener would stay deaf forever.  No audio_output chunk in
+# this window means playback is over.  Tune per plugin; 0 disables it.
+DEFAULT_PLAYBACK_IDLE_TIMEOUT: Final = 1.5
 # ponytail: hard ceiling so a monologue cannot grow the turn buffer forever.
 DEFAULT_MAX_TURN_SECS: Final = 30.0
 # ponytail: 0.5 is the upstream default, but it assumes loud/normalised
@@ -86,6 +91,9 @@ class AudioInputConfig:
     # Turn accumulation: consecutive segments closer than this flush as one chunk.
     turn_silence_timeout: float = DEFAULT_TURN_SILENCE_TIMEOUT
     max_turn_secs: float = DEFAULT_MAX_TURN_SECS
+    # Playback watchdog: silence on audio_output longer than this clears the
+    # playback window (final=True alone is unreliable, see bug 97).
+    playback_idle_timeout: float = DEFAULT_PLAYBACK_IDLE_TIMEOUT
     dept: str | None = "fun"
     callback_queue_capacity: int = 32
 
@@ -159,6 +167,11 @@ class AudioInputConfig:
                 DEFAULT_MAX_TURN_SECS
                 if getattr(settings, "max_turn_secs", None) is None
                 else settings.max_turn_secs
+            ),
+            playback_idle_timeout=(
+                DEFAULT_PLAYBACK_IDLE_TIMEOUT
+                if getattr(settings, "playback_idle_timeout", None) is None
+                else settings.playback_idle_timeout
             ),
             dept=dept,
             callback_queue_capacity=(
