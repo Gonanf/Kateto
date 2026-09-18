@@ -64,6 +64,26 @@ vision_periodic = true
 vision_interval = "30s"
 ```
 
+Para una cadencia irregular, rango por voz (el tick del scheduler corre al
+mínimo; el plugin sortea la espera en `[min, max]` y sólo narra al
+alcanzarla — además del portón de imagen repetida, que evita el costo VLM):
+
+```toml
+[voice.jane]
+vision_periodic = true
+vision_interval_min = "20s"
+vision_interval_max = "90s"
+```
+
+El sorteo se cuantiza a múltiplos del tick (`k * min`), así la espera real
+nunca baja del mínimo ni supera el máximo; cada sorteo se ve en el log
+(`[vision] next jane narration in 60s (range 20-90s)`). `vision_interval`
+sigue como compatibilidad (sin min/max, cadencia fija exacta); con un solo
+lado presente el otro toma el mismo valor (fijo); `min > max`, valores `<= 0`
+o expresiones inválidas → warning con el valor efectivo y cadencia fija, sin
+romper el arranque. La fuente de azar se inyecta en el constructor (`rng`:
+`random.Random(seed)` o callable); el `random` global nunca se toca.
+
 One stable job per voice (`vision-describe-<voice>`), canceled on disable;
 re-enable never duplicates. Ticks deferred while the voice is talking wait
 for the next interval — never re-queued.
