@@ -1,4 +1,7 @@
-// Medición QA del jaw del overlay (bug: mandíbula sólo se mueve hacia arriba).
+// Medición QA del jaw del overlay (bugs 112/122/125).
+//
+// Convención (bug 125): jawOffsetY NEGATIVO = la capa de ARRIBA sube = abre;
+// headOffsetY POSITIVO leve = la pieza de abajo baja = ayuda a abrir.
 //
 // Protocolo (pedido en el issue):
 //   1. silencio (rms 0) ~0.3 s,

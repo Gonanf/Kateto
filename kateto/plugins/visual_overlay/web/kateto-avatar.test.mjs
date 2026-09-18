@@ -1,10 +1,11 @@
-// Tests de la cinemática del jaw del overlay (bug 112).
+// Tests de la cinemática del jaw del overlay (bugs 112 y 125).
 //
-// Convención única: jawOffsetY POSITIVO = boca que abre, neutro = 0 = cerrada.
-// El ciclo abre/cierra es unipolar (0..max): la mandíbula no puede ir "más
+// Convención única: jawOffsetY NEGATIVO = la capa de ARRIBA sube = boca que
+// abre, neutro = 0 = cerrada (bug 125: avatar_jaw.png es la mitad superior).
+// El ciclo abre/cierra es unipolar (max..0): la mandíbula no puede ir "más
 // cerrada que cerrada", así que los ciclos se cuentan por cruces del nivel
 // medio (2 por ciclo abre/cierra) y el retorno físico al neutro se verifica
-// con min ≈ 0. Corre con: node --test kateto-avatar.test.mjs
+// con max ≈ 0. Corre con: node --test kateto-avatar.test.mjs
 
 // Stubs mínimos de DOM (el módulo registra Custom Elements a nivel top-level,
 // pero lo testeado aquí son funciones puras que no tocan el DOM).
@@ -41,11 +42,11 @@ describe("computeJawKinematics (bug 112: ciclo abre/cierra, no solo arriba)", ()
     assert.deepEqual(computeJawKinematics(0.014, 12345), { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 });
   });
 
-  it("durante el habla el mínimo es ≈ 0 y el máximo > 0 (sin piso fijo)", () => {
+  it("durante el habla el máximo es ≈ 0 y el mínimo < 0 (sin piso fijo)", () => {
     const ys = speechSeries();
-    assert.ok(Math.min(...ys) < 1.0, `min debería volver al neutro, fue ${Math.min(...ys)}`);
-    assert.ok(Math.max(...ys) > 20.0, `max debería abrir la boca con punch, fue ${Math.max(...ys)}`);
-    assert.ok(ys.every((y) => y >= 0), "convención unipolar: nunca negativo");
+    assert.ok(Math.max(...ys) > -1.0, `max debería volver al neutro, fue ${Math.max(...ys)}`);
+    assert.ok(Math.min(...ys) < -20.0, `min debería subir la capa con punch, fue ${Math.min(...ys)}`);
+    assert.ok(ys.every((y) => y <= 0), "convención unipolar: nunca positivo");
   });
 
   it("hay ciclo abre/cierra real: >= 4 cruces del nivel medio en 1 s", () => {
@@ -54,9 +55,9 @@ describe("computeJawKinematics (bug 112: ciclo abre/cierra, no solo arriba)", ()
     assert.ok(crosses >= 4, `se esperaban >= 4 cruces (2 por ciclo), hubo ${crosses}`);
   });
 
-  it("respeta el recorrido máximo del backend (<= 32 px)", () => {
+  it("respeta el recorrido máximo del backend (<= 32 px hacia arriba)", () => {
     const ys = speechSeries();
-    assert.ok(Math.max(...ys) <= JAW_MAX_TRAVEL_PX, `max ${Math.max(...ys)} > ${JAW_MAX_TRAVEL_PX}`);
+    assert.ok(Math.min(...ys) >= -JAW_MAX_TRAVEL_PX, `min ${Math.min(...ys)} < ${-JAW_MAX_TRAVEL_PX}`);
   });
 
   it("tilt acotado a ±6.5° (antes llegaba a ±40°)", () => {
@@ -66,16 +67,16 @@ describe("computeJawKinematics (bug 112: ciclo abre/cierra, no solo arriba)", ()
     }
   });
 
-  it("más energía ⇒ más recorrido (escala agresiva, bug 122)", () => {
+  it("más energía ⇒ más subida (escala agresiva, bug 122)", () => {
     const peak = (rms) => {
       const ys = [];
       for (let i = 0; i < 60; i++) ys.push(computeJawKinematics(rms, i * 17).jawOffsetY);
-      return Math.max(...ys);
+      return Math.min(...ys);
     };
     const low = peak(0.15);
     const high = peak(0.8);
-    assert.ok(high > low * 1.5, `voz fuerte (${high}) debería superar ampliamente a voz baja (${low})`);
-    assert.ok(high >= 24.0, `voz fuerte debería acercarse al tope, fue ${high}`);
+    assert.ok(high < low * 1.5, `voz fuerte (${high}) debería superar ampliamente a voz baja (${low})`);
+    assert.ok(high <= -24.0, `voz fuerte debería acercarse al tope, fue ${high}`);
   });
 
   it("silencio ⇒ 0 exacto (sin residuo, bug 122)", () => {
@@ -86,15 +87,15 @@ describe("computeJawKinematics (bug 112: ciclo abre/cierra, no solo arriba)", ()
 });
 
 describe("convención compartida local vs backend", () => {
-  it("mismo signo: ambos >= 0 en jaw, head <= 0", () => {
+  it("mismo signo: ambos <= 0 en jaw, head >= 0", () => {
     for (const rms of [0.1, 0.3, 0.5, 0.8, 1.0]) {
       const ys = [];
       for (let i = 0; i < 60; i++) ys.push(computeJawKinematics(rms, i * 17).jawOffsetY);
       const back = computeBackendKinematics(rms);
-      assert.ok(back.jawOffsetY > 0, `backend debería abrir con rms=${rms}`);
-      assert.ok(Math.max(...ys) > 0, `local debería abrir con rms=${rms}`);
-      assert.ok(ys.every((y) => y >= 0) && back.jawOffsetY >= 0, "mismo signo en jaw");
-      assert.ok(back.headOffsetY <= 0, "head compensa en sentido opuesto");
+      assert.ok(back.jawOffsetY < 0, `backend debería abrir con rms=${rms}`);
+      assert.ok(Math.min(...ys) < 0, `local debería abrir con rms=${rms}`);
+      assert.ok(ys.every((y) => y <= 0) && back.jawOffsetY <= 0, "mismo signo en jaw");
+      assert.ok(back.headOffsetY >= 0, "head baja para ayudar a abrir");
     }
   });
 

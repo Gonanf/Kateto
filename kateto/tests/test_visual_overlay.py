@@ -72,15 +72,16 @@ def test_map_rms_to_jaw_transform_pure_mapping():
     assert map_rms_to_jaw_transform(0.05) == (0.0, 0.0)
 
     # When: rms is at intermediate level (0.525 gives factor = (0.525 - 0.05) / 0.95 = 0.5)
+    # jaw NEGATIVO = capa de arriba que sube = abre (bug 125)
     offset_y, rotation = map_rms_to_jaw_transform(0.525)
-    assert math.isclose(offset_y, 16.0, abs_tol=1e-2)
+    assert math.isclose(offset_y, -16.0, abs_tol=1e-2)
     assert math.isclose(rotation, 3.25, abs_tol=1e-2)
 
     # When: rms is at maximum (1.0)
-    assert map_rms_to_jaw_transform(1.0) == (32.0, 6.5)
+    assert map_rms_to_jaw_transform(1.0) == (-32.0, 6.5)
 
     # When: rms exceeds 1.0
-    assert map_rms_to_jaw_transform(1.5) == (32.0, 6.5)
+    assert map_rms_to_jaw_transform(1.5) == (-32.0, 6.5)
 
 
 def test_rms_processor_stateful_and_windowed():
@@ -155,7 +156,7 @@ async def test_audio_output_explicit_rms_passthrough():
     mock_ws.send_json.assert_called_once()
     payload = mock_ws.send_json.call_args[0][0]
     assert payload["rms"] == 0.525
-    assert math.isclose(payload["jawOffsetY"], 16.0, abs_tol=1e-2)
+    assert math.isclose(payload["jawOffsetY"], -16.0, abs_tol=1e-2)
     assert math.isclose(payload["jawRotation"], 3.25, abs_tol=1e-2)
 
 
@@ -325,9 +326,10 @@ def test_js_jaw_kinematics_suite():
 
 def test_shared_convention_js_backend_vs_python_puppet():
     """La convención es única entre computeBackendKinematics (JS) y
-    map_rms_to_puppet_transform (Python): mismo signo en jaw (≥ 0 = abre),
-    head compensa en opuesto (≤ 0) y mismos topes. Bug 112: antes el path
-    local era siempre negativo mientras el backend era positivo (salto ~55px).
+    map_rms_to_puppet_transform (Python): mismo signo en jaw (≤ 0 = abre,
+    la capa de arriba sube — bug 125), head baja en leve positivo (≥ 0) y
+    mismos topes. Bug 112: antes el path local era siempre negativo mientras
+    el backend era positivo (salto ~55px).
     """
     node = shutil.which("node")
     if node is None:
@@ -346,8 +348,8 @@ def test_shared_convention_js_backend_vs_python_puppet():
     for rms_str, js in js_results.items():
         rms = float(rms_str)
         py = map_rms_to_puppet_transform(rms)
-        assert (js["jawOffsetY"] >= 0) == (py["jawOffsetY"] >= 0), f"signo jaw difiere con rms={rms}"
-        assert (js["headOffsetY"] <= 0) == (py["headOffsetY"] <= 0), f"signo head difiere con rms={rms}"
+        assert (js["jawOffsetY"] <= 0) == (py["jawOffsetY"] <= 0), f"signo jaw difiere con rms={rms}"
+        assert (js["headOffsetY"] >= 0) == (py["headOffsetY"] >= 0), f"signo head difiere con rms={rms}"
         assert math.isclose(js["jawOffsetY"], py["jawOffsetY"], abs_tol=1e-2), f"jaw difiere con rms={rms}"
         assert math.isclose(js["jawRotation"], py["jawRotation"], abs_tol=1e-2), f"rot difiere con rms={rms}"
         assert math.isclose(js["headOffsetY"], py["headOffsetY"], abs_tol=1e-2), f"head difiere con rms={rms}"
