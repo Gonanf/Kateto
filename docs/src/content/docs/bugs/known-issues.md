@@ -116,7 +116,7 @@ description: "Known Issues — índice de bugs"
 | 104 | Scheduler rutea el evento al target_voice y el plugin consumidor jamás lo recibe | Alta | `kateto/plugins/executor/scheduler.py` | [104-scheduler-target-voice-blackholes-plugin-events.md](./bugs/104-scheduler-target-voice-blackholes-plugin-events.md) |
 | 105 | Sospecha sin confirmar: el problema restante puede estar en el tool calling | Media | `kateto/voices/tools.py` | [105-sospecha-tool-calling-vision-mcp.md](./bugs/105-sospecha-tool-calling-vision-mcp.md) |
 | 109 | `max_tokens` de la voz capado silenciosamente a 384 | Media | `kateto/voices/base.py` | [109-max-tokens-voz-capado-384.md](./bugs/109-max-tokens-voz-capado-384.md) |
-| 110 | `thinking=false` no llega al proveedor (no se manda reasoning_effort) | Media | `kateto/voices/base.py` | [110-thinking-false-no-llega-al-proveedor.md](./bugs/110-thinking-false-no-llega-al-proveedor.md) |
+| 110 | `thinking=false` no llega al proveedor (no se manda reasoning_effort) | Media | `kateto/providers/agent.py` | [110-thinking-false-no-llega-al-proveedor.md](./bugs/110-thinking-false-no-llega-al-proveedor.md) |
 | 111 | Las skills bundled no se refrescan: la copia del usuario queda vieja | Media | `kateto/voices/skills.py` | [111-skills-bundled-no-se-refrescan.md](./bugs/111-skills-bundled-no-se-refrescan.md) |
 
 ---

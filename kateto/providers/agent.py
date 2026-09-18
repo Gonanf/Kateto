@@ -42,6 +42,8 @@ class OpenAIAgentProvider:
         retries: int | None = None,
         timeout: float | None = None,
         session_headers: Mapping[str, str] | None = None,
+        reasoning_effort: str | None = None,
+        thinking: bool | None = None,
     ) -> None:
         self._model = model
         self._client = AsyncOpenAI(
@@ -52,8 +54,15 @@ class OpenAIAgentProvider:
         )
         self._max_tokens = max_tokens
         self._session_headers = dict(session_headers or {})
+        self._reasoning_effort = reasoning_effort
+        self._thinking = thinking
+        self._reasoning_logged = False
 
     def _base_kwargs(self, *, stream: bool) -> dict[str, Any]:
+        # ponytail: lazy import — kateto.voices.base importa este módulo;
+        # importar arriba sería circular. Misma regla, sin duplicar lógica.
+        from kateto.voices.base import resolve_reasoning_effort
+
         kwargs: dict[str, Any] = {
             "model": self._model,
             "max_tokens": self._max_tokens or 256,
@@ -62,6 +71,19 @@ class OpenAIAgentProvider:
             kwargs["stream"] = True
         if self._session_headers:
             kwargs["extra_headers"] = dict(self._session_headers)
+        effort = resolve_reasoning_effort(self._reasoning_effort, self._thinking)
+        if not self._reasoning_logged:
+            from loguru import logger
+
+            logger.info(
+                "[provider] reasoning_effort={} thinking={} model={}",
+                effort,
+                self._thinking,
+                self._model,
+            )
+            self._reasoning_logged = True
+        if effort is not None:
+            kwargs["extra_body"] = {"reasoning_effort": effort}
         return kwargs
 
     async def chat_with_tools(
@@ -178,6 +200,8 @@ class HermesProvider(OpenAIAgentProvider):
         timeout: float | None = None,
         session_headers: Mapping[str, str] | None = None,
         manage_tools: bool = False,
+        reasoning_effort: str | None = None,
+        thinking: bool | None = None,
     ) -> None:
         super().__init__(
             model=model,
@@ -187,13 +211,17 @@ class HermesProvider(OpenAIAgentProvider):
             retries=retries,
             timeout=timeout,
             session_headers=session_headers,
+            reasoning_effort=reasoning_effort,
+            thinking=thinking,
         )
         self._conversation_id = conversation_id
         self._manage_tools = manage_tools
 
     def _base_kwargs(self, *, stream: bool) -> dict[str, Any]:
         kwargs = super()._base_kwargs(stream=stream)
-        kwargs["extra_body"] = {"conversation_id": self._conversation_id}
+        body = dict(kwargs.get("extra_body") or {})
+        body["conversation_id"] = self._conversation_id
+        kwargs["extra_body"] = body
         return kwargs
 
     async def chat_with_tools(

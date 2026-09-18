@@ -3,14 +3,14 @@ id: 110
 title: "`thinking=false` no llega al proveedor (no se manda reasoning_effort)"
 severity: Media
 status: resolved
-component: kateto/voices/base.py
+component: kateto/providers/agent.py
 resolved: 2026-09-18
 ---
 
 ## 110. `thinking=false` no llega al proveedor (no se manda reasoning_effort)
 
 **Severidad:** Media
-**Componente:** `kateto/voices/base.py`
+**Componente:** `kateto/providers/agent.py` (antes: `kateto/voices/base.py`)
 
 ### Descripción
 
@@ -49,3 +49,32 @@ proveedor cuando no aplica sin fallar el request.
 - Tests en `kateto/tests/test_voice_llm_params.py` para las tres ramas de la regla.
 
 **Archivos:** `kateto/voices/base.py`, `kateto/voices/factory.py`, `kateto/core/config.py`, `config/defaults/config.toml`, `kateto/tests/test_voice_llm_params.py`
+
+### Addendum 2026-09-18: el camino real era el agent provider
+
+El fix anterior cableó `reasoning_effort`/`thinking` en
+`OpenAICompatibleProvider` (`kateto/voices/base.py`), pero las voces del
+usuario no pasan por ahí: `factory.py` construye además un
+`OpenAIAgentProvider` (o `HermesProvider` si hay `conversation_id`) y, como
+`voice_llm.model` está seteado y la voz tiene tools/skills/MCP, la generación
+la hace `kateto/providers/agent.py`. Ahí `_base_kwargs` sólo mandaba `model`,
+`max_tokens`, `stream` y `extra_headers`: ningún parámetro de reasoning.
+
+Evidencia del runtime (repo en `912931a` = con el fix anterior): request
+`POST http://127.0.0.1:3001/v1/chat/completions "200 OK"` sin la línea
+`[provider] reasoning_effort=...` (sólo se logueaba desde `base.py`, que en
+este path nunca corre); primer chunk a los 5.25 s con
+`nemotron-3.5-lightning-30b-a3b` contra 1.85 s con `reasoning_effort="none"`
+en la misma máquina y mismo tipo de prompt.
+
+Fix aplicado: `OpenAIAgentProvider.__init__` y `HermesProvider.__init__`
+aceptan `reasoning_effort`/`thinking` y `_base_kwargs` mergea `extra_body`
+con la misma regla importada de `base.py::resolve_reasoning_effort`
+(explícito gana; `thinking=False` → `"none"`; `thinking=True` → no se manda;
+si el effort es None no se agrega la clave ni un `extra_body` vacío).
+`HermesProvider` mergea `{"conversation_id": ...}` con `reasoning_effort` en
+vez de pisarlo. `factory.py` pasa `reasoning_effort`/`thinking` a ambos
+providers. Log una vez por instancia con el mismo formato `[provider]
+reasoning_effort={} thinking={} model={}`.
+
+**Archivos (addendum):** `kateto/providers/agent.py`, `kateto/voices/factory.py`
