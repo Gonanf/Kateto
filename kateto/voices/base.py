@@ -39,6 +39,7 @@ from pydantic_ai.messages import (
 
 from kateto.core.config import VoiceSettings
 from kateto.core.event import (
+    ClassificationData,
     EventEnvelope,
     EventModel,
     GENERATE_REQUEST_MAX_DEPTH,
@@ -63,6 +64,7 @@ from kateto.core.event import (
     WorkflowStartedData,
     WorkflowStopData,
 )
+from kateto.core.event import is_ignored_category
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.core.workflow import WorkflowCatalog, WorkflowNotFoundError
 from kateto.providers import ChatMessage
@@ -84,6 +86,13 @@ _PIPELINES: dict[str, AudioPipeline] = {}
 PHRASE_DELIMITERS = ".!?\n"
 PHRASE_MAX_TOKENS = 35
 MIN_CLAUSE_TOKENS = 18
+
+# Marca de historial para transcripciones ignoradas por el clasificador.
+# Prefijo en el CONTENIDO del mensaje user (no mensaje system aparte):
+# _pydantic_agent_loop filtra history a roles ("assistant", "user") y un
+# system intercalado se descartaría; el prefijo sobrevive en los dos caminos
+# (proveedor directo y pydantic) y deja el texto original visible.
+IGNORED_TRANSCRIPT_PREFIX = "[IGNORADO POR EL CLASIFICADOR — NO RESPONDER]"
 
 
 @dataclass(frozen=True, slots=True)
@@ -609,6 +618,10 @@ class VoiceAgent(Plugin):
         self, envelope: EventEnvelope[BaseModel], handler: EventHandler
     ) -> None:
         self._remember_event(envelope)
+        if envelope.name == "classification":
+            data = envelope.data
+            if isinstance(data, ClassificationData) and is_ignored_category(data.category):
+                self._mark_ignored_transcript(data.text)
         match envelope.name, envelope.data:
             case "interrupt", InterruptData() as interrupt:
                 await self.on_interrupt(interrupt)
@@ -622,6 +635,20 @@ class VoiceAgent(Plugin):
 
     async def on_transcription(self, data: TranscriptionData) -> None:
         return None
+
+    async def on_classification(self, data: ClassificationData) -> None:
+        return None
+
+    def _mark_ignored_transcript(self, text: str) -> None:
+        raw = self._bounded_event_text(text)
+        if not raw or raw.startswith(IGNORED_TRANSCRIPT_PREFIX):
+            return
+        marked = self._bounded_event_text(f"{IGNORED_TRANSCRIPT_PREFIX} {raw}")
+        for index in range(len(self._event_messages) - 1, -1, -1):
+            current = self._event_messages[index]
+            if current.role == "user" and current.content == raw:
+                self._event_messages[index] = ChatMessage(role="user", content=marked)
+                return
 
     async def on_vision_describe_result(self, data: VisionDescribeResultData) -> None:
         # No-op: subscription + _remember_event (via _enqueue) land the

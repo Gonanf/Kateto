@@ -15,6 +15,12 @@ class Classification(StrEnum):
     IGNORE_THIRD_PARTY = "IGNORE_THIRD_PARTY"
 
 
+def is_ignored_category(category: Classification | str) -> bool:
+    """True para cualquier categoría de ignorado (IGNORE_* actual o futura)."""
+    text = category.value if isinstance(category, Classification) else str(category)
+    return text.startswith("IGNORE")
+
+
 class ProjectState(StrEnum):
     NEW = "new"
     ALREADY_UNDERWAY = "already_underway"
