@@ -1,5 +1,5 @@
 ---
-id: 125
+id: 126
 title: "La voz no consume el OCR ni la detección de objetos del sidecar (opina adivinando la pantalla)"
 severity: Media
 status: resolved
@@ -7,7 +7,7 @@ component: kateto/plugins/executor/static_vision_plugin.py
 resolved: 2026-09-18
 ---
 
-## 125. La voz no consume el OCR ni la detección de objetos del sidecar
+## 126. La voz no consume el OCR ni la detección de objetos del sidecar
 
 **Severidad:** Media
 **Componente:** `kateto/plugins/executor/static_vision_plugin.py`, `kateto/voices/base.py`
