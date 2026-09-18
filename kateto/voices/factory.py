@@ -395,6 +395,14 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             )
             from pydantic_ai.settings import ModelSettings
 
+            # Seed only: the frozen stable prefix (SOUL + language rule +
+            # skills + durable memory) cannot be built here — it needs
+            # initialize() (memory.ensure_soul, loaded skills, tool executor
+            # for the MCP block, and this agent for the delegation block).
+            # initialize() pushes the frozen text into agent._system_prompts,
+            # so both generation paths share one prefix from spawn on.
+            # _pydantic_agent_loop keeps skipping system messages from
+            # history: the stable text lives ONLY in the agent.
             pydantic_agent = Agent(
                 model=model,
                 system_prompt=profile.system_prompt,

@@ -119,7 +119,7 @@ enabled = false
 
 ### Modificar la personalidad de una voz
 
-Editá `~/.config/kateto/voices/{nombre}/SOUL.md`. Kateto lo lee como `system_prompt` al crear la voz (`create_voice()` en `kateto/voices/factory.py`). La voz NO es un archivo de código: es un prompt. Cambiar el SOUL cambia el comportamiento sin tocar Python.
+Editá `~/.config/kateto/voices/{nombre}/SOUL.md`. Kateto lo lee al spawnear la voz y lo congela dentro del prompt estable (`VoiceAgent.build_stable_prompt()`: SOUL + arquetipo del perfil + regla de idioma + skills + memoria durable; el agente pydantic recibe ese mismo texto). La voz NO es un archivo de código: es un prompt. Cambiar el SOUL cambia el comportamiento sin tocar Python, pero aplica al próximo spawn: el prompt congelado no cambia a mitad de sesión.
 
 ### Workflows
 
