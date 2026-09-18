@@ -7,21 +7,33 @@ Worktree: `~/proyectos/OpenaiBuildWeek/kateto-fix-listener-bargein`, rama `fix/l
 "se tomó 4 minutos en empezar, en vez de los 30 segundos que puse. con un error de MCP tool timed out"
 
 ## Evidencia (medida, no hipótesis)
-1. **El cliente MCP corta a los 30 s, hardcodeado**: `kateto/plugins/system/external_mcp.py::call_tool`
-   (`asyncio.wait_for(..., timeout=30.0)`), y devuelve el texto
-   `{"error": "MCP tool timed out: describe_images"}` (47 chars; el log de visión lo reportaba como
-   `sidecar describe_images answered (48 chars)` — la cuenta del plugin).
-2. **Un frame real de pantalla hace trabajar al VLM mucho más que eso.** En el log del VLM
-   (`/var/log/llama-server.log`, alias `LFM2.5-VL-3B`, Q4_K_M, llama-server con `--sleep-idle-seconds 600`):
+1. **El cliente MCP corta a los 30 s, hardcodeado**: `kateto/plugins/system/external_mcp.py::call_tool_result`
+   (`asyncio.wait_for(..., timeout=30.0)`). Reproducido con el cliente REAL de Kateto
+   (`ExternalMcpClient`, binario y args del config del usuario: `/home/study/.local/bin/video-rag mcp serve`):
+   ```
+   start(): 0.05s   last_error=None
+   tools: ['search', 'list_videos', 'describe', 'describe_images', 'answer', 'summarize']
+     [8x8]               10.55s  is_error=False  text='La imagen que has proporcionado es completamente roja...'
+     [1920x1080 con texto] 30.03s  is_error=True  text='{"error": "MCP tool timed out: describe_images"}'
+   ```
+   O sea: un frame de 1920x1080 **no alcanza a terminar en 30 s** y el cliente corta. Ese texto de 48 chars
+   es exactamente el que aparece en el log del runtime del usuario.
+2. **Por qué tarda tanto**: en el log del VLM (`/var/log/llama-server.log`, alias `LFM2.5-VL-3B`, Q4_K_M):
    ```
    slot print_timing: id 0 | task 259 | prompt processing, n_tokens = 1319, progress = 0.56, t = 20.00 s / 65.95 tokens per second
    ```
-   O sea: la imagen se convierte en ~1300–1600 tokens de visión y el prefill va a ~66 tok/s ⇒ **~20-25 s
-   sólo de prefill**, más la generación: el total supera los 30 s y el cliente corta antes de obtener el
-   caption. Con el modelo frío (se descarga a los 10 min de inactividad) es peor.
-3. Los "4 minutos" son eso + la cadencia: el primer tick gasta >30 s, muere por timeout, y el siguiente
-   tick recién a los 30 s siguientes; lo que el usuario vio fue el primer caption/error que sobrevivió.
-4. La captura queda en resolución nativa (PNG), así que el costo en tokens del VLM lo paga entero.
+   una sola imagen de pantalla ≈ 2350 tokens de visión y el prefill va a ~66 tok/s ⇒ ~36 s sólo de prefill,
+   más la generación. Con 3 frames en la ventana, peor. El `mcp` del usuario manda la captura en resolución
+   nativa.
+3. **Consecuencia en su runtime** (log, líneas textuales): el job corre cada 30 s, el describe muere por
+   timeout y la narración se suprime:
+   ```
+   [scheduler] job vision-describe-jane registered: vision_describe_request every 0:00:30 (target=jane)
+   [scheduler] job vision-describe-jane fired -> vision_describe_request
+   [vision] sidecar describe_images answered (48 chars): {"error": "MCP tool timed out: describe_images"}
+   [vision] periodic narration suppressed for jane: no real description (via=recap)
+   ```
+   ⇒ el usuario percibe "no se ejecuta" (nadie habla), aunque el job sí dispara.
 
 ## Fix esperado
 1. **Timeout configurable y más largo para la visión.**
@@ -38,7 +50,12 @@ Worktree: `~/proyectos/OpenaiBuildWeek/kateto-fix-listener-bargein`, rama `fix/l
    - si el data-URL resultante no entra en el tope del sidecar (~1.5 MB), bajar calidad/escala y, si no
      entra, descartar el frame con log (nunca mandar algo que el sidecar va a rechazar).
    - PIL ya está en las deps de visión; no agregues dependencias.
-3. **Precalentamiento del VLM** cuando arranca la visión periódica (si hay endpoint VLM configurado o
+3. **Acotar cuántos frames van por describe.** Cada frame cuesta ~2350 tokens de visión: mandar 3-5
+   frames multiplica el prefill (105+ s medidos por extrapolación). Para la narración periódica alcanza
+   con 1-2 frames (el más viejo de la ventana y el más nuevo, que es lo que muestra el cambio); dejalo
+   configurable (p.ej. `max_frames_per_describe`, default 2) y documentá el motivo con estos números.
+   Que el log diga cuántos frames se mandaron.
+4. **Precalentamiento del VLM** cuando arranca la visión periódica (si hay endpoint VLM configurado o
    sidecar): un describe mínimo (imagen 1x1) para que el primer tick real no pague la carga del modelo.
    Tiene que ser best-effort: si falla, se loguea y no rompe nada.
 4. **Un timeout no es una descripción** (ya cubierto por fix-102/106: `is_error` y formas de error): que

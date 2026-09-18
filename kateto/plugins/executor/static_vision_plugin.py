@@ -18,6 +18,7 @@ from kateto.core.event import (
     PluginErrorData,
     ScheduleCancelData,
     ScheduleRequestData,
+    ScheduleResultData,
     ScheduleType,
     VisionCaptureTriggerData,
     VisionDescribeRequestData,
@@ -158,6 +159,10 @@ def _is_sidecar_error(text: str) -> bool:
 class StaticVisionPlugin(Plugin):
     """Plugin for capturing static vision frames (screen / process window)."""
 
+    # ponytail: short backoff until the schedule_result ack lands; one WARNING
+    # at exhaustion, never a loop. Tests shrink this via instance override.
+    _RETRY_DELAYS: tuple[float, ...] = (2.0, 5.0, 10.0, 20.0, 30.0, 30.0)
+
     def __init__(
         self,
         settings: PluginSettings | None = None,
@@ -206,6 +211,9 @@ class StaticVisionPlugin(Plugin):
         self._dropped: dict[str, int] = {}
         # ponytail: todo-9 lane appends stable per-voice job ids here; disable cancels them.
         self._periodic_jobs: list[str] = []
+        # Pending voice -> interval until the schedule_result ack lands.
+        self._periodic_pending: dict[str, str] = {}
+        self._periodic_retry_tasks: dict[str, asyncio.Task[None]] = {}
         self._capture_task: asyncio.Task[None] | None = None
         # ponytail: todo-5 lane opens the webcam handle; disable releases it.
         self._webcam_handle: Any | None = None
@@ -218,6 +226,7 @@ class StaticVisionPlugin(Plugin):
             self.manager.register_event("vision_capture_trigger", VisionCaptureTriggerData)
             self.manager.register_event("vision_describe_request", VisionDescribeRequestData)
             self.manager.register_event("vision_describe_result", VisionDescribeResultData)
+            self.manager.register_event("schedule_result", ScheduleResultData)
         if self._config_dir is not None:
             # ponytail: narrow backfill exception — bootstrap skips existing config
             # dirs, so the skill file is copied here; failures degrade silently and
@@ -256,32 +265,112 @@ class StaticVisionPlugin(Plugin):
         )
 
     async def _schedule_periodic(self) -> None:
-        """Emit ONE stable INTERVAL schedule_request per opted-in voice (todo 9)."""
         pairs = tuple(self._opted_in)
         if not pairs or self.manager is None:
             return
-        known = {p.name for p in self.manager.get_plugins() if "voice" in p.capabilities}
         for voice, interval in pairs:
             job_id = f"vision-describe-{voice}"
-            if job_id in self._periodic_jobs:
+            if job_id in self._periodic_jobs or voice in self._periodic_pending:
                 continue
-            if known and voice not in known:
-                self._periodic_skipped[voice] = f"unknown voice {voice!r} (known: {sorted(known)})"
-                continue
-            await self.required_manager.emit(
-                "schedule_request",
-                ScheduleRequestData(
-                    schedule_type=ScheduleType.INTERVAL,
-                    expression=interval,
-                    event_name="vision_describe_request",
-                    data={"requester": f"scheduler:{voice}"},
-                    job_id=job_id,
-                    target_voice=voice,
-                ),
-                source=self.name,
-            )
-            log.info("[vision] scheduled {} every {} for {}", job_id, interval, voice)
+            self._periodic_pending[voice] = interval
+            await self._try_emit_schedule(voice, interval)
+            self._spawn_retry(voice)
+
+    async def _try_emit_schedule(self, voice: str, interval: str) -> bool:
+        manager = self.manager
+        if manager is None:
+            return False
+        known = {p.name for p in manager.get_plugins() if "voice" in p.capabilities}
+        if known and voice not in known:
+            self._periodic_skipped[voice] = f"unknown voice {voice!r} (known: {sorted(known)})"
+            return False
+        job_id = f"vision-describe-{voice}"
+        await self.required_manager.emit(
+            "schedule_request",
+            ScheduleRequestData(
+                schedule_type=ScheduleType.INTERVAL,
+                expression=interval,
+                event_name="vision_describe_request",
+                data={"requester": f"scheduler:{voice}"},
+                job_id=job_id,
+                target_voice=voice,
+            ),
+            source=self.name,
+        )
+        return True
+
+    def _spawn_retry(self, voice: str) -> None:
+        existing = self._periodic_retry_tasks.get(voice)
+        if existing is not None and not existing.done():
+            return
+        self._periodic_retry_tasks[voice] = asyncio.create_task(
+            self._retry_loop(voice), name=f"kateto-vision-retry-{voice}"
+        )
+
+    async def _retry_loop(self, voice: str) -> None:
+        attempts = 1
+        try:
+            for delay in self._RETRY_DELAYS:
+                await asyncio.sleep(delay)
+                if voice not in self._periodic_pending:
+                    return
+                if f"vision-describe-{voice}" in self._periodic_jobs:
+                    self._periodic_pending.pop(voice, None)
+                    return
+                interval = self._periodic_pending.get(voice)
+                if interval is None:
+                    return
+                attempts += 1
+                await self._try_emit_schedule(voice, interval)
+            if voice in self._periodic_pending and f"vision-describe-{voice}" not in self._periodic_jobs:
+                reason = self._periodic_skipped.get(voice, "no schedule_result ack received")
+                log.warning(
+                    "[vision] vision-describe-{} NOT registered after {} attempts "
+                    "(is executor_scheduler enabled?) ({})",
+                    voice, attempts, reason,
+                )
+                self._periodic_pending.pop(voice, None)
+        except asyncio.CancelledError:
+            raise
+        finally:
+            self._periodic_retry_tasks.pop(voice, None)
+
+    async def on_schedule_result(self, data: Any = None) -> None:
+        if isinstance(data, dict):
+            data = ScheduleResultData.model_validate(data)
+        job_id: str = data.job_id
+        prefix = "vision-describe-"
+        if not job_id.startswith(prefix):
+            return
+        voice = job_id.removeprefix(prefix)
+        if voice not in self._periodic_pending:
+            return
+        if data.error:
+            if "already scheduled" in data.error:
+                interval = self._periodic_pending.pop(voice, "")
+                task = self._periodic_retry_tasks.pop(voice, None)
+                if task is not None:
+                    task.cancel()
+                if job_id not in self._periodic_jobs:
+                    self._periodic_jobs.append(job_id)
+                log.info("[vision] scheduled {} every {} for {}", job_id, interval, voice)
+                return
+            reason = data.error
+            self._periodic_skipped[voice] = reason
+            log.warning("[vision] schedule failed for {}: {}", job_id, reason)
+            task = self._periodic_retry_tasks.pop(voice, None)
+            if task is not None:
+                task.cancel()
+            self._periodic_pending.pop(voice, None)
+            return
+        interval = self._periodic_pending.pop(voice, "")
+        task = self._periodic_retry_tasks.pop(voice, None)
+        if task is not None:
+            task.cancel()
+        self._periodic_skipped.pop(voice, None)
+        if job_id not in self._periodic_jobs:
             self._periodic_jobs.append(job_id)
+        log.info("[vision] scheduled {} every {} for {}", job_id, interval, voice)
 
     async def disable(self) -> None:
         task, self._capture_task = self._capture_task, None
@@ -304,6 +393,16 @@ class StaticVisionPlugin(Plugin):
                 "schedule_cancel", ScheduleCancelData(job_id=job_id), source=self.name
             )
         self._periodic_jobs.clear()
+        pending_tasks = list(self._periodic_retry_tasks.values())
+        self._periodic_retry_tasks.clear()
+        self._periodic_pending.clear()
+        for retry in pending_tasks:
+            retry.cancel()
+        for retry in pending_tasks:
+            try:
+                await retry
+            except asyncio.CancelledError:
+                pass
         await super().disable()
 
     def _append_frame(self, source: str, frame: bytes, ts: float) -> None:
