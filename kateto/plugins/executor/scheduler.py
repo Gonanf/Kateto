@@ -19,6 +19,9 @@ from kateto.core.event import (
     VoiceStatusData,
 )
 from kateto.core.plugin import Plugin
+from loguru import logger
+
+log = logger
 
 if TYPE_CHECKING:
     from kateto.core.manager import PluginManager
@@ -139,6 +142,10 @@ class SchedulerPlugin(Plugin):
             )
             return
         job = self._jobs[job_id]
+        log.info(
+            "[scheduler] job {} registered: {} every {} (target={})",
+            job_id, job.event_name, job.interval or job.cron, job.target_voice,
+        )
         await manager.emit(
             "schedule_result",
             ScheduleResultData(job_id=job_id, next_run=job.next_run.isoformat()),
@@ -219,11 +226,25 @@ class SchedulerPlugin(Plugin):
             job.next_run = job.compute_next(now)
             return
         if job.target_voice is not None and job.target_voice in self._voice_status and self._voice_status[job.target_voice] in {"talking", "thinking"}:
+            log.info(
+                "[scheduler] job {} deferred: {} is {}",
+                job.job_id, job.target_voice, self._voice_status[job.target_voice],
+            )
             job.next_run = job.compute_next(now)
             return
         target = job.target_voice
         if target is None:
             target = self._pick_random_voice()
+        if target is not None and not self._handles(target, job.event_name):
+            # A target that handles nothing for this event would blackhole the
+            # fire: vision jobs target the beneficiary voice while static_vision
+            # handles the event. Fall back to broadcast so real receivers get it.
+            # (Targets that ARE receivers, e.g. voices for generate, are untouched.)
+            log.info(
+                "[scheduler] job {} target {} is not a receiver of {}; broadcasting",
+                job.job_id, target, job.event_name,
+            )
+            target = None
         payload = dict(job.data)
         if job.jitter_seconds:
             import random
@@ -239,6 +260,7 @@ class SchedulerPlugin(Plugin):
             # payload came from a JSON tool call; tighten when jobs persist.
             data = _GenericPayload(values=payload)  # type: ignore[arg-type]
         await manager.emit(job.event_name, data, source=self.name, target=target, dept=job.dept)
+        log.info("[scheduler] job {} fired -> {} (target={})", job.job_id, job.event_name, target)
         job.fires += 1
         if job.max_fires is not None and job.fires >= job.max_fires:
             self._jobs.pop(job.job_id, None)
@@ -247,6 +269,16 @@ class SchedulerPlugin(Plugin):
             self._jobs.pop(job.job_id, None)
             return
         job.next_run = job.compute_next(now)
+
+    def _handles(self, plugin_name: str, event_name: str) -> bool:
+        """Whether *plugin_name* subscribes to *event_name* on the bus."""
+        manager = self.manager
+        if manager is None:
+            return True
+        for reg in manager.get_event_registrations():
+            if reg.name == event_name:
+                return plugin_name in reg.receivers
+        return True
 
     def _in_active_hours(self, job: _Job, now: datetime) -> bool:
         start, end = job.active_hours  # type: ignore[misc]

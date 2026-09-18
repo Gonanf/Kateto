@@ -157,6 +157,8 @@ class RuntimeOwner:
             from kateto.voices.base import VoiceAgent
             for plugin in self._plugins:
                 if isinstance(plugin, VoiceAgent) and self._config_enabled(plugin):
+                    if not plugin.settings.prefill:
+                        continue
                     asyncio.create_task(plugin.prefill(), name=f"prefill-{plugin.name}")
         except BaseException:  # noqa: BROAD_EXCEPT_OK
             await self.stop()

@@ -57,6 +57,107 @@ async def test_pywhispercpp_provider_raises_informative_error_when_missing():
 
 
 @pytest.mark.asyncio
+async def test_pywhispercpp_provider_forwards_gpu_device_setting():
+    # Given: settings with gpu_device set
+    mock_model_cls = MagicMock()
+    mock_segment = MagicMock()
+    mock_segment.text = "ok"
+    mock_model_cls.return_value.transcribe.return_value = [mock_segment]
+
+    with patch.dict(sys.modules, {"pywhispercpp": MagicMock(), "pywhispercpp.model": MagicMock(Model=mock_model_cls)}):
+        settings = PluginSettings(model="base.en", gpu_device=1)
+        provider = PyWhisperCppProvider(settings)
+
+        # When: transcribing audio
+        audio = AudioData(
+            samples=b"\x00\x00" * 1600,
+            sample_rate=16000,
+            channels=1,
+            format="pcm_s16le",
+        )
+        await provider.transcribe(audio)
+
+        # Then: the Vulkan device index reaches whisper.cpp context params
+        _, kwargs = mock_model_cls.call_args
+        assert kwargs["context_params"] == {"gpu_device": 1}
+
+
+@pytest.mark.asyncio
+async def test_pywhispercpp_provider_falls_back_to_numeric_device_setting():
+    # Given: only the shared `device` string set (same key as the server backend)
+    mock_model_cls = MagicMock()
+    mock_segment = MagicMock()
+    mock_segment.text = "ok"
+    mock_model_cls.return_value.transcribe.return_value = [mock_segment]
+
+    with patch.dict(sys.modules, {"pywhispercpp": MagicMock(), "pywhispercpp.model": MagicMock(Model=mock_model_cls)}):
+        provider = PyWhisperCppProvider(PluginSettings(model="base.en", device="1"))
+
+        # When: transcribing audio
+        audio = AudioData(
+            samples=b"\x00\x00" * 1600,
+            sample_rate=16000,
+            channels=1,
+            format="pcm_s16le",
+        )
+        await provider.transcribe(audio)
+
+        # Then: the numeric device string is used as gpu_device
+        _, kwargs = mock_model_cls.call_args
+        assert kwargs["context_params"] == {"gpu_device": 1}
+
+
+@pytest.mark.asyncio
+async def test_pywhispercpp_provider_explicit_gpu_device_wins():
+    # Given: both explicit arg and settings present
+    mock_model_cls = MagicMock()
+    mock_segment = MagicMock()
+    mock_segment.text = "ok"
+    mock_model_cls.return_value.transcribe.return_value = [mock_segment]
+
+    with patch.dict(sys.modules, {"pywhispercpp": MagicMock(), "pywhispercpp.model": MagicMock(Model=mock_model_cls)}):
+        provider = PyWhisperCppProvider(PluginSettings(model="base.en", gpu_device=0), gpu_device=2)
+
+        # When: transcribing audio
+        audio = AudioData(
+            samples=b"\x00\x00" * 1600,
+            sample_rate=16000,
+            channels=1,
+            format="pcm_s16le",
+        )
+        await provider.transcribe(audio)
+
+        # Then: the explicit constructor arg takes precedence
+        _, kwargs = mock_model_cls.call_args
+        assert kwargs["context_params"] == {"gpu_device": 2}
+
+
+@pytest.mark.asyncio
+async def test_pywhispercpp_provider_omits_context_params_without_device():
+    # Given: no device configured anywhere
+    mock_model_cls = MagicMock()
+    mock_segment = MagicMock()
+    mock_segment.text = "ok"
+    mock_model_cls.return_value.transcribe.return_value = [mock_segment]
+
+    with patch.dict(sys.modules, {"pywhispercpp": MagicMock(), "pywhispercpp.model": MagicMock(Model=mock_model_cls)}):
+        provider = PyWhisperCppProvider(PluginSettings(model="base.en"))
+
+        # When: transcribing audio
+        audio = AudioData(
+            samples=b"\x00\x00" * 1600,
+            sample_rate=16000,
+            channels=1,
+            format="pcm_s16le",
+        )
+        await provider.transcribe(audio)
+
+        # Then: default whisper.cpp device selection is left untouched
+        _, kwargs = mock_model_cls.call_args
+        assert "context_params" not in kwargs
+
+
+@pytest.mark.asyncio
 async def test_whisper_audio_processor_selects_pywhispercpp_backend():
     # Given: settings with backend="pywhispercpp"
     settings = PluginSettings(backend="pywhispercpp")

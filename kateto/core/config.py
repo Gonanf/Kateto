@@ -107,6 +107,7 @@ class PluginSettings(_ExtensibleConfigModel):
     silence_timeout: float | None = Field(default=None, gt=0)
     sample_rate: int | None = Field(default=None, gt=0)
     device: str | None = None
+    gpu_device: int | None = Field(default=None, ge=0)
     vad_model: str | None = None
     vad_threshold: float | None = Field(default=None, ge=0, le=1)
     interrupt_on_vad: bool | None = None
@@ -161,6 +162,12 @@ class VoiceSettings(_ExtensibleConfigModel):
     max_tokens: int | None = None
     retries: int | None = None
     timeout: float | None = None
+    # Reasoning effort (pydantic-ai Thinking capability). Disable for harnesses
+    # like Hermes that manage thinking server-side, or for plain throughput.
+    thinking: bool = True
+    # KV-cache prefill of the system prompt at startup. Disable for harnesses
+    # that manage conversation state themselves.
+    prefill: bool = True
 
     @model_validator(mode="after")
     def validate_dept_fields(self) -> Self:

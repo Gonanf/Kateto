@@ -247,6 +247,45 @@ async def test_sidecar_up_returns_via_sidecar(
 
 
 @pytest.mark.asyncio
+async def test_sidecar_reached_via_shared_services_when_field_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given: a running sidecar exposed only through shared services
+    # (production shape: the discovery context field is never assigned)
+    srv = _write_sidecar(tmp_path)
+    seen_args = tmp_path / "seen_args.json"
+    mcp = ExternalMcpManager()
+    mcp.configure("op", "video_rag", _video_rag_settings(sys.executable, [str(srv), "ok", str(seen_args)]))
+    await asyncio.wait_for(mcp.start_all(), timeout=60.0)
+    try:
+        calls: list = []
+        _install_400_primary(monkeypatch, calls)
+        monkeypatch.setattr(
+            svp,
+            "discovery_context_for",
+            lambda plugins: SimpleNamespace(external_mcp=None, get_shared=lambda name: mcp),
+        )
+        manager = PluginManager()
+        results = _ResultRecorder()
+        await manager.enable_plugin(results)
+        plugin = await _make_plugin(manager)
+        plugin._append_frame("screen", _noise_frame(5), 30.0)
+        plugin._append_frame("screen", _noise_frame(6), 31.0)
+
+        # When: describing
+        await plugin.on_vision_describe_request(VisionDescribeRequestData(requester="jane"))
+        await manager.wait_for_idle()
+
+        # Then: the sidecar answers (not a recap)
+        assert len(results.seen) == 1
+        assert results.seen[0].via == "sidecar"
+        assert CANNED in results.seen[0].text
+        await _teardown(manager, plugin.name, results.name)
+    finally:
+        await mcp.stop_all()
+
+
+@pytest.mark.asyncio
 async def test_sidecar_absent_degrades_without_crash(monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: the declared server name pointing at a binary that is absent
     # (existing bad-command fixture pattern from test_mcp_wait_semantics.py:63)

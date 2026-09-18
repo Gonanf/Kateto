@@ -386,12 +386,18 @@ async def test_periodic_talking_state_defers_tick():
     assert job_id in scheduler._jobs
     assert [e for e in envelopes if e.name == "vision_describe_request"] == []
 
-    # When: the voice goes idle → next fire dispatches
+    # When: the voice goes idle → next fire broadcasts to the real receiver
+    # (static_vision handles the event; the "jane" target only names the
+    # beneficiary voice for deferral, it must not blackhole delivery)
     scheduler._voice_status["jane"] = "idle"
     await scheduler._fire(job, datetime.now().astimezone())
     fired = [e for e in envelopes if e.name == "vision_describe_request"]
     assert len(fired) == 1
-    assert fired[0].target == "jane"
+    assert fired[0].target is None
+    # And: the vision plugin actually receives it and answers
+    await manager.wait_for_idle()
+    answered = [e for e in envelopes if e.name == "vision_describe_result"]
+    assert len(answered) == 1
 
     manager.remove_event_observer(envelopes.append)
     await asyncio.wait_for(manager.disable_plugin(plugin.name), timeout=5.0)

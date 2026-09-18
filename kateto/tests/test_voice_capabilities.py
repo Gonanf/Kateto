@@ -63,3 +63,64 @@ def test_create_voice_supports_custom_dynamic_voices(tmp_path: Path):
     assert "Custom Agent" in voice.profile.system_prompt
 
 
+
+
+def test_capabilities_skip_thinking_when_disabled(tmp_path: Path):
+    # Given: thinking explicitly disabled (e.g. Hermes manages it server-side)
+    profile = _PROFILES["jane"]
+    settings = VoiceSettings(enabled=True, thinking=False)
+    executor = VoiceToolExecutor(config_dir=tmp_path)
+
+    # When: capabilities are resolved
+    caps = _capabilities_for(
+        voice=None,
+        profile=profile,
+        settings=settings,
+        config_dir=tmp_path,
+        executor=executor,
+        cli_allowlist=None,
+    )
+
+    # Then: no Thinking capability is injected
+    assert "Thinking" not in {type(cap).__name__ for cap in caps}
+
+
+def test_capabilities_include_thinking_by_default(tmp_path: Path):
+    # Given: default settings
+    profile = _PROFILES["jane"]
+    settings = VoiceSettings(enabled=True)
+    executor = VoiceToolExecutor(config_dir=tmp_path)
+
+    # When: capabilities are resolved
+    caps = _capabilities_for(
+        voice=None,
+        profile=profile,
+        settings=settings,
+        config_dir=tmp_path,
+        executor=executor,
+        cli_allowlist=None,
+    )
+
+    # Then: Thinking stays on unless opted out
+    assert "Thinking" in {type(cap).__name__ for cap in caps}
+
+
+def test_prefill_skipped_when_disabled(tmp_path: Path):
+    import asyncio
+
+    from kateto.tests.conversation_support import StreamingFixtureProvider
+    from kateto.voices.base import VoiceAgent
+
+    # Given: a voice with prefill disabled
+    voice = VoiceAgent(
+        profile=_PROFILES["jane"],
+        config_dir=tmp_path,
+        provider=StreamingFixtureProvider(),
+        settings=VoiceSettings(enabled=True, prefill=False),
+    )
+
+    # When: prefill runs
+    result = asyncio.run(voice.prefill())
+
+    # Then: no-op without touching the provider
+    assert result is False

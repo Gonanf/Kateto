@@ -117,10 +117,21 @@ class AudioOutputPlayer(Plugin):
         self._pipeline_queues: dict[str, asyncio.Queue[bytes | None]] = {}
         # Raw data lanes for non-streaming TTS (EdgeTTS/Boson/CAMB): same lane
         # model as pipelines so the mixer serializes ALL producers per voice.
+        # Lanes are per-SENTENCE (voice#N): a sentence synthesized while the
+        # previous one still plays opens a new lane queued behind it. Sharing
+        # one lane per voice orphaned the next sentence's already-queued chunks
+        # when the previous sentence's final sentinel popped the lane.
         self._raw_lanes: dict[str, asyncio.Queue[bytes | None]] = {}
         self._raw_formats: dict[str, tuple[int, int]] = {}
+        self._lane_voice: dict[str, str] = {}
+        self._voice_lane: dict[str, str] = {}
+        self._lane_gen: dict[str, int] = {}
+        self._closed_lanes: set[str] = set()
         self._rms_processors: dict[str, RMSProcessor] = {}
         self._last_write_time: float = 0.0
+        # PCM bytes written to the device per lane since the lane started.
+        # Lets viseme consumers map energy to sentence-relative playback time.
+        self._lane_bytes: dict[str, int] = {}
 
     def _rms_for(self, voice_id: str) -> RMSProcessor:
         if voice_id not in self._rms_processors:
@@ -146,6 +157,11 @@ class AudioOutputPlayer(Plugin):
         self._pipeline_queues.clear()
         self._raw_lanes.clear()
         self._raw_formats.clear()
+        self._lane_bytes.clear()
+        self._lane_voice.clear()
+        self._voice_lane.clear()
+        self._lane_gen.clear()
+        self._closed_lanes.clear()
         await self._set_playing(False)
 
     @property
@@ -166,6 +182,8 @@ class AudioOutputPlayer(Plugin):
                 if data.voice_id not in self._active_pipelines:
                     self._active_pipelines[data.voice_id] = pipeline
                     self._pipeline_queues[data.voice_id] = pipeline.pcm_queue
+                    self._lane_voice[data.voice_id] = data.voice_id
+                    self._lane_bytes[data.voice_id] = 0
                     if self._mixer_task is None or self._mixer_task.done():
                         self._mixer_task = asyncio.create_task(
                             self._run_mixer(), name="kateto-mixer"
@@ -178,10 +196,13 @@ class AudioOutputPlayer(Plugin):
         _validate_pcm(data)
         key = data.voice_id or ""
         if data.final:
-            # Final chunk closes this voice's raw data lane: the sequencer
-            # advances to the next lane when the sentinel drains.
-            lane = self._raw_lanes.get(key)
+            # Final chunk closes this voice's CURRENT raw data lane: the
+            # sequencer advances to the next lane when the sentinel drains.
+            lane_key = self._voice_lane.get(key, key)
+            logger.info("[player] final voice={} lane={} seq={}", data.voice_id, lane_key, data.sequence)
+            lane = self._raw_lanes.get(lane_key)
             if lane is not None:
+                self._closed_lanes.add(lane_key)
                 await lane.put(None)
             return
         if not data.samples:
@@ -198,16 +219,28 @@ class AudioOutputPlayer(Plugin):
         # event that arrives while another lane is still yielding simply opens
         # a new lane behind the current one.
         # ponytail: lane maxsize bounds memory if the head lane stalls forever.
-        lane = self._raw_lanes.get(key)
-        if lane is None:
+        lane_key = self._voice_lane.get(key)
+        if lane_key is None or lane_key in self._closed_lanes or lane_key not in self._raw_lanes:
+            gen = self._lane_gen.get(key, 0) + 1
+            self._lane_gen[key] = gen
+            lane_key = key if gen == 1 else f"{key}#{gen}"
+            self._voice_lane[key] = lane_key
+            self._lane_voice[lane_key] = key
+            logger.info("[player] lane open voice={} lane={} seq={}", data.voice_id, lane_key, data.sequence)
             lane = asyncio.Queue(maxsize=64)
-            self._raw_lanes[key] = lane
-            self._raw_formats[key] = (data.sample_rate, data.channels)
-            self._pipeline_queues[key] = lane
+            self._raw_lanes[lane_key] = lane
+            self._raw_formats[lane_key] = (data.sample_rate, data.channels)
+            self._pipeline_queues[lane_key] = lane
+            self._lane_bytes[lane_key] = 0
             if self._mixer_task is None or self._mixer_task.done():
                 self._mixer_task = asyncio.create_task(
                     self._run_mixer(), name="kateto-mixer"
                 )
+        lane = self._raw_lanes[lane_key]
+        logger.info(
+            "[player] queued voice={} lane={} seq={} bytes={} lane_size={}",
+            data.voice_id, lane_key, data.sequence, len(data.samples), lane.qsize(),
+        )
         await lane.put(data.samples)
 
     async def _run_mixer(self) -> None:
@@ -231,10 +264,23 @@ class AudioOutputPlayer(Plugin):
                     await asyncio.sleep(0.005)
                     continue
                 idle_cycles = 0
-                voice_id, queue = next(iter(self._pipeline_queues.items()))
-                try:
-                    pcm = queue.get_nowait()
-                except asyncio.QueueEmpty:
+                head_id = next(iter(self._pipeline_queues.keys()))
+                # An empty head lane must not wedge lanes behind it (a lost
+                # final would otherwise mute everything for 10s): drain the
+                # first lane that actually has data. Same-voice order is still
+                # FIFO per lane; only a head awaiting late data can be jumped,
+                # which beats a decade of silence. The 10s drop below remains
+                # the backstop for permanently dead lanes.
+                voice_id: str | None = None
+                pcm: bytes | None = b""
+                for candidate_id, candidate_queue in self._pipeline_queues.items():
+                    try:
+                        pcm = candidate_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        continue
+                    voice_id = candidate_id
+                    break
+                if voice_id is None:
                     # Head lane has not yielded yet (synthesis in flight): wait
                     # for it, but drop a dead lane so it cannot block the device.
                     now = time.monotonic()
@@ -242,9 +288,9 @@ class AudioOutputPlayer(Plugin):
                         head_empty_since = now
                     elif (now - head_empty_since) > 10.0:
                         logger.warning(
-                            "audio_output_player: lane {} stalled >10s; dropping", voice_id
+                            "audio_output_player: lane {} stalled >10s; dropping", head_id
                         )
-                        self._pop_lane(voice_id)
+                        self._pop_lane(head_id)
                         head_empty_since = None
                     elif self._stream is not None and (now - self._last_write_time) > 1.5:
                         # Idle timeout: close stream to prevent ALSA xrun
@@ -254,15 +300,25 @@ class AudioOutputPlayer(Plugin):
                 head_empty_since = None
                 if pcm is None:
                     # Lane stopped yielding: pop it and advance to the next lane.
+                    logger.info("[player] lane done lane={} voice={} played_bytes={}", voice_id, self._lane_voice.get(voice_id, voice_id), self._lane_bytes.get(voice_id, 0))
                     self._pop_lane(voice_id)
                     self._rms_for(voice_id).reset()
                     continue
                 if pcm:
                     fmt = self._raw_formats.get(voice_id, (24_000, 1))
+                    audio_ms: float | None = None
                     try:
                         stream = self._open_or_reopen_stream(fmt)
                         _ = await to_thread.run_sync(stream.write, pcm)
                         self._last_write_time = time.monotonic()
+                        sample_rate, channels = fmt
+                        played = self._lane_bytes.get(voice_id, 0) + len(pcm)
+                        self._lane_bytes[voice_id] = played
+                        audio_ms = played / (sample_rate * channels * 2) * 1000.0
+                        logger.info(
+                            "[player] played lane={} voice={} bytes={} audio_ms={:.0f}",
+                            voice_id, self._lane_voice.get(voice_id, voice_id), len(pcm), audio_ms,
+                        )
                     except (
                         sounddevice.PortAudioError,
                         ValueError,
@@ -283,11 +339,12 @@ class AudioOutputPlayer(Plugin):
                         await self._set_playing(False)
                         await asyncio.sleep(0.05)
                     rms = self._rms_for(voice_id).process(pcm)
-                    if self._playing_speaker != voice_id:
+                    heard_voice = self._lane_voice.get(voice_id, voice_id)
+                    if self._playing_speaker != heard_voice:
                         # New lane reached the device: this voice is now the
                         # one actually being heard.
-                        self._playing_speaker = voice_id
-                    await self._send_viseme(voice_id, rms, None)
+                        self._playing_speaker = heard_voice
+                    await self._send_viseme(heard_voice, rms, None, audio_ms=audio_ms)
                 else:
                     await asyncio.sleep(0.005)
         except asyncio.CancelledError:
@@ -301,13 +358,51 @@ class AudioOutputPlayer(Plugin):
             self._pipeline_queues.clear()
             self._raw_lanes.clear()
             self._raw_formats.clear()
+            self._lane_bytes.clear()
+            self._lane_voice.clear()
+            self._voice_lane.clear()
+            self._lane_gen.clear()
+            self._closed_lanes.clear()
             await self._set_playing(False)
 
-    def _pop_lane(self, voice_id: str) -> None:
-        self._pipeline_queues.pop(voice_id, None)
+    def _pop_lane(self, voice_id: str, *, rescue: bool = True) -> None:
+        queue = self._pipeline_queues.pop(voice_id, None)
         self._active_pipelines.pop(voice_id, None)
+        self._lane_bytes.pop(voice_id, None)
         self._raw_lanes.pop(voice_id, None)
-        self._raw_formats.pop(voice_id, None)
+        fmt = self._raw_formats.pop(voice_id, (24_000, 1))
+        voice = self._lane_voice.pop(voice_id, voice_id)
+        self._closed_lanes.discard(voice_id)
+        for name, lane_key in list(self._voice_lane.items()):
+            if lane_key == voice_id:
+                del self._voice_lane[name]
+        if rescue and queue is not None:
+            # A popped lane can still hold unplayed chunks of the NEXT sentence
+            # (synthesis outruns realtime playback on the shared pipeline queue,
+            # or the voice replaced the queue object). Re-queue them behind as a
+            # fresh lane instead of orphaning them into silence.
+            rest: list[bytes | None] = []
+            while True:
+                try:
+                    rest.append(queue.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
+            if any(item is not None for item in rest):
+                gen = self._lane_gen.get(voice, 0) + 1
+                self._lane_gen[voice] = gen
+                rescued_key = voice if gen == 1 else f"{voice}#{gen}"
+                rescued: asyncio.Queue[bytes | None] = asyncio.Queue(maxsize=64)
+                for item in rest:
+                    rescued.put_nowait(item)
+                self._raw_lanes[rescued_key] = rescued
+                self._raw_formats[rescued_key] = fmt
+                self._pipeline_queues[rescued_key] = rescued
+                self._lane_bytes[rescued_key] = 0
+                self._lane_voice[rescued_key] = voice
+                logger.info(
+                    "[player] lane rescue lane={} voice={} chunks={}",
+                    rescued_key, voice, len(rest),
+                )
 
     @override
     async def _enqueue(self, envelope: EventEnvelope[BaseModel], handler: EventHandler) -> None:
@@ -319,6 +414,10 @@ class AudioOutputPlayer(Plugin):
     def _open_or_reopen_stream(self, requested_format: tuple[int, int]) -> SoundDeviceOutputStream:
         stream = self._stream
         if stream is None or self._stream_format != requested_format:
+            logger.info(
+                "[player] stream open rate={} channels={} (was={})",
+                requested_format[0], requested_format[1], self._stream_format,
+            )
             self._close_stream()
             sample_rate, channels = requested_format
             stream = self._factory.create(
@@ -333,6 +432,7 @@ class AudioOutputPlayer(Plugin):
         return stream
 
     async def on_interrupt(self, data: InterruptData) -> None:
+        logger.info("[player] interrupt reason={} dept={}", data.reason, data.dept)
         self._interrupted = True
         manager = self.manager
         target_voices: set[str] | None = None
@@ -343,9 +443,10 @@ class AudioOutputPlayer(Plugin):
                 if "voice" in plugin.capabilities and data.dept in plugin.depts
             }
         if target_voices is not None:
-            for voice_id in list(self._pipeline_queues.keys()):
-                if voice_id in target_voices:
-                    self._pop_lane(voice_id)
+            for lane_key in list(self._pipeline_queues.keys()):
+                if self._lane_voice.get(lane_key, lane_key) in target_voices:
+                    # Barge-in drops, never rescues: the user took the floor.
+                    self._pop_lane(lane_key, rescue=False)
             if not self._pipeline_queues:
                 self._playing_speaker = None
                 self._close_stream()
@@ -372,6 +473,11 @@ class AudioOutputPlayer(Plugin):
             self._pipeline_queues.clear()
             self._raw_lanes.clear()
             self._raw_formats.clear()
+            self._lane_bytes.clear()
+            self._lane_voice.clear()
+            self._voice_lane.clear()
+            self._lane_gen.clear()
+            self._closed_lanes.clear()
             self._playing_speaker = None
             await self._set_playing(False)
             self._idle_event.set()
@@ -381,6 +487,7 @@ class AudioOutputPlayer(Plugin):
         self._stream = None
         self._stream_format = None
         if stream is not None:
+            logger.info("[player] stream close abort={}", abort)
             # ponytail: never call abort() — on xrun-corrupted streams, abort()
             # triggers double-free in PortAudio's ALSA mmap path. Use graceful
             # stop() + close() even when abort was requested.
@@ -418,14 +525,19 @@ class AudioOutputPlayer(Plugin):
         )
 
     async def _send_viseme(
-        self, voice_id: str | None, rms: float, text: str | None = None
+        self,
+        voice_id: str | None,
+        rms: float,
+        text: str | None = None,
+        *,
+        audio_ms: float | None = None,
     ) -> None:
         if self.manager is None:
             return
         vo = self.manager.get_plugin("visual_overlay")
         if vo is not None and hasattr(vo, "update_viseme"):
             try:
-                await vo.update_viseme(voice_id, rms, text)
+                await vo.update_viseme(voice_id, rms, text, audio_ms=audio_ms)
             except Exception:
                 pass
 

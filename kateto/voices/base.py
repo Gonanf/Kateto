@@ -50,6 +50,7 @@ from kateto.core.event import (
     ToolCallData,
     ToolResultData,
     TranscriptionData,
+    VisionDescribeResultData,
     VoiceIdleData,
     VoiceRequestData,
     VoiceStatus,
@@ -549,6 +550,8 @@ class VoiceAgent(Plugin):
 
     async def prefill(self) -> bool:
         """Prefill the frozen stable system prompt into the LLM KV cache."""
+        if not self._settings.prefill:
+            return False
         prompt = await self._stable_prompt()
         if not prompt or not prompt.strip():
             return False
@@ -593,6 +596,11 @@ class VoiceAgent(Plugin):
                 await super()._enqueue(envelope, handler)
 
     async def on_transcription(self, data: TranscriptionData) -> None:
+        return None
+
+    async def on_vision_describe_result(self, data: VisionDescribeResultData) -> None:
+        # No-op: subscription + _remember_event (via _enqueue) land the
+        # description in this voice's memory so it can answer from it.
         return None
 
     async def on_voice_request(self, data: VoiceRequestData) -> None:
@@ -1342,6 +1350,12 @@ class VoiceAgent(Plugin):
         match envelope.data:
             case TranscriptionData(text=text):
                 message = ChatMessage(role="user", content=self._bounded_event_text(text))
+            case VisionDescribeResultData() as seen:
+                span = seen.window_end - seen.window_start
+                message = ChatMessage(
+                    role="user",
+                    content=self._bounded_event_text(f"[look-at {seen.source} {span:.0f}s]: {seen.text}"),
+                )
             case TextChunk(text=text) if text:
                 message = ChatMessage(role="assistant", content=self._bounded_event_text(text))
             case VoiceRequestData(prompt=prompt):
@@ -1410,6 +1424,10 @@ class VoiceAgent(Plugin):
     async def _emit_chunk(self, text: str, sequence: int, *, final: bool) -> None:
         if not text and not final:
             return
+        log.info(
+            "[llm-chunk] voice={} seq={} final={} chars={} text={!r}",
+            self.name, sequence, final, len(text), text[:80],
+        )
         manager = self.manager
         if manager is not None:
             envelope = await manager.emit(

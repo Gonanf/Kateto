@@ -196,18 +196,19 @@ class HttpServer:
 
         @app.get("/overlay")
         async def overlay() -> FileResponse:
-            return FileResponse(OVERLAY_HTML)
+            return FileResponse(OVERLAY_HTML, headers={"Cache-Control": "no-store"})
 
         @app.get("/courtroom")
         async def courtroom() -> FileResponse:
-            return FileResponse(COURTROOM_HTML)
+            return FileResponse(COURTROOM_HTML, headers={"Cache-Control": "no-store"})
 
         @app.get("/components/{file}")
         async def component_asset(file: str) -> FileResponse:
             path = (WEB_DIR / file).resolve()
             if not path.is_relative_to(WEB_DIR) or not path.is_file():
                 raise HTTPException(status_code=404, detail="not found")
-            return FileResponse(path)
+            # ponytail: no-store so overlay clients never run stale kinematics JS
+            return FileResponse(path, headers={"Cache-Control": "no-store"})
 
         @app.get("/sounds/{file}")
         async def sound_asset(file: str) -> FileResponse:

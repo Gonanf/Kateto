@@ -117,6 +117,30 @@ def _wav_bytes(audio: AudioData) -> bytes:
             raise UnsupportedAudioPayload(format=unsupported)
 
 
+def _resolve_gpu_device(
+    explicit: int | None,
+    settings: PluginSettings | None,
+) -> int | None:
+    """Resolve the whisper.cpp Vulkan GPU device index.
+
+    Precedence: explicit constructor arg > `gpu_device` setting >
+    numeric `device` setting (shared with the whisper-server backend).
+    """
+    if explicit is not None:
+        return explicit
+    if settings is not None:
+        configured = getattr(settings, "gpu_device", None)
+        if configured is not None:
+            return configured
+        device = getattr(settings, "device", None)
+        if device is not None:
+            try:
+                return int(str(device).strip())
+            except ValueError:
+                return None
+    return None
+
+
 class PyWhisperCppProvider:
     """In-process whisper.cpp speech-to-text provider using pywhispercpp Python bindings."""
 
@@ -127,6 +151,7 @@ class PyWhisperCppProvider:
         model: str | None = None,
         n_threads: int = 4,
         language: str | None = None,
+        gpu_device: int | None = None,
     ) -> None:
         self._settings = settings
         self._model_name = model or (settings.model if settings else None) or "base.en"
@@ -141,6 +166,7 @@ class PyWhisperCppProvider:
             if resolved_lang == "auto":
                 resolved_lang = None
         self._language = resolved_lang
+        self._gpu_device = _resolve_gpu_device(gpu_device, settings)
         self._model: Any = None
 
     async def __aenter__(self) -> PyWhisperCppProvider:
@@ -166,7 +192,13 @@ class PyWhisperCppProvider:
             ) from err
 
         def _load() -> Any:
-            return Model(self._model_name, n_threads=self._n_threads)
+            if self._gpu_device is None:
+                return Model(self._model_name, n_threads=self._n_threads)
+            return Model(
+                self._model_name,
+                n_threads=self._n_threads,
+                context_params={"gpu_device": self._gpu_device},
+            )
 
         self._model = await asyncio.to_thread(_load)
 

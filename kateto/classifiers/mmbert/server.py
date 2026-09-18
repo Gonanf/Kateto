@@ -109,6 +109,16 @@ ONNX_FILENAME = "model.onnx"
 CONFIG_FILENAME = "config.json"
 
 
+def _require_hub_deps() -> None:
+    """Fail fast with an actionable message instead of `'NoneType' is not callable`."""
+    if hf_hub_download is None or Tokenizer is None:
+        raise RuntimeError(
+            "mmBERT classifier dependencies are missing (huggingface-hub, tokenizers). "
+            "Install the optional feature with `uv run --extra classifier kateto run` "
+            "or `uv tool install 'kateto[classifier]'`."
+        )
+
+
 def _resolve_model_path(model_ref: str) -> Path:
     """Return local path to the ONNX model file.
 
@@ -118,6 +128,7 @@ def _resolve_model_path(model_ref: str) -> Path:
     p = Path(model_ref)
     if p.exists():
         return p if p.is_file() else p / ONNX_FILENAME
+    _require_hub_deps()
     # Download from HuggingFace Hub
     return Path(
         hf_hub_download(
@@ -130,6 +141,7 @@ def _resolve_model_path(model_ref: str) -> Path:
 
 def _load_tokenizer(model_repo: str) -> Tokenizer:
     """Load the BERT-compatible WordPiece tokenizer from the Hub."""
+    _require_hub_deps()
     tokenizer_path = hf_hub_download(
         repo_id=model_repo,
         filename="tokenizer.json",

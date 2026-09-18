@@ -111,6 +111,14 @@ class TextChunk(EventModel):
     voice_id: str | None = None
 
 
+class WordTiming(EventModel):
+    """One spoken word with sentence-relative timing (EdgeTTS WordBoundary)."""
+
+    text: str = Field(min_length=1)
+    start_ms: float = Field(ge=0.0)
+    end_ms: float = Field(ge=0.0)
+
+
 class AudioOutput(EventModel):
     samples: bytes
     sample_rate: int = Field(gt=0)
@@ -121,6 +129,7 @@ class AudioOutput(EventModel):
     final: bool = False
     rms: float | None = Field(default=None, ge=0.0, le=1.0)
     text: str | None = None
+    words: list[WordTiming] | None = None
 
 
 class OverlayLayout(EventModel):

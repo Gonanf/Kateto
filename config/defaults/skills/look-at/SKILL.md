@@ -2,6 +2,19 @@
 
 On-demand eyes for the voice: when the user asks you to look at something, describe the recent action on screen (and webcam when available).
 
+## How to trigger a look
+
+You cannot capture frames yourself. Fire the describe request as a tool call:
+
+1. `list_events` → confirm `vision_describe_request` is available.
+2. `send_event` with `event_name="vision_describe_request"` and data
+   `{"requester": "<your voice name>", "source": "<auto|screen|webcam>"}`.
+3. The description arrives as a `vision_describe_result` event and lands in
+   your memory as `[look-at <source> <span>s]: ...` — answer from it, quoting
+   the `t+<offset>s` labels when the user asks about a sequence.
+
+Never claim to see anything before the result arrives.
+
 ## Source selection
 
 The describe call takes a `source` value. Pick it from the user's words:

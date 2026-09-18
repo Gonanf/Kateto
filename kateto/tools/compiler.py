@@ -50,6 +50,11 @@ def get_env_for_backend(backend: str, *, jobs: int = 1) -> dict[str, str]:
     env["CMAKE_BUILD_PARALLEL_LEVEL"] = parallel_level
     env["MAX_JOBS"] = parallel_level
     env["MAKEFLAGS"] = f"-j{parallel_level}"
+    # ponytail: never use sccache/ccache here — a broken cache (e.g. root-owned
+    # cache dir) fails the whole build with opaque "Permission denied" errors.
+    env["GGML_CCACHE"] = "OFF"
+    env["CMAKE_C_COMPILER_LAUNCHER"] = ""
+    env["CMAKE_CXX_COMPILER_LAUNCHER"] = ""
 
     backend_lower = backend.lower()
     cmake_flags: list[str] = []

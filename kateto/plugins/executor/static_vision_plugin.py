@@ -27,7 +27,10 @@ from kateto.core.event import (
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.voices.base import _openai_client
+from loguru import logger
 from openai import APIStatusError, BadRequestError
+
+log = logger
 
 
 def _setting(settings: PluginSettings | None, key: str, default: Any) -> Any:
@@ -191,6 +194,23 @@ class StaticVisionPlugin(Plugin):
 
     async def enable(self) -> None:
         await super().enable()
+        if not self._opted_in:
+            log.warning(
+                "[vision] periodic describe idle: no voice sets vision_periodic=true "
+                "(describe_interval/window_secs alone do not schedule anything)"
+            )
+        else:
+            log.info(
+                "[vision] periodic describe opted in: {}",
+                ", ".join(f"{voice}@{interval}" for voice, interval in self._opted_in),
+            )
+        if not (self.vision_endpoint and self.vision_model) and not (
+            self.vision_fallback_endpoint and self.vision_fallback_model
+        ):
+            log.warning(
+                "[vision] no VLM endpoint configured (vision_endpoint/vision_model): "
+                "describes fall back to the video-rag sidecar if present, else a text recap"
+            )
         await self._schedule_periodic()
         if self._capture_task is not None and not self._capture_task.done():
             return
@@ -223,6 +243,7 @@ class StaticVisionPlugin(Plugin):
                 ),
                 source=self.name,
             )
+            log.info("[vision] scheduled {} every {} for {}", job_id, interval, voice)
             self._periodic_jobs.append(job_id)
 
     async def disable(self) -> None:
@@ -300,6 +321,10 @@ class StaticVisionPlugin(Plugin):
             window_end: float = 0.0,
             via: str = "primary",
         ) -> None:
+            log.info(
+                "[vision] describe requester={} source={} via={} frames={}/{} chars={}",
+                requester, source, via, kept_count, frame_count, len(text),
+            )
             await manager.emit(
                 "vision_describe_result",
                 VisionDescribeResultData(
@@ -407,6 +432,7 @@ class StaticVisionPlugin(Plugin):
             voice = requester.split("scheduler:", 1)[1]
             if voice and kept_count > 0:
                 span = window_end - window_start
+                log.info("[vision] periodic narration -> {} ({}s window)", voice, f"{span:.0f}")
                 await manager.emit(
                     "generate",
                     GenerateData(prompt=f"[look-at {source} {span:.0f}s]: {fused}"),
@@ -439,14 +465,26 @@ class StaticVisionPlugin(Plugin):
         try:
             context = discovery_context_for((self,))
             mcp = getattr(context, "external_mcp", None) if context is not None else None
+            if mcp is None and context is not None:
+                # The manager lives in shared services, not on the context field.
+                get_shared = getattr(context, "get_shared", None)
+                if callable(get_shared):
+                    try:
+                        mcp = get_shared("external_mcp")
+                    except Exception:
+                        mcp = None
             if mcp is not None:
                 result = await mcp.try_call_tool(
                     ["video_rag"], "describe_images", {"prompt": prompt, "images": images}
                 )
                 if result is not None:
+                    log.info("[vision] sidecar describe_images answered ({} chars)", len(str(result)))
                     return str(result), "sidecar"
-        except Exception:
-            pass
+                log.warning("[vision] sidecar video_rag unreachable (no client or no describe_images tool)")
+            else:
+                log.warning("[vision] sidecar video_rag unavailable (no external MCP context)")
+        except Exception as exc:
+            log.warning("[vision] sidecar describe_images failed: {}", exc)
         fallback_model = self.vision_fallback_model or self.vision_model
         if self.vision_fallback_endpoint and fallback_model:
             try:

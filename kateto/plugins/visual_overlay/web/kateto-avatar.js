@@ -11,19 +11,24 @@
  */
 
 // 1. Pure jaw kinematics formula (Kateto visual overlay standard)
-// Erratic jaw: side-to-side shake + random tilt via Math.random(). Body stays still
-// (no headOffsetY) so only the jaw layer moves. This is the primary animation path
-// for both synthetic TTS (pulseWord) and live audio (setRms).
-export function computeJawKinematics(rms) {
+// Muppet jaw: fast up/down flap PLUS random sideways shake and tilt via
+// Math.random(). The JAW layer alone may sway — the full character must never
+// move sideways (that was the card-level `transform` bug, fixed with the
+// independent CSS `scale` property). Primary animation path for both
+// synthetic TTS (pulseWord) and live audio (setRms).
+export function computeJawKinematics(rms, nowMs) {
   if (typeof rms !== 'number' || rms < 0.015) {
     return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
   }
+  const t = typeof nowMs === 'number' ? nowMs : Date.now();
   // Punchy response curve with strong upward force
   const factor = Math.min(1.0, Math.max(0.0, Math.pow((rms - 0.015) / 0.985, 0.68)));
-  const upMovement = -Number((factor * 52.0).toFixed(2));
+  // Syllabic flap (~8Hz) scaled by voice energy, strong upward travel.
+  const flap = 0.5 + 0.5 * Math.sin((t / 1000) * 2 * Math.PI * 8);
+  const upMovement = -Number(((6.0 + 40.0 * flap) * (0.5 + 0.5 * factor)).toFixed(2));
   const sideDir = (Math.random() * 2 - 1);
-  const sideShake = Number((sideDir * factor * 6.0).toFixed(2));
-  const tilt = Number(((sideDir * 0.9 + (Math.random() * 0.2 - 0.1)) * factor * 34.0).toFixed(2));
+  const sideShake = Number((sideDir * factor * 9.0).toFixed(2));
+  const tilt = Number(((sideDir * 0.9 + (Math.random() * 0.2 - 0.1)) * factor * 40.0).toFixed(2));
 
   return {
     jawOffsetX: sideShake,
@@ -258,11 +263,12 @@ export class KatetoAvatar extends HTMLElement {
 
     this._head.src = `/voices/${encodeURIComponent(this._voice)}/avatar_head.png`;
     this._jaw.src = `/voices/${encodeURIComponent(this._voice)}/avatar_jaw.png`;
-    this._fallback.src = `/voices/${encodeURIComponent(this._voice)}/top.png`;
+    // NOTE: fallback src is set lazily in _enableFallback so a missing
+    // top.png doesn't spam 404s on every healthy load.
   }
 
   // Direct transform set (used for fallback image switching and external calls).
-  // Primary animation path is setRms → computeJawKinematics (erratic jaw, still body).
+  // Primary animation path is setRms → computeJawKinematics (vertical flap).
   setJawTransform({ jawOffsetX = 0, jawOffsetY = 0, jawRotation = 0, headOffsetY = 0 } = {}) {
     if (this._useFallback) {
       const active = (Math.abs(jawOffsetY) > 0.5 || Math.abs(jawRotation) > 0.3);

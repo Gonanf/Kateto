@@ -1,0 +1,40 @@
+base_url = "http://localhost:11434/v1"
+# api_key optional; llama-server ignores it
+embedding_model = "Qwen3Embedding"
+embedding_dim = 1024
+# "openai" = endpoint above; "lexical" = offline weighted-keyword fallback
+embedding_provider = "openai"
+
+# Model pins (eval/model-pins.md, eval/vram.log): one model resident at a time;
+# 4GB-floor machine → 3B VLM/text model only (LFM2.5-VL-3B Q4_K_M, ~2GB).
+# Qwen3.5-9B is 8GB-class — set explicitly on 8GB machines only.
+# vision_model = "LFM2.5-VL-3B"
+# text_model = "LFM2.5-VL-3B"
+
+# CPU fallback (documented, no dedicated GPU required):
+# - ASR: whisper turbo (models/ggml-large-v3-turbo-q5_0.bin) runs on CPU;
+#   measured ~20s wall for a 35s clip on the i3-10105F (eval/word-ts.md) ≈ realtime.
+# - Embeddings: set embedding_provider = "lexical" for the offline
+#   weighted-keyword fallback (no endpoint needed); otherwise serve
+#   Qwen3-Embedding-0.6B Q8_0 via llama-server (CPU fine, ~700MB).
+# - VLM/text: llama-server with CPU offload (smaller n_ctx recommended).
+
+[whisper_config]
+model_path = "./models/ggml-large-v3-turbo-q5_0.bin"
+# Forced transcription language (e.g. "es", "en"); "auto" (or empty)
+# leaves whisper auto-detect. Env VIDEO_WHISPER_CONFIG__LANGUAGE and
+# `video-rag index --language <lang>` override this (CLI wins).
+language = "es"
+# Decoder threads (default 0 = all logical cores via
+# std::thread::available_parallelism; whisper.cpp would use min(4, cores)).
+# Env VIDEO_WHISPER_CONFIG__N_THREADS overrides this.
+n_threads = 0
+
+# Visual specialists (todo 2):
+# OCR language packs (tesseract, `+`-separated; every pack must be present in
+# one tessdata dir or OCR degrades to empty).
+# ocr_lang = "spa+eng"
+# Object-detection sidecar (RT-DETR, eval/detect.md): default-OFF gate.
+# Localhost-only; unreachable sidecar degrades to text-only chapters (WARN).
+# detect_enabled = false
+# detect_url = "http://127.0.0.1:8091/detect"

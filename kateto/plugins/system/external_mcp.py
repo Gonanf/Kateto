@@ -41,6 +41,7 @@ class ExternalMcpClient:
             self._session_cm = ClientSession(read, write)
             self._session = await self._session_cm.__aenter__()
             await self._session.initialize()
+            log.info("External MCP '{}' started: {}", self.name, self._command)
         except Exception as exc:
             log.warning("External MCP '{}' failed to start: {}", self.name, exc)
             await self.stop()

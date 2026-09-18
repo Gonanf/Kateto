@@ -140,8 +140,19 @@ class VisualOverlayPlugin(Plugin):
                 self._debate_history.pop(0)
             await self._broadcast(state)
 
-    async def update_viseme(self, voice_id: str | None, rms: float, text: str | None = None) -> None:
-        """Direct data-layer update for viseme/RMS kinematics, bypassing event bus dispatch."""
+    async def update_viseme(
+        self,
+        voice_id: str | None,
+        rms: float,
+        text: str | None = None,
+        *,
+        audio_ms: float | None = None,
+    ) -> None:
+        """Direct data-layer update for viseme/RMS kinematics, bypassing event bus dispatch.
+
+        `audio_ms` is sentence-relative playback time from the audio player —
+        lets the overlay reveal word captions in sync with audible audio.
+        """
         is_speaking = bool(rms > 0.05)
         puppet = map_rms_to_puppet_transform(rms)
         payload = {
@@ -155,6 +166,7 @@ class VisualOverlayPlugin(Plugin):
             "jawRotation": puppet["jawRotation"],
             "headOffsetY": puppet["headOffsetY"],
             "text": text,
+            "audio_ms": audio_ms,
             "data": {
                 "rms": rms,
                 "is_speaking": is_speaking,
@@ -164,6 +176,7 @@ class VisualOverlayPlugin(Plugin):
                 "jawRotation": puppet["jawRotation"],
                 "headOffsetY": puppet["headOffsetY"],
                 "text": text,
+                "audio_ms": audio_ms,
             },
         }
         await self._broadcast(payload)
@@ -188,6 +201,13 @@ class VisualOverlayPlugin(Plugin):
         if data.samples and self._stream_audio:
             audio_b64 = base64.b64encode(data.samples).decode("ascii")
 
+        words = None
+        if data.words:
+            words = [
+                {"text": w.text, "start_ms": w.start_ms, "end_ms": w.end_ms}
+                for w in data.words
+            ]
+
         payload = {
             "event": "audio_output",
             "type": "viseme",
@@ -200,6 +220,7 @@ class VisualOverlayPlugin(Plugin):
             "headOffsetY": puppet["headOffsetY"],
             "text": data.text,
             "audio": audio_b64,
+            "words": words,
             "sample_rate": data.sample_rate,
             "channels": data.channels,
             "format": data.format,
@@ -214,6 +235,7 @@ class VisualOverlayPlugin(Plugin):
                 "headOffsetY": puppet["headOffsetY"],
                 "text": data.text,
                 "audio": audio_b64,
+                "words": words,
                 "sample_rate": data.sample_rate,
                 "channels": data.channels,
                 "format": data.format,

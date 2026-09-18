@@ -17,6 +17,12 @@ description: "Known Issues — índice de bugs"
 | 2 | Sin tests end-to-end | Media | `kateto/tests/` | [02-no-e2e-tests.md](./bugs/02-no-e2e-tests.md) — **parcialmente resuelto 2026-08-25**: e2e de workflows+tool-calling en `test_workflow_e2e.py`, autonomía en `test_autonomy_e2e.py`; el pipeline completo de audio real sigue sin cobertura |
 | 7 | Proyecto no runneable sin configuración externa | Alta | `README.md`, `config/defaults/` | [07-not-runnable.md](./bugs/07-not-runnable.md) |
 | 12 | TODO.md se escribe en voices/shared/ | Informativa | `plugins/executor/todo_list.py` | [12-todo-md-location.md](./bugs/12-todo-md-location.md) |
+| 91 | Compilación Vulkan falla por sccache roto y por caché cmake stale de uv | Media | `kateto/tools/compiler.py` | [91-compilacion-vulkan-sccache-y-cache-stale.md](./bugs/91-compilacion-vulkan-sccache-y-cache-stale.md) |
+| 92 | `kateto compile` instala en el venv del repo pero el runtime usa el entorno de `uv tool` | Alta | `kateto/tools/compiler.py` | [92-desajuste-entornos-uv-tool-vs-repo.md](./bugs/92-desajuste-entornos-uv-tool-vs-repo.md) |
+| 94 | El micrófono escucha el propio parlante y el VAD auto-interrumpe el habla | Alta | `kateto/plugins/audio_input/listener.py` | [94-auto-barge-in-por-vad-escucha-propio-parlante.md](./bugs/94-auto-barge-in-por-vad-escucha-propio-parlante.md) |
+| 99 | Subtítulos pelean entre texto LLM y texto TTS (z-fighting de captions) | Baja | `kateto/plugins/visual_overlay/web/index.html` | [99-subtitulos-pelean-llm-vs-tts.md](./bugs/99-subtitulos-pelean-llm-vs-tts.md) |
+| 100 | Warning `returncode 255` en cada teardown de ffmpeg | Baja | `kateto/providers/edgetts.py` | [100-warning-returncode-255-teardown.md](./bugs/100-warning-returncode-255-teardown.md) |
+| 101 | Whisper en Iris Xe vía Vulkan: primera inferencia lenta | Media | `kateto/providers/whisper.py` | [101-whisper-lento-en-iris-xe.md](./bugs/101-whisper-lento-en-iris-xe.md) |
 
 
 ## Resueltos (✅)
@@ -93,6 +99,17 @@ description: "Known Issues — índice de bugs"
 | 86 | ALSA mmap xrun en streams persistentes y demora artificial en cue de objeción | Crítica | `plugins/audio_output/player.py`, `plugins/bate_debate/` | [86-alsa-mmap-xrun-and-stream-lifecycle.md](./bugs/86-alsa-mmap-xrun-and-stream-lifecycle.md) |
 | 87 | Voice generate fails with ReferenceClipError when TTS provider is not Zonos | Alta | `kateto/voices/base.py` | [87-reference-wav-validation-blocks-non-zonos-tts.md](./bugs/87-reference-wav-validation-blocks-non-zonos-tts.md) |
 | 88 | Mixer task dies on PortAudio host error -9999 (unretrieved exception, audio silent) | Alta | `kateto/plugins/audio_output/player.py` | [88-mixer-portaudio-host-error-kills-task.md](./bugs/88-mixer-portaudio-host-error-kills-task.md) |
+| 89 | Classifier trata `model = "classifier"` como repo ID de HuggingFace (401) | Media | `kateto/providers/classifier.py` | [89-classifier-model-id-como-repo-hf.md](./bugs/89-classifier-model-id-como-repo-hf.md) |
+| 90 | Wheel prebuilt de pywhispercpp sin Vulkan + sin selección de GPU | Alta | `kateto/providers/whisper.py` | [90-whisper-prebuilt-sin-vulkan-y-gpu-device.md](./bugs/90-whisper-prebuilt-sin-vulkan-y-gpu-device.md) |
+| 93 | mmBERT sin `huggingface-hub` muere con `'NoneType' is not callable` | Media | `kateto/classifiers/mmbert/server.py` | [93-mmbert-nonetype-sin-huggingface-hub.md](./bugs/93-mmbert-nonetype-sin-huggingface-hub.md) |
+| 95 | Overlay: `.speaking` con `transform: scale() !important` desplaza la tarjeta | Media | `kateto/plugins/visual_overlay/web/index.html` | [95-overlay-sway-por-transform-important.md](./bugs/95-overlay-sway-por-transform-important.md) |
+| 96 | Overlay sirve el JS sin `Cache-Control` (cinemática vieja en caché) | Baja | `kateto/plugins/system/http_server.py` | [96-overlay-js-cacheado-stale.md](./bugs/96-overlay-js-cacheado-stale.md) |
+| 97 | Player pierde oraciones sintetizadas cuando la síntesis adelanta al playback | Crítica | `kateto/plugins/audio_output/player.py` | [97-player-pierde-oraciones-en-cola-tras-final.md](./bugs/97-player-pierde-oraciones-en-cola-tras-final.md) |
+| 98 | Chunks LLM vacíos generaban un `final seq=0` espurio | Baja | `kateto/plugins/audio_output/edgetts.py` | [98-final-espurio-de-chunks-llm-vacios.md](./bugs/98-final-espurio-de-chunks-llm-vacios.md) |
+| 102 | El modelo no sabe que puede mirar: skill sin mecanismo y voz que ignora resultados | Alta | `kateto/voices/base.py` | [102-modelo-no-sabe-mirar-ni-recibe-resultados.md](./bugs/102-modelo-no-sabe-mirar-ni-recibe-resultados.md) |
+| 103 | Describe periódico requiere `vision_periodic` por voz y backend | Media | `kateto/plugins/executor/static_vision_plugin.py` | [103-vision-periodica-requiere-optin-y-backend.md](./bugs/103-vision-periodica-requiere-optin-y-backend.md) |
+| 104 | Scheduler rutea el evento al target_voice y el plugin consumidor jamás lo recibe | Alta | `kateto/plugins/executor/scheduler.py` | [104-scheduler-target-voice-blackholes-plugin-events.md](./bugs/104-scheduler-target-voice-blackholes-plugin-events.md) |
+| 105 | Sospecha sin confirmar: el problema restante puede estar en el tool calling | Media | `kateto/voices/tools.py` | [105-sospecha-tool-calling-vision-mcp.md](./bugs/105-sospecha-tool-calling-vision-mcp.md) |
 
 ---
 

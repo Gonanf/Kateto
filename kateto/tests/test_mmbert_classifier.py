@@ -74,9 +74,23 @@ async def test_llamacpp_classifier_provider_classifies_with_mocked_llm():
     assert result.confidence == 0.88
 
 
+def test_mmbert_server_fails_with_actionable_error_without_hub_deps():
+    # Given: huggingface-hub / tokenizers unavailable
+    from kateto.classifiers.mmbert import server as mmbert_server
+
+    with (
+        patch.object(mmbert_server, "hf_hub_download", None),
+        patch.object(mmbert_server, "Tokenizer", None),
+    ):
+        # When / Then: guard raises an install hint, not "'NoneType' is not callable"
+        with pytest.raises(RuntimeError, match=r"kateto\[classifier\]"):
+            mmbert_server._require_hub_deps()
+        with pytest.raises(RuntimeError, match=r"kateto\[classifier\]"):
+            mmbert_server._load_tokenizer("Qdrant/all-MiniLM-L6-v2-onnx")
+
+
 @pytest.mark.asyncio
-async def test_classifier_executor_selects_mmbert_backend():
-    # Given: settings with backend="mmbert"
+async def test_classifier_executor_selects_mmbert_backend():    # Given: settings with backend="mmbert"
     settings = PluginSettings(backend="mmbert")
     executor = ClassifierExecutor(settings)
 

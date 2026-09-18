@@ -5,8 +5,9 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
+  <link rel="icon" href="data:," />
   <title>Kateto Visual Overlay</title>
-  <script type="module" src="/components/kateto-avatar.js"></script>
+  <script type="module" src="/components/kateto-avatar.js?v=flap6"></script>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -90,6 +91,7 @@
         right 0.6s cubic-bezier(0.22, 1, 0.36, 1),
         bottom 0.6s cubic-bezier(0.22, 1, 0.36, 1),
         transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+        scale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
         opacity 0.25s ease,
         filter 0.25s ease;
       opacity: 0.72;
@@ -97,7 +99,11 @@
     }
     .agent-card.speaking {
       opacity: 1.0;
-      transform: scale(1.06) !important;
+      /* Independent `scale` property (not `transform`): it composes with the
+         inline positioning translate (translateX/Y(-50%)) instead of replacing
+         it. `transform: scale() !important` used to drop the centering while
+         talking, jerking the whole card sideways on every utterance. */
+      scale: 1.06;
       filter: drop-shadow(0 8px 24px rgba(59, 130, 246, 0.6));
     }
     .agent-card.hidden {
@@ -174,8 +180,11 @@
       font-size: 1.15rem;
       line-height: 1.4;
       text-align: center;
-      color: #f1f5f9;
+      color: rgba(241, 245, 249, 0.45);
       text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    }
+    #caption-text .w-spoken {
+      color: #f1f5f9;
     }
   </style>
 </head>
@@ -205,7 +214,7 @@
   </div>
 
   <script type="module">
-    import { BrowserPcmPlayer, VOICE_NAMES } from '/components/kateto-avatar.js';
+    import { BrowserPcmPlayer, VOICE_NAMES } from '/components/kateto-avatar.js?v=flap6';
 
     // Parse URL parameters
     const params = new URLSearchParams(window.location.search);
@@ -498,6 +507,92 @@
 
     // Caption handler
     let captionClearTimer = null;
+    // Word-synced karaoke: per-voice { words: [{text, start_ms, end_ms}] } for the
+    // sentence currently being heard. Words come from EdgeTTS WordBoundary timings
+    // on audio_output events; reveal position comes from the player's post-write
+    // visemes (audio_ms = ms of sentence audio already on the speakers).
+    const voiceWords = new Map();
+    // Caption ownership: while a voice is audibly speaking, its audio events
+    // own the caption bar. LLM-paced text_chunk events arriving for the NEXT
+    // sentence must not overwrite the currently spoken one (caption z-fighting).
+    // Ownership expires shortly after the last audible activity.
+    const audioCaptionOwns = new Map();
+    function audioOwnsCaption(voiceId) {
+      return (audioCaptionOwns.get((voiceId || '').toLowerCase()) || 0) > Date.now();
+    }
+    function hasActiveWords(voiceId) {
+      const state = voiceWords.get((voiceId || '').toLowerCase());
+      return Boolean(state && state.active);
+    }
+    function storeWords(voiceId, words) {
+      // Synthesis bursts overlap playback: sentences arrive faster than they
+      // are heard. Keep the audible one active and queue the next instead of
+      // replacing (replacing is what stepped over the current subtitle).
+      if (!voiceId || !Array.isArray(words) || words.length === 0) return false;
+      const vid = voiceId.toLowerCase();
+      let state = voiceWords.get(vid);
+      if (!state) {
+        state = { active: null, pending: [] };
+        voiceWords.set(vid, state);
+      }
+      if (!state.active) {
+        state.active = { words };
+        return true; // new sentence
+      }
+      const last = state.pending[state.pending.length - 1];
+      if (!last || words.length < last.words.length) {
+        // A shrinking snapshot starts a new sentence; a growing one extends
+        // the pending sentence already queued.
+        state.pending.push({ words });
+      } else {
+        state.pending[state.pending.length - 1] = { words };
+      }
+      return false;
+    }
+    function completeWords(voiceId) {
+      const vid = (voiceId || '').toLowerCase();
+      const state = voiceWords.get(vid);
+      if (!state) return;
+      const next = state.pending.shift();
+      if (next) {
+        state.active = next;
+      } else {
+        voiceWords.delete(vid);
+      }
+    }
+    function revealWords(voiceId, audioMs) {
+      const vid = (voiceId || '').toLowerCase();
+      const state = voiceWords.get(vid);
+      const entry = state ? state.active : null;
+      if (!entry || typeof audioMs !== 'number') return false;
+      const words = entry.words;
+      let shown = 0;
+      for (const w of words) {
+        if (typeof w.start_ms === 'number' && w.start_ms <= audioMs) shown++;
+        else break;
+      }
+      if (shown === 0) return false;
+      captionBadge.textContent = VOICE_NAMES[vid] || voiceId;
+      captionText.innerHTML = '';
+      words.forEach((w, i) => {
+        const span = document.createElement('span');
+        span.textContent = (i > 0 ? ' ' : '') + w.text;
+        if (i < shown) span.className = 'w-spoken';
+        captionText.appendChild(span);
+      });
+      captionBar.classList.remove('empty');
+      if (captionClearTimer) clearTimeout(captionClearTimer);
+      captionClearTimer = setTimeout(() => {
+        captionBar.classList.add('empty');
+        captionClearTimer = null;
+      }, 5000);
+      const lastEnd = words[words.length - 1].end_ms;
+      if (typeof lastEnd === 'number' && audioMs >= lastEnd) {
+        // Sentence fully heard: promote the queued sentence, if any.
+        completeWords(vid);
+      }
+      return true;
+    }
     function setCaption(voiceId, text) {
       if (!text || !text.trim()) return;
       captionBadge.textContent = VOICE_NAMES[voiceId] || voiceId;
@@ -545,10 +640,12 @@
         if (rms > 0.05) {
           agent.card.classList.add('speaking');
           if (agent.speakingTimer) clearTimeout(agent.speakingTimer);
+          // Hold past the ~1s worst-case gap between playback visemes so the
+          // mouth doesn't freeze mid-speech; post-write visemes re-arm this.
           agent.speakingTimer = setTimeout(() => {
             agent.card.classList.remove('speaking');
             agent.avatar.setRms(0);
-          }, 350);
+          }, 1500);
         }
       }
     }
@@ -591,6 +688,9 @@
           const rawRms = (typeof msg.rms === 'number') ? msg.rms : (msg.data && typeof msg.data.rms === 'number') ? msg.data.rms : 0.0;
           const text = msg.text || (msg.data && msg.data.text);
           const audioB64 = msg.audio || (msg.data && msg.data.audio);
+          const words = msg.words || (msg.data && msg.data.words);
+          const audioMs = (typeof msg.audio_ms === 'number') ? msg.audio_ms
+            : (msg.data && typeof msg.data.audio_ms === 'number' ? msg.data.audio_ms : null);
 
           // Play streaming backend TTS audio
           if (audioB64 && isAudioEnabled) {
@@ -599,11 +699,23 @@
             pcmPlayer.playChunk(audioB64, sampleRate, channels);
           }
 
+          if (words && words.length) {
+            storeWords(voiceId, words);
+          }
+
           if (voiceId) {
             onSpeakerActivity(voiceId, rawRms, msg);
           }
-          if (text) {
+          // Karaoke reveal owns the caption while a sentence is audibly in
+          // progress; otherwise fall back to the sentence text on audio events
+          // (TTS-paced, still ahead of LLM-paced text_chunk captions).
+          if (audioMs !== null && revealWords(voiceId, audioMs)) {
+            // Caption handled by karaoke.
+          } else if (text && !hasActiveWords(voiceId)) {
             setCaption(voiceId, text);
+          }
+          if (voiceId && (text || (words && words.length) || rawRms > 0.05)) {
+            audioCaptionOwns.set(voiceId.toLowerCase(), Date.now() + 1500);
           }
           return;
         }
@@ -617,7 +729,10 @@
           const text = msg.text || (msg.data && msg.data.text);
           if (voiceId && text) {
             onSpeakerActivity(voiceId, 0.08);
-            setCaption(voiceId, text);
+            // Don't let LLM-paced text jump ahead while audio owns the caption.
+            if (!hasActiveWords(voiceId) && !audioOwnsCaption(voiceId)) {
+              setCaption(voiceId, text);
+            }
           }
           return;
         }
@@ -631,7 +746,9 @@
           const text = msg.text || (msg.data && msg.data.text);
           if (voiceId && text) {
             onSpeakerActivity(voiceId, 0.12);
-            setCaption(voiceId, text);
+            if (!hasActiveWords(voiceId) && !audioOwnsCaption(voiceId)) {
+              setCaption(voiceId, text);
+            }
           }
           return;
         }
@@ -639,6 +756,8 @@
         // Interruption
         if (msg.event === 'interrupt' || msg.type === 'interrupt') {
           pcmPlayer.stop();
+          voiceWords.clear();
+          audioCaptionOwns.clear();
           document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('speaking'));
           agentCards.forEach(a => {
             if (typeof a.avatar.setJawTransform === 'function') a.avatar.setJawTransform({ jawOffsetX:0, jawOffsetY:0, jawRotation:0, headOffsetY:0 });
@@ -650,6 +769,14 @@
 
         // Voice Idle
         if (msg.event === 'voice_idle') {
+          const vid = String(msg.voice || msg.voice_id || (msg.data && (msg.data.voice || msg.data.voice_id)) || '').toLowerCase();
+          if (vid) {
+            voiceWords.delete(vid);
+            audioCaptionOwns.delete(vid);
+          } else {
+            voiceWords.clear();
+            audioCaptionOwns.clear();
+          }
           document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('speaking'));
           agentCards.forEach(a => {
             if (typeof a.avatar.setJawTransform === 'function') a.avatar.setJawTransform({ jawOffsetX:0, jawOffsetY:0, jawRotation:0, headOffsetY:0 });

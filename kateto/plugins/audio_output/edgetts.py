@@ -11,6 +11,9 @@ from kateto.core.config import PluginConfigRegistry, PluginSettings
 from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, EventEnvelope, InterruptData, TextChunk
 from kateto.core.plugin import EventHandler, Plugin
 from kateto.providers import EdgeTTSProvider
+from loguru import logger
+
+log = logger
 
 # Register dynamic config parameters contributed by this plugin
 PluginConfigRegistry.register_plugin_param("audio_output_edgetts", "default_voice", "en-US-JennyNeural")
@@ -97,19 +100,9 @@ class EdgeTTSAudioOutput(Plugin):
 
         raw_text = (data.text or "").strip()
         if not raw_text:
-            if data.final and self.required_manager is not None:
-                await self.required_manager.emit(
-                    "audio_output",
-                    AudioOutput(
-                        samples=b"",
-                        sample_rate=24_000,
-                        channels=1,
-                        format="pcm_s16le",
-                        voice_id=data.voice_id,
-                        final=True,
-                    ),
-                    source=self.name,
-                )
+            # Empty chunks (e.g. the LLM's contentless turn-final) carry no
+            # audio: synthesizing them would only inject a bogus final
+            # sentinel into the player's lane mid-stream.
             return
 
         if self._stream:
@@ -159,6 +152,7 @@ class EdgeTTSAudioOutput(Plugin):
 
     async def on_interrupt(self, data: InterruptData) -> None:
         del data
+        log.info("[edgetts] interrupt voice={}", self._current_voice)
         self._interrupted = True
         self._interrupted_voice = self._current_voice
         self._interrupted_at = time.monotonic()
@@ -195,6 +189,10 @@ class EdgeTTSAudioOutput(Plugin):
         voice_config = self._voice_map.get(str(voice_id_str).casefold(), {})
         edge_voice: str = voice_config.get("edge_tts_voice") or self._default_voice
         await self._set_playing(True)
+        log.info(
+            "[edgetts] synth start voice={} edge_voice={} chars={} text={!r}",
+            data.voice_id, edge_voice, len(raw_text), raw_text[:80],
+        )
         try:
             out_sample_rate = 24_000
             out_channels = 1
@@ -202,6 +200,7 @@ class EdgeTTSAudioOutput(Plugin):
             seq = 0
             pcm_chunk = bytearray()
             CHUNK_THRESHOLD = 16384
+            sentence_words: list | None = None
 
             async for output in self._provider.stream_sentence(data, voice=edge_voice):
                 if self._interrupted and data.voice_id == self._interrupted_voice:
@@ -209,10 +208,17 @@ class EdgeTTSAudioOutput(Plugin):
                 out_sample_rate = output.sample_rate
                 out_channels = output.channels
                 out_format = output.format
+                if output.words:
+                    sentence_words = list(output.words)
                 if output.samples:
                     pcm_chunk.extend(output.samples)
                     if len(pcm_chunk) >= CHUNK_THRESHOLD:
                         if self.required_manager is not None:
+                            log.info(
+                                "[edgetts] emit voice={} seq={} bytes={} words={}",
+                                data.voice_id, seq, len(pcm_chunk),
+                                len(sentence_words) if sentence_words else 0,
+                            )
                             _ = await self.required_manager.emit(
                                 "audio_output",
                                 AudioOutput(
@@ -223,13 +229,23 @@ class EdgeTTSAudioOutput(Plugin):
                                     voice_id=data.voice_id,
                                     sequence=seq,
                                     final=False,
+                                    text=data.text,
+                                    words=list(sentence_words) if sentence_words else None,
                                 ),
                                 source=self.name,
                             )
                             seq += 1
                         pcm_chunk.clear()
 
+            if self._interrupted and data.voice_id == self._interrupted_voice:
+                log.info("[edgetts] synth interrupted voice={} seq={}", data.voice_id, seq)
+
             if not (self._interrupted and data.voice_id == self._interrupted_voice) and pcm_chunk and self.required_manager is not None:
+                log.info(
+                    "[edgetts] emit tail voice={} seq={} bytes={} words={}",
+                    data.voice_id, seq, len(pcm_chunk),
+                    len(sentence_words) if sentence_words else 0,
+                )
                 _ = await self.required_manager.emit(
                     "audio_output",
                     AudioOutput(
@@ -240,6 +256,8 @@ class EdgeTTSAudioOutput(Plugin):
                         voice_id=data.voice_id,
                         sequence=seq,
                         final=False,
+                        text=data.text,
+                        words=list(sentence_words) if sentence_words else None,
                     ),
                     source=self.name,
                 )
@@ -247,6 +265,11 @@ class EdgeTTSAudioOutput(Plugin):
                 pcm_chunk.clear()
 
             if not (self._interrupted and data.voice_id == self._interrupted_voice) and self.required_manager is not None:
+                log.info(
+                    "[edgetts] emit final voice={} seq={} words={}",
+                    data.voice_id, seq,
+                    len(sentence_words) if sentence_words else 0,
+                )
                 _ = await self.required_manager.emit(
                     "audio_output",
                     AudioOutput(
@@ -257,6 +280,8 @@ class EdgeTTSAudioOutput(Plugin):
                         voice_id=data.voice_id,
                         sequence=seq,
                         final=True,
+                        text=data.text,
+                        words=sentence_words,
                     ),
                     source=self.name,
                 )

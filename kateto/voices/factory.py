@@ -174,7 +174,8 @@ def _capabilities_for(
     try:
         from pydantic_ai.capabilities import Thinking
 
-        capabilities.append(Thinking())
+        if settings.thinking:
+            capabilities.append(Thinking())
     except (ImportError, ValueError):
         pass  # model does not support thinking
 
