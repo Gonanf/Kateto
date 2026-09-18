@@ -16,7 +16,7 @@
 // - jawOffsetY POSITIVO = mandíbula baja = boca que abre (translateY+ en CSS).
 // - Neutro = boca cerrada = transform 0. Con silencio, todo vuelve a 0.
 // - El movimiento es un ciclo real abre/cierra: la amplitud escala con la
-//   energía de la voz y el flap silábico (~8 Hz) la multiplica entre 0 y el
+//   energía de la voz y el flap silábico (~9 Hz) la multiplica entre 0 y el
 //   máximo, así la mandíbula cruza el neutro varias veces por segundo.
 // - Recorrido máximo configurable en un solo lugar (JAW_MAX_TRAVEL_PX).
 // Muppet jaw: fast up/down flap PLUS random sideways shake and tilt via
@@ -24,24 +24,33 @@
 // move sideways (that was the card-level `transform` bug, fixed with the
 // independent CSS `scale` property). Primary animation path for both
 // synthetic TTS (pulseWord) and live audio (setRms).
-export const JAW_MAX_TRAVEL_PX = 16.0;
-export const JAW_MAX_TILT_DEG = 4.5;
+// Amplitud alta y agresiva (bug 122): el tope teórico es 32 px pero el máximo
+// medido real ronda ~28 px (el flap rara vez pica justo en el muestreo) con
+// media ~10 px en habla normal — el recorrido anterior (16 px, media ~4.8 px)
+// se veía poco y sin punch.
+export const JAW_MAX_TRAVEL_PX = 32.0;
+export const JAW_MAX_TILT_DEG = 6.5;
+export const JAW_MAX_SHAKE_PX = 12.0;
 export const HEAD_BOB_PX = 1.8;
-export const FLAP_HZ = 8;
+export const FLAP_HZ = 9;
 export function computeJawKinematics(rms, nowMs) {
   if (typeof rms !== 'number' || rms < 0.015) {
     return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
   }
   const t = typeof nowMs === 'number' ? nowMs : Date.now();
   // Punchy response curve scaled by voice energy; -> 0 en silencio.
-  const factor = Math.min(1.0, Math.max(0.0, Math.pow((rms - 0.015) / 0.985, 0.68)));
-  // Syllabic flap (~8Hz): multiplica la amplitud (0..1), nunca suma un piso
+  // Exponente bajo (0.52): responde fuerte ya con poca voz.
+  const factor = Math.min(1.0, Math.max(0.0, Math.pow((rms - 0.015) / 0.985, 0.52)));
+  // Syllabic flap (~9Hz): multiplica la amplitud (0..1), nunca suma un piso
   // fijo — sin voz no hay desplazamiento (bug 112: el piso de 6px la dejaba
   // pegada arriba con wobble entre ~-3 y ~-46px sin cruzar el neutro).
+  // Ataque marcado: el flap se eleva a 1.25 para afilar el pico (cierra más
+  // tiempo, abre con más punch) sin dejar de volver a 0 varias veces por s.
   const flap = 0.5 + 0.5 * Math.sin((t / 1000) * 2 * Math.PI * FLAP_HZ);
-  const openMovement = Number((factor * JAW_MAX_TRAVEL_PX * flap).toFixed(2));
+  const shapedFlap = Math.pow(flap, 1.25);
+  const openMovement = Number((factor * JAW_MAX_TRAVEL_PX * shapedFlap).toFixed(2));
   const sideDir = (Math.random() * 2 - 1);
-  const sideShake = Number((sideDir * factor * 9.0).toFixed(2));
+  const sideShake = Number((sideDir * factor * JAW_MAX_SHAKE_PX).toFixed(2));
   // Tilt acotado al mismo máximo del backend (antes llegaba a ±40°).
   const tilt = Number((sideDir * factor * JAW_MAX_TILT_DEG).toFixed(2));
 

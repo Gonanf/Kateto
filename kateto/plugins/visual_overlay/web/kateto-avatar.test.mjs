@@ -44,7 +44,7 @@ describe("computeJawKinematics (bug 112: ciclo abre/cierra, no solo arriba)", ()
   it("durante el habla el mínimo es ≈ 0 y el máximo > 0 (sin piso fijo)", () => {
     const ys = speechSeries();
     assert.ok(Math.min(...ys) < 1.0, `min debería volver al neutro, fue ${Math.min(...ys)}`);
-    assert.ok(Math.max(...ys) > 5.0, `max debería abrir la boca, fue ${Math.max(...ys)}`);
+    assert.ok(Math.max(...ys) > 20.0, `max debería abrir la boca con punch, fue ${Math.max(...ys)}`);
     assert.ok(ys.every((y) => y >= 0), "convención unipolar: nunca negativo");
   });
 
@@ -54,15 +54,33 @@ describe("computeJawKinematics (bug 112: ciclo abre/cierra, no solo arriba)", ()
     assert.ok(crosses >= 4, `se esperaban >= 4 cruces (2 por ciclo), hubo ${crosses}`);
   });
 
-  it("respeta el recorrido máximo del backend (<= 16 px)", () => {
+  it("respeta el recorrido máximo del backend (<= 32 px)", () => {
     const ys = speechSeries();
     assert.ok(Math.max(...ys) <= JAW_MAX_TRAVEL_PX, `max ${Math.max(...ys)} > ${JAW_MAX_TRAVEL_PX}`);
   });
 
-  it("tilt acotado a ±4.5° (antes llegaba a ±40°)", () => {
+  it("tilt acotado a ±6.5° (antes llegaba a ±40°)", () => {
     for (let i = 0; i < 200; i++) {
       const { jawRotation } = computeJawKinematics(0.8, i * 17);
-      assert.ok(Math.abs(jawRotation) <= 4.5, `tilt ${jawRotation} excede ±4.5°`);
+      assert.ok(Math.abs(jawRotation) <= 6.5, `tilt ${jawRotation} excede ±6.5°`);
+    }
+  });
+
+  it("más energía ⇒ más recorrido (escala agresiva, bug 122)", () => {
+    const peak = (rms) => {
+      const ys = [];
+      for (let i = 0; i < 60; i++) ys.push(computeJawKinematics(rms, i * 17).jawOffsetY);
+      return Math.max(...ys);
+    };
+    const low = peak(0.15);
+    const high = peak(0.8);
+    assert.ok(high > low * 1.5, `voz fuerte (${high}) debería superar ampliamente a voz baja (${low})`);
+    assert.ok(high >= 24.0, `voz fuerte debería acercarse al tope, fue ${high}`);
+  });
+
+  it("silencio ⇒ 0 exacto (sin residuo, bug 122)", () => {
+    for (const rms of [0, 0.005, 0.014, -0.3]) {
+      assert.deepEqual(computeJawKinematics(rms, 999), { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 });
     }
   });
 });

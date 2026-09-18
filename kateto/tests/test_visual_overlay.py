@@ -73,14 +73,14 @@ def test_map_rms_to_jaw_transform_pure_mapping():
 
     # When: rms is at intermediate level (0.525 gives factor = (0.525 - 0.05) / 0.95 = 0.5)
     offset_y, rotation = map_rms_to_jaw_transform(0.525)
-    assert math.isclose(offset_y, 8.0, abs_tol=1e-2)
-    assert math.isclose(rotation, 2.25, abs_tol=1e-2)
+    assert math.isclose(offset_y, 16.0, abs_tol=1e-2)
+    assert math.isclose(rotation, 3.25, abs_tol=1e-2)
 
     # When: rms is at maximum (1.0)
-    assert map_rms_to_jaw_transform(1.0) == (16.0, 4.5)
+    assert map_rms_to_jaw_transform(1.0) == (32.0, 6.5)
 
     # When: rms exceeds 1.0
-    assert map_rms_to_jaw_transform(1.5) == (16.0, 4.5)
+    assert map_rms_to_jaw_transform(1.5) == (32.0, 6.5)
 
 
 def test_rms_processor_stateful_and_windowed():
@@ -155,8 +155,8 @@ async def test_audio_output_explicit_rms_passthrough():
     mock_ws.send_json.assert_called_once()
     payload = mock_ws.send_json.call_args[0][0]
     assert payload["rms"] == 0.525
-    assert math.isclose(payload["jawOffsetY"], 8.0, abs_tol=1e-2)
-    assert math.isclose(payload["jawRotation"], 2.25, abs_tol=1e-2)
+    assert math.isclose(payload["jawOffsetY"], 16.0, abs_tol=1e-2)
+    assert math.isclose(payload["jawRotation"], 3.25, abs_tol=1e-2)
 
 
 @pytest.mark.asyncio
