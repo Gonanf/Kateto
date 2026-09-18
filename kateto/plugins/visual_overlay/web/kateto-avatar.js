@@ -31,15 +31,27 @@
 // move sideways (that was the card-level `transform` bug, fixed with the
 // independent CSS `scale` property). Primary animation path for both
 // synthetic TTS (pulseWord) and live audio (setRms).
-// Amplitud alta y agresiva (bugs 122 y 125): el tope teórico es 32 px pero el
-// máximo medido real ronda ~28 px (el flap rara vez pica justo en el muestreo)
-// con media ~10 px en habla normal — el recorrido anterior (16 px, media
-// ~4.8 px) se veía poco y sin punch. Todo en NEGATIVO (hacia arriba).
-export const JAW_MAX_TRAVEL_PX = 32.0;
+// Amplitud alta y agresiva (bugs 122, 125 y 128): el tope teórico es 40 px
+// con media ~12 px en habla normal — el recorrido anterior (32 px, media
+// ~10 px) seguía pareciendo corto a voz fuerte (issue 128). Todo en NEGATIVO
+// (hacia arriba).
+export const JAW_MAX_TRAVEL_PX = 40.0;
 export const JAW_MAX_TILT_DEG = 6.5;
-export const JAW_MAX_SHAKE_PX = 12.0;
-export const HEAD_BOB_PX = 1.8;
+export const JAW_MAX_SHAKE_PX = 16.0;
+export const HEAD_BOB_PX = 2.6;
 export const FLAP_HZ = 9;
+
+// Movimiento idle (issue 128): en silencio el avatar no debe quedar congelado.
+// Cada IDLE_TURN_PERIOD_MS se sortea un objetivo nuevo (giro de cabeza + sway
+// lateral hacia donde mira, MISMO signo) y la pose actual se acerca al
+// objetivo con suavizado exponencial (IDLE_EASE_TAU_MS): se lee como un giro
+// de cabeza, no como un temblor. Es movimiento de render: corre igual con voz
+// (escalado por IDLE_SPEAKING_SCALE) y sin voz (plena amplitud, boca cerrada).
+export const IDLE_TURN_PERIOD_MS = 1000;
+export const IDLE_TILT_DEG = 8.0;
+export const IDLE_SWAY_PX = 14.0;
+export const IDLE_EASE_TAU_MS = 300;
+export const IDLE_SPEAKING_SCALE = 0.5;
 export function computeJawKinematics(rms, nowMs) {
   if (typeof rms !== 'number' || rms < 0.015) {
     return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
@@ -83,6 +95,64 @@ export function computeBackendKinematics(rms) {
   const jawRotation = Number((factor * JAW_MAX_TILT_DEG).toFixed(2));
   const headOffsetY = Number((factor * HEAD_BOB_PX).toFixed(2));
   return { jawOffsetX: 0, jawOffsetY, jawRotation, headOffsetY };
+}
+
+// --- Idle motion (issue 128) -------------------------------------------------
+// Clase con estado, rng y reloj INYECTABLES para tests deterministas (mismo
+// patrón que el intervalo aleatorio de visión, bug 112/fix-112).
+// Cada IDLE_TURN_PERIOD_MS sortea un objetivo nuevo: rotación en
+// ±IDLE_TILT_DEG y sway lateral en ±IDLE_SWAY_PX con el MISMO signo (el avatar
+// "se mueva hacia donde mira"). La pose se acerca al objetivo con easing
+// exponencial (tau = IDLE_EASE_TAU_MS): sin saltos entre frames.
+export class IdleMotion {
+  constructor({ rng = Math.random, startMs = 0 } = {}) {
+    this._rng = rng;
+    this._nowMs = startMs;
+    this._turnIndex = -1;
+    this._target = { rotation: 0, sway: 0 };
+    this._pose = { rotation: 0, sway: 0 };
+  }
+
+  get target() {
+    return { rotation: this._target.rotation, sway: this._target.sway };
+  }
+
+  _pickTarget(turnIndex) {
+    this._turnIndex = turnIndex;
+    // Magnitud en [0.4, 1]: nunca un objetivo casi-cero (se vería estático).
+    const mag = 0.4 + 0.6 * this._rng();
+    const sign = this._rng() < 0.5 ? -1 : 1;
+    this._target = {
+      rotation: sign * mag * IDLE_TILT_DEG,
+      sway: sign * mag * IDLE_SWAY_PX, // mismo signo que la rotación
+    };
+  }
+
+  update(nowMs) {
+    const t = typeof nowMs === 'number' ? nowMs : Date.now();
+    const turnIndex = Math.floor(t / IDLE_TURN_PERIOD_MS);
+    if (turnIndex !== this._turnIndex) this._pickTarget(turnIndex);
+    const dt = Math.max(0, t - this._nowMs);
+    this._nowMs = t;
+    const alpha = dt > 0 ? 1 - Math.exp(-dt / IDLE_EASE_TAU_MS) : 0;
+    this._pose.rotation += alpha * (this._target.rotation - this._pose.rotation);
+    this._pose.sway += alpha * (this._target.sway - this._pose.sway);
+    // jawOffsetY SIEMPRE 0 exacto: el idle no abre la boca (bug 112).
+    return { jawRotation: this._pose.rotation, jawOffsetX: this._pose.sway, jawOffsetY: 0 };
+  }
+}
+
+// Suma idle + cinemática de voz. `speaking` escala el idle (la boca es la
+// protagonista hablando); en silencio va a plena amplitud y jawOffsetY queda
+// en 0 exacto porque el idle nunca aporta Y y la voz silenciosa es 0.
+export function combineIdleWithVoice(idlePose, voiceKinematics, speaking) {
+  const s = speaking ? IDLE_SPEAKING_SCALE : 1.0;
+  const voice = voiceKinematics || { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
+  return {
+    jawOffsetX: voice.jawOffsetX + idlePose.jawOffsetX * s,
+    jawOffsetY: voice.jawOffsetY + idlePose.jawOffsetY, // idle Y = 0 exacto
+    jawRotation: voice.jawRotation + idlePose.jawRotation * s,
+  };
 }
 
 // 2. Automatic Subtitle Chunker
@@ -254,6 +324,42 @@ export class KatetoAvatar extends HTMLElement {
 
   connectedCallback() {
     this._updateSources();
+    this._startIdleLoop();
+  }
+
+  disconnectedCallback() {
+    this._stopIdleLoop();
+  }
+
+  // Loop de render persistente (issue 128): el idle corre SIEMPRE, con o sin
+  // voz — es movimiento de render, no depende del RMS. Cada frame suma la
+  // cinemática de voz (si hay) + el idle (escalado si hay voz).
+  _startIdleLoop() {
+    if (this._idleAnim != null) return;
+    if (!this._idleMotion) this._idleMotion = new IdleMotion();
+    const loop = (now) => {
+      this._renderCombined(typeof now === 'number' ? now : performance.now());
+      this._idleAnim = requestAnimationFrame(loop);
+    };
+    this._idleAnim = requestAnimationFrame(loop);
+  }
+
+  _stopIdleLoop() {
+    if (this._idleAnim != null) {
+      cancelAnimationFrame(this._idleAnim);
+      this._idleAnim = null;
+    }
+  }
+
+  _renderCombined(nowMs) {
+    if (!this._jaw) return;
+    const idle = this._idleMotion.update(nowMs);
+    const speaking = typeof this._rms === 'number' && this._rms >= 0.015;
+    const voice = speaking
+      ? computeJawKinematics(this._rms, nowMs)
+      : { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
+    const k = combineIdleWithVoice(idle, voice, speaking);
+    this._jaw.style.transform = `translate(${k.jawOffsetX}px, ${k.jawOffsetY}px) rotate(${k.jawRotation}deg)`;
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
@@ -312,6 +418,16 @@ export class KatetoAvatar extends HTMLElement {
         : `/voices/${encodeURIComponent(this._voice)}/top.png`;
       return;
     }
+    // Modo backend (issue 128): el idle también corre aquí — es movimiento de
+    // render, no depende del RMS. Hablando se escala; la boca (jawOffsetY del
+    // backend) no se toca: silencio = 0 exacto (bug 112).
+    if (this._idleMotion) {
+      const idle = this._idleMotion.update(performance.now());
+      const speaking = Math.abs(jawOffsetY) > 0.5;
+      const s = speaking ? IDLE_SPEAKING_SCALE : 1.0;
+      jawOffsetX += idle.jawOffsetX * s;
+      jawRotation += idle.jawRotation * s;
+    }
     this._jaw.style.transform = `translate(${jawOffsetX}px, ${jawOffsetY}px) rotate(${jawRotation}deg)`;
     if (headOffsetY !== 0 || this._head.style.transform !== 'translateY(0px)') {
       this._head.style.transform = `translateY(${headOffsetY}px)`;
@@ -319,13 +435,17 @@ export class KatetoAvatar extends HTMLElement {
   }
 
   setRms(rms) {
-    this._rms = rms;
-    if (rms == null || typeof rms !== 'number') {
-      this._jaw.style.transform = 'translate(0px, 0px) rotate(0deg)';
+    const valid = rms != null && typeof rms === 'number';
+    this._rms = valid ? rms : 0;
+    if (!valid) {
+      // Antes: transform a 0 fijo (avatar congelado en silencio). Ahora el
+      // loop de render aplica idle a plena amplitud con jawOffsetY 0 exacto.
+      this._renderCombined(performance.now());
       return;
     }
-    const { jawOffsetX, jawOffsetY, jawRotation } = computeJawKinematics(rms);
-    this._jaw.style.transform = `translate(${jawOffsetX}px, ${jawOffsetY}px) rotate(${jawRotation}deg)`;
+    // Con voz el loop idle también re-renderiza cada frame; aplicar ya para
+    // que el primer frame tras setRms no espere al próximo rAF.
+    this._renderCombined(performance.now());
   }
 
   pulseWord(wordDurationMs = 385) {
