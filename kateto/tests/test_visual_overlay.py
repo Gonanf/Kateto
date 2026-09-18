@@ -1,4 +1,7 @@
+import json
 import math
+import shutil
+import subprocess
 from pathlib import Path
 import struct
 from unittest.mock import AsyncMock, MagicMock
@@ -14,6 +17,7 @@ from kateto.core.rms import (
     apply_ema,
     calculate_raw_rms,
     map_rms_to_jaw_transform,
+    map_rms_to_puppet_transform,
     normalize_rms,
 )
 from kateto.plugins.visual_overlay.visual_overlay_plugin import VisualOverlayPlugin
@@ -299,5 +303,53 @@ async def test_visual_overlay_programmatic_layout_event():
     assert payload["positions"]["jane"] == "left"
     assert payload["positions"]["doktor"] == "right"
     assert payload["voices"] == ["jane", "doktor"]
+
+
+WEB_DIR = Path(__file__).resolve().parents[1] / "plugins" / "visual_overlay" / "web"
+
+
+def test_js_jaw_kinematics_suite():
+    """Corre la suite JS del jaw (bug 112: ciclo abre/cierra, convención única).
+
+    El JS es el path primario de animación (setRms/pulseWord); sin este
+    wrapper `uv run pytest` no lo cubriría. Skip si no hay runtime JS.
+    """
+    node = shutil.which("node") or shutil.which("bun")
+    if node is None:
+        pytest.skip("sin runtime JS (node/bun)")
+    suite = WEB_DIR / "kateto-avatar.test.mjs"
+    cmd = [node, "--test", str(suite)] if "node" in node else [node, "test", str(suite)]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, f"suite JS falló:\n{proc.stdout}\n{proc.stderr}"
+
+
+def test_shared_convention_js_backend_vs_python_puppet():
+    """La convención es única entre computeBackendKinematics (JS) y
+    map_rms_to_puppet_transform (Python): mismo signo en jaw (≥ 0 = abre),
+    head compensa en opuesto (≤ 0) y mismos topes. Bug 112: antes el path
+    local era siempre negativo mientras el backend era positivo (salto ~55px).
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("sin node para evaluar el kinematics JS")
+    probe = (
+        "globalThis.HTMLElement=class{};"
+        "globalThis.customElements={get:()=>undefined,define:()=>{}};"
+        f"const m=await import({json.dumps(str(WEB_DIR / 'kateto-avatar.js'))});"
+        "const out={};"
+        "for (const r of [0.0,0.04,0.1,0.3,0.525,0.8,1.0]) out[r]=m.computeBackendKinematics(r);"
+        "console.log(JSON.stringify(out));"
+    )
+    proc = subprocess.run([node, "--input-type=module", "-e", probe], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"probe JS falló:\n{proc.stderr}"
+    js_results = json.loads(proc.stdout)
+    for rms_str, js in js_results.items():
+        rms = float(rms_str)
+        py = map_rms_to_puppet_transform(rms)
+        assert (js["jawOffsetY"] >= 0) == (py["jawOffsetY"] >= 0), f"signo jaw difiere con rms={rms}"
+        assert (js["headOffsetY"] <= 0) == (py["headOffsetY"] <= 0), f"signo head difiere con rms={rms}"
+        assert math.isclose(js["jawOffsetY"], py["jawOffsetY"], abs_tol=1e-2), f"jaw difiere con rms={rms}"
+        assert math.isclose(js["jawRotation"], py["jawRotation"], abs_tol=1e-2), f"rot difiere con rms={rms}"
+        assert math.isclose(js["headOffsetY"], py["headOffsetY"], abs_tol=1e-2), f"head difiere con rms={rms}"
 
 
