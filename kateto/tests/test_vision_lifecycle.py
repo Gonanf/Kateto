@@ -422,6 +422,8 @@ async def test_periodic_scheduler_request_emits_targeted_generate(
     monkeypatch.setattr(svp, "_openai_client", fake_openai_client)
     manager = PluginManager()
     plugin = await _make_quiet_plugin(manager)
+    plugin.vision_endpoint = "http://primary:8080/v1"
+    plugin.vision_model = "vlm"
     plugin._append_frame("screen", _noise_payload(101), 100.0)
     plugin._append_frame("screen", _noise_payload(102), 101.0)
     envelopes: list[Any] = []

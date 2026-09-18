@@ -11,11 +11,28 @@ from typing import Any, Final, Self
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+from loguru import logger as _log
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from kateto.core.event import EventModel
 
 from kateto.core.exceptions import ConfigError
+
+
+# ponytail: explicit footgun log — voices/<voz>/config.toml wins over [voice] in
+# the main file, so every silent override is recorded here for `config check`.
+_VOICE_OVERRIDE_NOTES: list[dict[str, Any]] = []
+_VOICE_FILE_KEYS: dict[str, dict[str, str]] = {}
+
+
+def get_voice_override_notes() -> list[dict[str, Any]]:
+    """One entry per overridden key: voice, key, principal/file values + winner."""
+    return [dict(note) for note in _VOICE_OVERRIDE_NOTES]
+
+
+def get_voice_file_sources() -> dict[str, dict[str, str]]:
+    """Voice -> {key: winning file} for keys that came from a voice folder file."""
+    return {voice: dict(keys) for voice, keys in _VOICE_FILE_KEYS.items()}
 
 
 SAFE_CLI_COMMANDS: Final[frozenset[str]] = frozenset({"cat", "date", "echo", "git", "ls", "pwd"})
@@ -336,6 +353,8 @@ def _copy_missing_defaults(*, source_dir: Path, target_dir: Path) -> None:
 
 def _load_voice_folder_configs(config_dir: Path, raw_config: dict[str, Any]) -> None:
     voices_section = raw_config.setdefault("voice", {})
+    _VOICE_OVERRIDE_NOTES.clear()
+    _VOICE_FILE_KEYS.clear()
     voices_dir = config_dir / "voices"
     if not voices_dir.is_dir():
         return
@@ -361,6 +380,26 @@ def _load_voice_folder_configs(config_dir: Path, raw_config: dict[str, Any]) -> 
                     vsettings = vdata
 
                 existing = voices_section.get(vname, {})
+                for key, file_value in vsettings.items():
+                    _VOICE_FILE_KEYS.setdefault(vname, {})[key] = str(cfg_file)
+                    if key in existing and existing[key] != file_value:
+                        _VOICE_OVERRIDE_NOTES.append(
+                            {
+                                "voice": vname,
+                                "key": key,
+                                "principal": existing[key],
+                                "file_value": file_value,
+                                "winner": str(cfg_file),
+                            }
+                        )
+                        _log.warning(
+                            "[config] voice.{}.{} overridden by {}: principal={!r} -> file={!r}",
+                            vname,
+                            key,
+                            cfg_file,
+                            existing[key],
+                            file_value,
+                        )
                 voices_section[vname] = {**existing, **vsettings}
             except Exception as err:
                 raise ConfigError(f"unable to read voice config at {cfg_file}: {err}") from err

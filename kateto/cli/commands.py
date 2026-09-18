@@ -19,7 +19,7 @@ from loguru import logger
 
 from kateto.cli.agency_convert import _resolve_source, convert_agency_pack
 from kateto.cli.registry import register_command
-from kateto.core.config import load_config
+from kateto.core.config import get_voice_file_sources, get_voice_override_notes, load_config
 from kateto.core.discovery import LiveAssemblyConfigurationError as EventRuntimeConfigurationError
 from kateto.core.exceptions import ConfigError
 from kateto.run_mode import run_event_runtime
@@ -41,6 +41,19 @@ class ConfigCheck(Command):
             _ = self.app.stderr.write(f"config check: {error}\n")
             return 2
         _ = self.app.stdout.write(f"config check: ok ({loaded.paths.config_dir})\n")
+        for note in get_voice_override_notes():
+            _ = self.app.stdout.write(
+                "config check: voice.{voice}.{key} principal={principal!r} "
+                "overridden by {winner} (effective={file_value!r})\n".format(**note)
+            )
+        sources = get_voice_file_sources()
+        for voice_name in sorted(loaded.settings.voice):
+            effective = loaded.settings.voice[voice_name].model_dump()
+            for key in sorted(effective):
+                origin = sources.get(voice_name, {}).get(key, "principal")
+                _ = self.app.stdout.write(
+                    f"config check: voice.{voice_name}.{key} = {effective[key]!r} ({origin})\n"
+                )
         return 0
 
 
