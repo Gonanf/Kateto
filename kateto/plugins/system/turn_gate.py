@@ -142,9 +142,29 @@ class TurnGate(Plugin):
         generate (and its TTS lane buffer) while another voice's audio is still
         playing — the audio_output_player serializes lanes at the device, so
         overlapping speech is impossible by construction.
+
+        ``origin`` may also be "ambient" (video-rag narration): lowest
+        priority — discarded whenever the user barged in, a turn is active or
+        turns are pending; never queued, never claims the turn.
         """
         if self._consume_ignored(prompt):
             return Decision.DISCARD
+        if origin == "ambient":
+            # Ambient narration (video-rag) never competes with the user: it
+            # only speaks when nobody barged in, no turn is active and the
+            # follow-up queue is empty. It never touches _barge_in, never
+            # claims _active and never enqueues (not even at the front).
+            if self._barge_in or self._active is not None or self._pending:
+                log.info(
+                    "turn_gate: ambient narration discarded for {} "
+                    "(barge_in={} active={} pending={})",
+                    voice,
+                    sorted(self._barge_in),
+                    self._active,
+                    len(self._pending),
+                )
+                return Decision.DISCARD
+            return Decision.EXECUTE
         if origin == "followup":
             if voice in self._barge_in or (
                 self._active is not None and self._active != voice

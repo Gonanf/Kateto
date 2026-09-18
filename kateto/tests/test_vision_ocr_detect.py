@@ -17,7 +17,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from kateto.core.event import VisionDescribeRequestData, VisionDescribeResultData
+from loguru import logger
+
+from kateto.core.event import InterruptData, VisionDescribeRequestData, VisionDescribeResultData
 from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 from kateto.plugins.executor import static_vision_plugin as svp
@@ -351,3 +353,190 @@ def test_frame_mentions_ocr_and_keeps_no_instructions() -> None:
     assert "Nunca pidas instrucciones" in framed
     assert "No inventes" in framed
     assert block in framed  # el bloque viaja intacto
+
+
+def _install_slow_primary(
+    monkeypatch: pytest.MonkeyPatch,
+    ready: asyncio.Event,
+    release: asyncio.Event,
+) -> None:
+    async def create(**kwargs):
+        ready.set()
+        await release.wait()
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=CAPTION))]
+        )
+
+    monkeypatch.setattr(
+        svp,
+        "_openai_client",
+        lambda *a, **k: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+        ),
+    )
+
+
+class _GenerateRecorder(Plugin):
+    # Named like the voice: the narration generate is emitted with target=voice.
+    def __init__(self, name: str = "jane") -> None:
+        super().__init__(name=name)
+        self.seen: list[object] = []
+
+    async def initialize(self) -> None:
+        from kateto.core.event import GenerateData
+
+        self.required_manager.register_event("generate", GenerateData)
+
+    async def on_generate(self, data) -> None:
+        self.seen.append(data)
+
+
+async def _teardown(manager: PluginManager, *plugins: Plugin) -> None:
+    for plugin in plugins:
+        await asyncio.wait_for(manager.disable_plugin(plugin.name), timeout=5.0)
+    await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_user_interrupt_cancels_in_flight_describe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: un describe en vuelo bloqueado en el VLM
+    ready = asyncio.Event()
+    release = asyncio.Event()
+    _install_fake_sidecar(monkeypatch, _FakeSidecar(ocr=OCR_TEXT))
+    _install_slow_primary(monkeypatch, ready, release)
+    manager = PluginManager()
+    results = _ResultRecorder()
+    generates = _GenerateRecorder()
+    await manager.enable_plugin(results)
+    await manager.enable_plugin(generates)
+    plugin = await _make_plugin(manager)
+    try:
+        plugin._append_frame("screen", _noise_frame(1), 10.0)
+        task = asyncio.create_task(
+            plugin.on_vision_describe_request(
+                VisionDescribeRequestData(requester="jane", source="screen")
+            )
+        )
+        await asyncio.wait_for(ready.wait(), timeout=5)
+        assert plugin._describe_tasks.get("jane") is not None
+
+        # When: el usuario habla encima (interrupt de usuario)
+        await manager.emit(
+            "interrupt", InterruptData(reason="voice_activity"), source="vad"
+        )
+        await manager.wait_for_idle(timeout=5)
+        release.set()
+        await asyncio.wait_for(task, timeout=5)
+
+        # Then: la tarea en vuelo se cancela y no se narra ni se emite generate
+        assert results.seen == []
+        assert generates.seen == []
+        assert plugin._describe_tasks.get("jane") is None
+    finally:
+        await _teardown(manager, results, generates, plugin)
+
+
+@pytest.mark.asyncio
+async def test_stale_epoch_result_is_discarded_with_log(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: un describe en vuelo cuyo resultado vuelve con la época vieja
+    ready = asyncio.Event()
+    release = asyncio.Event()
+    _install_fake_sidecar(monkeypatch, _FakeSidecar(ocr=OCR_TEXT))
+    _install_slow_primary(monkeypatch, ready, release)
+    manager = PluginManager()
+    results = _ResultRecorder()
+    generates = _GenerateRecorder()
+    await manager.enable_plugin(results)
+    await manager.enable_plugin(generates)
+    plugin = await _make_plugin(manager)
+    messages: list[str] = []
+    sink = logger.add(messages.append, format="{message}")
+    try:
+        plugin._append_frame("screen", _noise_frame(2), 10.0)
+        task = asyncio.create_task(
+            plugin.on_vision_describe_request(
+                VisionDescribeRequestData(requester="jane", source="screen")
+            )
+        )
+        await asyncio.wait_for(ready.wait(), timeout=5)
+
+        # When: la época sube mientras el describe está en vuelo (sin cancelar)
+        plugin._user_epoch["jane"] = plugin._user_epoch.get("jane", 0) + 1
+        release.set()
+        await asyncio.wait_for(task, timeout=5)
+        await manager.wait_for_idle(timeout=5)
+
+        # Then: el resultado se descarta con log y no se emite generate
+        assert "describe result discarded for jane" in "\n".join(messages)
+        assert generates.seen == []
+    finally:
+        logger.remove(sink)
+        await _teardown(manager, results, generates, plugin)
+
+
+@pytest.mark.asyncio
+async def test_look_at_after_interrupt_still_answers_with_fresh_epoch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: un describe cancelado por interrupt (época sube) y luego un
+    # look-at pedido por el usuario sin barge-in posterior
+    _install_fake_sidecar(monkeypatch, _FakeSidecar(ocr=OCR_TEXT))
+    _install_fake_primary(monkeypatch)
+    manager = PluginManager()
+    results = _ResultRecorder()
+    generates = _GenerateRecorder()
+    await manager.enable_plugin(results)
+    await manager.enable_plugin(generates)
+    plugin = await _make_plugin(manager)
+    try:
+        plugin._append_frame("screen", _noise_frame(3), 10.0)
+
+        # When: interrupt primero (época sube) y el usuario pide look-at después
+        await manager.emit(
+            "interrupt", InterruptData(reason="voice_activity"), source="vad"
+        )
+        await manager.wait_for_idle(timeout=5)
+        await plugin.on_vision_describe_request(
+            VisionDescribeRequestData(requester="jane", source="screen")
+        )
+        await manager.wait_for_idle(timeout=5)
+
+        # Then: el look-at responde (época fresca) y no se descarta
+        assert len(results.seen) == 1
+    finally:
+        await _teardown(manager, results, generates, plugin)
+
+
+@pytest.mark.asyncio
+async def test_periodic_narration_emits_ambient_generate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: el plugin con un narrador periódico due (rango fijo) y sin OCR
+    # (la primera narración con OCR y _last_narrated vacío se saltea por diseño)
+    _install_fake_sidecar(monkeypatch, _FakeSidecar())
+    _install_fake_primary(monkeypatch)
+    manager = PluginManager()
+    results = _ResultRecorder()
+    generates = _GenerateRecorder()
+    await manager.enable_plugin(results)
+    await manager.enable_plugin(generates)
+    plugin = await _make_plugin(manager)
+    try:
+        plugin._append_frame("screen", _noise_frame(4), 10.0)
+        plugin._vision_range["jane"] = (0, 0)  # siempre due
+
+        # When: la narración periódica corre
+        await plugin.on_vision_describe_request(
+            VisionDescribeRequestData(requester="scheduler:jane", source="screen")
+        )
+        await manager.wait_for_idle(timeout=5)
+
+        # Then: el generate lleva origin="ambient"
+        assert len(generates.seen) == 1
+        assert generates.seen[0].origin == "ambient"
+    finally:
+        await _teardown(manager, results, generates, plugin)

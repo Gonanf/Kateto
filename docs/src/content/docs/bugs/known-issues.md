@@ -131,6 +131,7 @@ description: "Known Issues — índice de bugs"
 | 123 | Narración de visión: que opine (no que describa literal) y que se calle si la pantalla es la misma | Alta | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/voices/base.py` | [123-narracion-opina-y-se-calla-si-es-lo-mismo.md](./bugs/123-narracion-opina-y-se-calla-si-es-lo-mismo.md) |
 | 124 | Visión periódica: intervalo aleatorio dentro de un rango | Media | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/plugins/executor/__init__.py` | [124-vision-periodica-intervalo-aleatorio-en-rango.md](./bugs/124-vision-periodica-intervalo-aleatorio-en-rango.md) |
 | 126 | La voz no consume el OCR ni la detección de objetos del sidecar | Media | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/voices/base.py` | [126-vision-consume-ocr-y-objetos.md](./bugs/126-vision-consume-ocr-y-objetos.md) |
+| 127 | Barge-in: el video-rag y la narración que pide no se cortan cuando el usuario habla | Alta | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/plugins/system/turn_gate.py` | [127-bargein-no-corta-el-video-rag.md](./bugs/127-bargein-no-corta-el-video-rag.md) |
 
 ---
 
