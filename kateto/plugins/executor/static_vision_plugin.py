@@ -121,6 +121,40 @@ def _completion_text(response: Any) -> str:
         return ""
 
 
+def _window_span(
+    frames: list[tuple[float, bytes]],
+    kept: list[tuple[float, bytes]],
+    window_secs: float,
+) -> float:
+    """Real window duration: full capture range when it moves, else the asked window.
+
+    Dedupe collapses a still scene to a single kept frame whose own span is 0 —
+    reporting that claims a 0s look. One kept frame means "still", so the asked
+    window stands; with several kept frames the capture range (≈ real duration)
+    stands. Never 0 when window_secs is positive.
+    """
+    if len(kept) > 1 and len(frames) > 1:
+        elapsed = frames[-1][0] - frames[0][0]
+        if elapsed > 0:
+            return elapsed
+    return window_secs
+
+
+def _is_sidecar_error(text: str) -> bool:
+    """True when sidecar text is an error report, not a description.
+
+    The video-rag sidecar answers errors as text (see its src/mcp.rs:
+    `video-rag describe_images: VLM unreachable at ... (model ...)`), and our
+    own MCP client returns `{"error": ...}` JSON on timeouts — both arrive here
+    as plain strings, so match their shapes instead of a flag we never kept.
+    """
+    stripped = text.strip()
+    if stripped.startswith('{"error"'):
+        return True
+    head = stripped[:400]
+    return "video-rag describe_images:" in head or "VLM unreachable" in head
+
+
 class StaticVisionPlugin(Plugin):
     """Plugin for capturing static vision frames (screen / process window)."""
 
@@ -313,6 +347,11 @@ class StaticVisionPlugin(Plugin):
         source: str = data.source or "auto"
         max_images = data.max_images if data.max_images and data.max_images > 0 else 5
         correlation_id = data.correlation_id
+        window_secs = (
+            data.window_secs
+            if data.window_secs is not None and data.window_secs > 0
+            else self.window_secs
+        )
 
         async def emit_result(
             text: str,
@@ -361,7 +400,9 @@ class StaticVisionPlugin(Plugin):
                 await emit_result("no frames captured yet")
             return
 
-        sections: list[tuple[str, list[tuple[float, bytes]], int, str, list[Any]]] = []
+        sections: list[
+            tuple[str, list[tuple[float, bytes]], int, str, list[Any], list[tuple[float, bytes]]]
+        ] = []
         for name in wanted:
             frames = snapshots[name]
             if not frames:
@@ -380,7 +421,7 @@ class StaticVisionPlugin(Plugin):
                 {"type": "image_url", "image_url": {"url": _data_url(payload), "detail": "low"}}
                 for _, payload in kept
             ]
-            sections.append((name, kept, len(frames), prompt, content))
+            sections.append((name, kept, len(frames), prompt, content, frames))
         if not sections:
             await emit_result("no frames captured yet")
             return
@@ -400,28 +441,30 @@ class StaticVisionPlugin(Plugin):
                             extra_headers=headers,
                         )
                     )
-                    for name, _kept, _total, _prompt, content in sections
+                    for name, _kept, _total, _prompt, content, _frames in sections
                 }
                 via = "primary"
             except (BadRequestError, APIStatusError) as error:
                 if getattr(error, "status_code", 400) != 400:
                     raise
-                texts, via = await self._fallback_texts(headers, sections)
+                texts, via = await self._fallback_texts(headers, sections, window_secs)
         else:
-            texts, via = await self._fallback_texts(headers, sections)
+            texts, via = await self._fallback_texts(headers, sections, window_secs)
 
-        def section_span(kept: list[tuple[float, bytes]]) -> float:
-            return kept[-1][0] - kept[0][0] if len(kept) > 1 else 0.0
-
+        span_of = {
+            name: _window_span(frames, kept, window_secs)
+            for name, kept, _, _, _, frames in sections
+        }
+        start_of = {name: frames[0][0] for name, _, _, _, _, frames in sections}
         fused = "\n".join(
-            f"--- {name} ({section_span(kept):.0f}s, {len(kept)}/{total} frames) ---\n{texts[name]}"
-            for name, kept, total, _, _ in sections
+            f"--- {name} ({span_of[name]:.0f}s, {len(kept)}/{total} frames) ---\n{texts[name]}"
+            for name, kept, total, _, _, _ in sections
         )
-        all_ts = [ts for _, kept, _, _, _ in sections for ts, _ in kept]
-        frame_count = sum(total for _, _, total, _, _ in sections)
-        kept_count = sum(len(kept) for _, kept, _, _, _ in sections)
-        dropped = sum(self._dropped.get(name, 0) for name, _, _, _, _ in sections)
-        window_start, window_end = min(all_ts), max(all_ts)
+        frame_count = sum(total for _, _, total, _, _, _ in sections)
+        kept_count = sum(len(kept) for _, kept, _, _, _, _ in sections)
+        dropped = sum(self._dropped.get(name, 0) for name, _, _, _, _, _ in sections)
+        window_start = min(start_of.values())
+        window_end = max(start + span_of[name] for name, start in start_of.items())
         await emit_result(
             fused,
             frame_count=frame_count,
@@ -448,9 +491,10 @@ class StaticVisionPlugin(Plugin):
                     return
                 span = window_end - window_start
                 log.info("[vision] periodic narration -> {} ({}s window)", voice, f"{span:.0f}")
+                frames_note = ", 1 frame" if kept_count == 1 else ""
                 await manager.emit(
                     "generate",
-                    GenerateData(prompt=f"[look-at {source} {span:.0f}s]: {fused}"),
+                    GenerateData(prompt=f"[look-at {source} {span:.0f}s{frames_note}]: {fused}"),
                     source=self.name,
                     target=voice,
                 )
@@ -458,25 +502,33 @@ class StaticVisionPlugin(Plugin):
     async def _fallback_texts(
         self,
         headers: dict[str, str],
-        sections: list[tuple[str, list[tuple[float, bytes]], int, str, list[Any]]],
+        sections: list[
+            tuple[str, list[tuple[float, bytes]], int, str, list[Any], list[tuple[float, bytes]]]
+        ],
+        window_secs: float | None = None,
     ) -> tuple[dict[str, str], str]:
-        prompt = "\n".join(text for _, _, _, text, _ in sections)
+        prompt = "\n".join(text for _, _, _, text, _, _ in sections)
         content: list[Any] = [{"type": "text", "text": prompt}]
-        for _, _, _, _, parts in sections:
+        for _, _, _, _, parts, _ in sections:
             content += [part for part in parts if part.get("type") != "text"]
-        text, via = await self._describe_fallback(prompt, content, headers, sections)
-        return {name: text for name, _, _, _, _ in sections}, via
+        text, via = await self._describe_fallback(prompt, content, headers, sections, window_secs)
+        return {name: text for name, _, _, _, _, _ in sections}, via
 
     async def _describe_fallback(
         self,
         prompt: str,
         content: list[Any],
         headers: dict[str, str],
-        sections: list[tuple[str, list[tuple[float, bytes]], int, str, list[Any]]],
+        sections: list[tuple],
+        window_secs: float | None = None,
     ) -> tuple[str, str]:
         images = [
             part["image_url"]["url"] for part in content if part.get("type") == "image_url"
         ]
+        # ponytail: error text is not a description — it falls through to the
+        # next link, and only the recap names it (so ambient narration, which
+        # suppresses recaps, never voices an error as what it saw).
+        sidecar_error: str | None = None
         try:
             context = discovery_context_for((self,))
             mcp = getattr(context, "external_mcp", None) if context is not None else None
@@ -493,15 +545,24 @@ class StaticVisionPlugin(Plugin):
                     ["video_rag"], "describe_images", {"prompt": prompt, "images": images}
                 )
                 if result is not None:
-                    log.info("[vision] sidecar describe_images answered ({} chars)", len(str(result)))
-                    return str(result), "sidecar"
-                reason_fn = getattr(mcp, "sidecar_reason", None)
-                detail = (
-                    reason_fn(["video_rag"], "describe_images")
-                    if callable(reason_fn)
-                    else "no client or no describe_images tool"
-                )
-                log.warning("[vision] sidecar video_rag unreachable ({})", detail)
+                    text = result if isinstance(result, str) else str(result)
+                    log.info("[vision] sidecar describe_images answered ({} chars)", len(text))
+                    if _is_sidecar_error(text):
+                        sidecar_error = text
+                        log.warning(
+                            "[vision] sidecar describe_images error (not a description): {}",
+                            text,
+                        )
+                    else:
+                        return text, "sidecar"
+                else:
+                    reason_fn = getattr(mcp, "sidecar_reason", None)
+                    detail = (
+                        reason_fn(["video_rag"], "describe_images")
+                        if callable(reason_fn)
+                        else "no client or no describe_images tool"
+                    )
+                    log.warning("[vision] sidecar video_rag unreachable ({})", detail)
             else:
                 log.warning("[vision] sidecar video_rag unavailable (no external MCP context)")
         except Exception as exc:
@@ -522,11 +583,23 @@ class StaticVisionPlugin(Plugin):
             except (BadRequestError, APIStatusError) as error:
                 if getattr(error, "status_code", 400) != 400:
                     raise
+        def recap_span(sec: tuple) -> float:
+            kept = sec[1]
+            if window_secs is not None and len(sec) > 5:
+                return _window_span(sec[5], kept, window_secs)
+            return kept[-1][0] - kept[0][0] if len(kept) > 1 else 0.0
+
         details = "; ".join(
-            f"{name}: {len(kept)}/{total} frames over "
-            f"{(kept[-1][0] - kept[0][0]) if len(kept) > 1 else 0.0:.1f}s"
-            for name, kept, total, _, _ in sections
+            f"{sec[0]}: {len(sec[1])}/{sec[2]} frames over {recap_span(sec):.1f}s"
+            for sec in sections
         )
+        if sidecar_error is not None:
+            return (
+                "recap (sidecar describe failed, vision unavailable: "
+                f"{sidecar_error}; set vision_endpoint/vision_model "
+                f"or fix the video-rag sidecar): {details}",
+                "recap",
+            )
         return (
             "recap (vision not configured: set vision_endpoint/vision_model "
             f"or enable the video-rag sidecar): {details}",
