@@ -115,6 +115,16 @@ A periodic tick that lands on `via="recap"` stays silent: no `generate` is
 emitted (one warning, then quiet). A direct user ask still gets its "could not
 see" reply — that is an answer, not ambient narration.
 
+## Turn framing (bug 121)
+
+The plugin emits the caption bare (`[look-at <source> <span>s]: …`) and the
+voice frames it: in `_messages_for` (ambient `generate`) and in
+`_remember_event` (requested `vision_describe_result`) the block is wrapped
+with a turn instruction in the voice's own `response_language` — own eyes,
+comment in 1-2 sentences in character, never ask what to do with it, don't
+invent. The frame rides the volatile turn (user message / history); the frozen
+stable prompt never changes.
+
 When the sidecar link misses, the log names the cause: no MCP client
 configured (with the startup error when the process failed: missing binary,
 handshake, timeout) vs client running without the `describe_images` tool.

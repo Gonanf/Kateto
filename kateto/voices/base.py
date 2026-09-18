@@ -92,7 +92,50 @@ MIN_CLAUSE_TOKENS = 18
 # _pydantic_agent_loop filtra history a roles ("assistant", "user") y un
 # system intercalado se descartaría; el prefijo sobrevive en los dos caminos
 # (proveedor directo y pydantic) y deja el texto original visible.
+# Prefijo del turno de visión (bug 121): el plugin emite el caption como
+# `[look-at <source> <span>s]: ...` pelado. Sin marco el modelo chico lo lee
+# como un blob ajeno y pregunta "What do you want me to do with this
+# information?" (hasta en otro idioma).
 IGNORED_TRANSCRIPT_PREFIX = "[IGNORADO POR EL CLASIFICADOR — NO RESPONDER]"
+
+LOOK_AT_PREFIX = "[look-at "
+
+# Marca de que el bloque ya viaja con instrucción (evita doble marco entre
+# el camino ambiental —generate— y el pedido —vision_describe_result—).
+# Se detecta por la apertura de la propia instrucción: no agrega texto raro
+# al prompt que ve el modelo.
+_LOOK_AT_FRAMED_MARKERS = ("[Tu propia mirada", "[Your own look")
+
+
+def frame_look_at_turn(block: str, response_language: str | None) -> str:
+    """Envuelve un bloque `[look-at …]` con la instrucción del turno (bug 121).
+
+    Vive en la voz —opción (b)— y no en el plugin porque sólo la voz sabe su
+    idioma (`response_language`) y su persona, y así un único punto cubre los
+    dos caminos (narración ambiental por `generate` y resultado de un look-at
+    pedido por `vision_describe_result`). El plugin sigue mandando el caption
+    pelado: no tiene cómo saber el idioma de cada voz. Va en el turno volátil
+    (mensaje user / historial), nunca en el prompt estable congelado.
+    """
+    if any(marker in block for marker in _LOOK_AT_FRAMED_MARKERS):
+        return block
+    lang = (response_language or "es").strip().casefold()
+    # ponytail: dos ramas, sin i18n infra; None cae a español (lengua del proyecto).
+    if lang.startswith("en"):
+        instruction = (
+            "[Your own look — you just saw this yourself, the user sent you nothing. "
+            "Comment on what you see in 1 or 2 sentences, in character and in English. "
+            "Never ask for instructions or ask what to do with this information. "
+            "Do not invent anything not in the description.]"
+        )
+    else:
+        instruction = (
+            "[Tu propia mirada — vos acabás de ver esto, el usuario no te mandó nada. "
+            "Comentá lo que ves en 1 o 2 frases, en personaje y en español. "
+            "Nunca pidas instrucciones ni preguntes qué hacer con esta información. "
+            "No inventes nada que no esté en la descripción.]"
+        )
+    return f"{instruction}\n\n{block}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1411,11 +1454,19 @@ class VoiceAgent(Plugin):
             for message in recent_events
             if not (message.role == "user" and message.content == prompt)
         )
+        # bug 121: el caption pelado `[look-at …]` llega como instrucción de
+        # turno (mirada propia, en el idioma de la voz), no como dato. La
+        # comparación de arriba usa el prompt crudo; el marco va sólo al turno.
+        turn_prompt = (
+            frame_look_at_turn(prompt, self._response_language)
+            if prompt.lstrip().startswith(LOOK_AT_PREFIX)
+            else prompt
+        )
         return assemble_messages(
             stable=stable,
             history=history,
             volatile=volatile,
-            prompt=prompt,
+            prompt=turn_prompt,
         )
 
     def _remember_event(self, envelope: EventEnvelope[BaseModel]) -> None:
@@ -1425,9 +1476,14 @@ class VoiceAgent(Plugin):
                 message = ChatMessage(role="user", content=self._bounded_event_text(text))
             case VisionDescribeResultData() as seen:
                 span = seen.window_end - seen.window_start
+                raw = f"[look-at {seen.source} {span:.0f}s]: {seen.text}"
+                # bug 121: el resultado pedido también llega con marco (mirada
+                # propia + idioma de la voz); el bloque crudo va intacto abajo.
                 message = ChatMessage(
                     role="user",
-                    content=self._bounded_event_text(f"[look-at {seen.source} {span:.0f}s]: {seen.text}"),
+                    content=self._bounded_event_text(
+                        frame_look_at_turn(raw, self._response_language)
+                    ),
                 )
             case TextChunk(text=text) if text:
                 message = ChatMessage(role="assistant", content=self._bounded_event_text(text))
