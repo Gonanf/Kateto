@@ -31,6 +31,7 @@ class ExternalMcpClient:
         self._session_cm: Any = None
         self._transport_cm: Any = None
         self._tools: list | None = None  # cached tool list
+        self.last_error: str | None = None
 
     async def start(self) -> None:
         """Spawn the subprocess, connect stdio, initialise session."""
@@ -41,10 +42,12 @@ class ExternalMcpClient:
             self._session_cm = ClientSession(read, write)
             self._session = await self._session_cm.__aenter__()
             await self._session.initialize()
+            self.last_error = None
             log.info("External MCP '{}' started: {}", self.name, self._command)
         except Exception as exc:
-            log.warning("External MCP '{}' failed to start: {}", self.name, exc)
             await self.stop()
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            log.warning("External MCP '{}' failed to start: {}", self.name, exc)
 
     async def list_tools(self) -> list:
         """Return the raw MCP tool list (cached after first fetch)."""
@@ -176,6 +179,36 @@ class ExternalMcpManager:
 
     def get_servers_for_voice(self, voice_name: str) -> list[str]:
         return self._voice_servers.get(voice_name, [])
+
+    def client_error(self, server_name: str) -> str | None:
+        """Last startup failure for *server_name* (None when it started cleanly)."""
+        client = self._clients.get(server_name)
+        return client.last_error if client is not None else None
+
+    def sidecar_reason(self, server_names: list[str], tool_name: str) -> str:
+        """Why *tool_name* cannot be called: no client vs client-up-without-tool."""
+        missing = [n for n in server_names if n == "system" or n not in self._clients]
+        down = [
+            n
+            for n in server_names
+            if n in self._clients and not self._clients[n].is_running
+        ]
+        if len(missing) + len(down) == len([n for n in server_names if n != "system"]) or not [
+            n for n in server_names if n in self._clients and self._clients[n].is_running
+        ]:
+            detail = "; ".join(
+                f"client {n!r} not running"
+                + (f": {self._clients[n].last_error}" if self._clients[n].last_error else "")
+                if n in self._clients
+                else f"no client configured for {n!r}"
+                for n in server_names
+                if n != "system"
+            )
+            return f"no MCP client ({detail})" if detail else "no MCP client configured"
+        return (
+            f"client running but no {tool_name!r} tool in session "
+            f"(servers={[n for n in server_names if n != 'system']!r})"
+        )
 
     async def stop_all(self) -> None:
         """Stop every running client."""

@@ -96,6 +96,14 @@ nothing configured the result is a recap starting
 the video-rag sidecar)"`. Connection/timeout errors propagate as bus error
 events — the bus stays up.
 
+A periodic tick that lands on `via="recap"` stays silent: no `generate` is
+emitted (one warning, then quiet). A direct user ask still gets its "could not
+see" reply — that is an answer, not ambient narration.
+
+When the sidecar link misses, the log names the cause: no MCP client
+configured (with the startup error when the process failed: missing binary,
+handshake, timeout) vs client running without the `describe_images` tool.
+
 ## Degraded behaviors
 
 - Empty window on all resolved sources → `"no frames captured yet"`, counts 0.

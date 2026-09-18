@@ -119,6 +119,7 @@ description: "Known Issues — índice de bugs"
 | 110 | `thinking=false` no llega al proveedor (no se manda reasoning_effort) | Media | `kateto/providers/agent.py` | [110-thinking-false-no-llega-al-proveedor.md](./bugs/110-thinking-false-no-llega-al-proveedor.md) |
 | 111 | Las skills bundled no se refrescan: la copia del usuario queda vieja | Media | `kateto/voices/skills.py` | [111-skills-bundled-no-se-refrescan.md](./bugs/111-skills-bundled-no-se-refrescan.md) |
 | 114 | El path pydantic ignora el SOUL: las voces suenan a asistente genérico | Alta | `kateto/voices/factory.py`, `kateto/voices/base.py` | [114-path-pydantic-ignora-soul-voces-asistente.md](./bugs/114-path-pydantic-ignora-soul-voces-asistente.md) |
+| 115 | Config por voz pisa al principal en silencio y el recap hace hablar a la voz cada 30 s | Alta | `kateto/core/config.py`, `kateto/plugins/executor/static_vision_plugin.py`, `kateto/plugins/system/external_mcp.py` | [115-precedencia-silenciosa-voz-y-recap-narra.md](./bugs/115-precedencia-silenciosa-voz-y-recap-narra.md) |
 
 ---
 

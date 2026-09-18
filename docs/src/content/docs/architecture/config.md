@@ -54,6 +54,14 @@ timeout = 600
 # reasoning_effort = "none"  # none|minimal|low|medium|high (gateway: off|disabled|disable → none)
 ```
 
+## Voice precedence: per-voice file wins (loudly)
+
+`voices/<name>/config.toml` (or `voice.toml`) has priority over `[voice] <name>.*`
+in the main `config.toml`. Every overridden key logs a warning at load with the
+key, the principal value, the file value, and the winning file — and
+`kateto config check` prints the effective per-voice values with their source
+(`voices/<name>/config.toml` vs `principal`).
+
 ## Local (self-contained) mode
 
 Kateto can run the whisper and classifier backends **without any HTTP server** by

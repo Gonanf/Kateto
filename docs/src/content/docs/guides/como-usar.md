@@ -22,7 +22,7 @@ uv sync
 
 | Comando | Qué hace |
 |---|---|
-| `uv run kateto config check` | Valida el TOML y bootstrap de defaults |
+| `uv run kateto config check` | Valida el TOML y bootstrap de defaults; muestra valores efectivos por voz y qué archivo ganó cada clave |
 | `uv run kateto setup` | **Wizard interactivo**: configura LLM, Whisper y TTS; escribe `config.toml` (deep-merge con defaults) y las secrets a `secrets/.env` |
 | `uv run kateto doctor` | **Reporte de salud**: valida config, silero-vad/torch, API keys (enmascaradas), reachability de servers y modelos de Ollama (incluye probe de tool-calling) |
 | `uv run kateto run` | Event runtime (sin TUI) — el camino real |

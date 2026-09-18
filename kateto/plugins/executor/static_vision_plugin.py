@@ -164,6 +164,9 @@ class StaticVisionPlugin(Plugin):
         self._opted_in = self.opted_in
         # ponytail: unknown opt-in voices land here with a reason instead of a job.
         self._periodic_skipped: dict[str, str] = {}
+        # Recap carries no real description: periodic ticks stay silent after
+        # one warning, while direct user asks still get their "could not see" reply.
+        self._recap_narration_warned = False
         # ponytail: todo-4 lane adds maxlen bounds + drop counting on these same names.
         self._windows: dict[str, deque[tuple[float, bytes]]] = {}
         self._dropped: dict[str, int] = {}
@@ -431,6 +434,18 @@ class StaticVisionPlugin(Plugin):
         if requester.startswith("scheduler:"):
             voice = requester.split("scheduler:", 1)[1]
             if voice and kept_count > 0:
+                if via == "recap":
+                    if not self._recap_narration_warned:
+                        self._recap_narration_warned = True
+                        log.warning(
+                            "[vision] periodic narration suppressed for {}: "
+                            "no real description (via=recap); "
+                            "configure vision_endpoint/vision_model or the video-rag sidecar",
+                            voice,
+                        )
+                    else:
+                        log.debug("[vision] periodic narration suppressed for {} (via=recap)", voice)
+                    return
                 span = window_end - window_start
                 log.info("[vision] periodic narration -> {} ({}s window)", voice, f"{span:.0f}")
                 await manager.emit(
@@ -480,7 +495,13 @@ class StaticVisionPlugin(Plugin):
                 if result is not None:
                     log.info("[vision] sidecar describe_images answered ({} chars)", len(str(result)))
                     return str(result), "sidecar"
-                log.warning("[vision] sidecar video_rag unreachable (no client or no describe_images tool)")
+                reason_fn = getattr(mcp, "sidecar_reason", None)
+                detail = (
+                    reason_fn(["video_rag"], "describe_images")
+                    if callable(reason_fn)
+                    else "no client or no describe_images tool"
+                )
+                log.warning("[vision] sidecar video_rag unreachable ({})", detail)
             else:
                 log.warning("[vision] sidecar video_rag unavailable (no external MCP context)")
         except Exception as exc:
