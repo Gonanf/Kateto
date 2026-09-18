@@ -1,8 +1,9 @@
 """Todo-8 tests: look-at SKILL.md plus existing-user backfill.
 
 Covers the source-selection doc contract, fresh-bootstrap presence, the
-copy-missing backfill from vision plugin initialize(), and the adversarial
-probes (missing file -> SkillLoadError, underscore name rejected, idempotent).
+backfill from vision plugin initialize() (copy-missing + refresh-with-backup
+when the bundle diverged), and the adversarial probes (missing file ->
+SkillLoadError, underscore name rejected, idempotent).
 """
 
 from __future__ import annotations
@@ -79,23 +80,108 @@ async def test_backfill_idempotent(tmp_path: Path) -> None:
     before = (skill.stat().st_mtime_ns, skill.read_bytes())
     # When: initializing again
     await StaticVisionPlugin(config_dir=cfg).initialize()
-    # Then: second run is a no-op (content + mtime untouched)
+    # Then: second run is a no-op (content + mtime untouched, no backup)
     assert (skill.stat().st_mtime_ns, skill.read_bytes()) == before
+    assert list((skill.parent).glob("SKILL.md.bak.*")) == []
+
+
+def _capture_logs() -> tuple[list[str], int]:
+    from loguru import logger
+
+    messages: list[str] = []
+    handler_id = logger.add(lambda record: messages.append(record.rstrip("\n")), format="{message}")
+    return messages, handler_id
+
+
+def _stop_capture(handler_id: int) -> None:
+    from loguru import logger
+
+    logger.remove(handler_id)
+
+
+def test_backfill_refreshes_stale_bundled_skill(tmp_path: Path) -> None:
+    # Given: a user config holding an outdated bundled skill
+    cfg = tmp_path / "cfg"
+    skill_dir = cfg / "skills" / "look-at"
+    skill_dir.mkdir(parents=True)
+    stale = skill_dir / "SKILL.md"
+    stale.write_text("# Mine\n", encoding="utf-8")
+    messages, handler_id = _capture_logs()
+    try:
+        result = ensure_shared_skill(cfg, "look-at")
+    finally:
+        _stop_capture(handler_id)
+    # Then: refreshed to the bundled bytes, old content kept in a backup, logged
+    assert result == stale
+    assert stale.read_bytes() == _defaults_skill().read_bytes()
+    backups = sorted(skill_dir.glob("SKILL.md.bak.*"))
+    assert len(backups) == 1
+    assert backups[0].read_text(encoding="utf-8") == "# Mine\n"
+    assert "[skills] refreshed look-at (bundled changed)" in messages
+
+
+def test_backfill_identical_skill_untouched(tmp_path: Path) -> None:
+    # Given: a user config whose bundled skill already matches the bundle
+    cfg = tmp_path / "cfg"
+    skill_dir = cfg / "skills" / "look-at"
+    skill_dir.mkdir(parents=True)
+    skill = skill_dir / "SKILL.md"
+    skill.write_bytes(_defaults_skill().read_bytes())
+    before = (skill.stat().st_mtime_ns, skill.read_bytes())
+    messages, handler_id = _capture_logs()
+    try:
+        ensure_shared_skill(cfg, "look-at")
+    finally:
+        _stop_capture(handler_id)
+    # Then: nothing touched, no backup, silent
+    assert (skill.stat().st_mtime_ns, skill.read_bytes()) == before
+    assert list(skill_dir.glob("SKILL.md.bak.*")) == []
+    assert not [message for message in messages if "refreshed look-at" in message]
 
 
 @pytest.mark.asyncio
-async def test_backfill_preserves_existing_file(tmp_path: Path) -> None:
-    # Given: a user-customized skill file already in place
+async def test_backfill_leaves_user_skill_intact(tmp_path: Path) -> None:
+    # Given: a voice-created skill with no bundled source, plus a stale look-at
     cfg = tmp_path / "cfg"
-    skill = cfg / "skills" / "look-at"
-    skill.mkdir(parents=True)
-    (skill / "SKILL.md").write_text("# Mine\n", encoding="utf-8")
+    user_skill = cfg / "skills" / "my-notes" / "SKILL.md"
+    user_skill.parent.mkdir(parents=True)
+    user_skill.write_text("# My notes\n", encoding="utf-8")
+    stale = cfg / "skills" / "look-at" / "SKILL.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("# Mine\n", encoding="utf-8")
     (cfg / "config.toml").write_text('[kateto]\nname = "existing"\n', encoding="utf-8")
-    # When: backfilling (direct helper + plugin path)
-    ensure_shared_skill(cfg, "look-at")
+    # When: backfilling (direct helper rejects the user skill, plugin path runs)
+    with pytest.raises(SkillLoadError):
+        ensure_shared_skill(cfg, "my-notes")
     await StaticVisionPlugin(config_dir=cfg).initialize()
-    # Then: the custom file is never overwritten
-    assert (skill / "SKILL.md").read_text(encoding="utf-8") == "# Mine\n"
+    # Then: the user skill is intact (no backup beside it), look-at refreshed
+    assert user_skill.read_text(encoding="utf-8") == "# My notes\n"
+    assert list(user_skill.parent.glob("SKILL.md.bak.*")) == []
+    assert stale.read_bytes() == _defaults_skill().read_bytes()
+
+
+def test_refresh_is_idempotent(tmp_path: Path) -> None:
+    # Given: a stale bundled skill refreshed once already
+    cfg = tmp_path / "cfg"
+    skill_dir = cfg / "skills" / "look-at"
+    skill_dir.mkdir(parents=True)
+    skill = skill_dir / "SKILL.md"
+    skill.write_text("# Mine\n", encoding="utf-8")
+    ensure_shared_skill(cfg, "look-at")
+    before = (skill.stat().st_mtime_ns, skill.read_bytes())
+    backups_before = sorted(skill_dir.glob("SKILL.md.bak.*"))
+    assert len(backups_before) == 1
+    # When: running the backfill again twice
+    messages, handler_id = _capture_logs()
+    try:
+        ensure_shared_skill(cfg, "look-at")
+        ensure_shared_skill(cfg, "look-at")
+    finally:
+        _stop_capture(handler_id)
+    # Then: no extra backups, content untouched, silent
+    assert (skill.stat().st_mtime_ns, skill.read_bytes()) == before
+    assert sorted(skill_dir.glob("SKILL.md.bak.*")) == backups_before
+    assert not [message for message in messages if "refreshed look-at" in message]
 
 
 @pytest.mark.asyncio
