@@ -20,6 +20,8 @@ from kateto.core.config import McpServerSettings
 
 log = logger
 
+DEFAULT_TOOL_TIMEOUT = 30.0
+
 
 @dataclass(frozen=True)
 class ToolCallResult:
@@ -95,8 +97,13 @@ class ExternalMcpClient:
         tools = await self.list_tools()
         return any(t.name == name for t in tools)
 
-    async def call_tool_result(self, name: str, arguments: dict[str, Any]) -> ToolCallResult:
-        """Execute a tool with a 30 s timeout, keeping the MCP `isError` flag."""
+    async def call_tool_result(
+        self, name: str, arguments: dict[str, Any], timeout: float = DEFAULT_TOOL_TIMEOUT
+    ) -> ToolCallResult:
+        """Execute a tool, keeping the MCP `isError` flag.
+
+        `timeout` is per call (default 30 s); slow tools (vision) pass their own.
+        """
         if self._session is None:
             return ToolCallResult(
                 text='{"error": "MCP client not started"}',
@@ -106,7 +113,7 @@ class ExternalMcpClient:
             )
         try:
             result = await asyncio.wait_for(
-                self._session.call_tool(name, arguments), timeout=30.0
+                self._session.call_tool(name, arguments), timeout=timeout
             )
             texts: list[str] = []
             for content in result.content:
@@ -128,9 +135,11 @@ class ExternalMcpClient:
                 tool=name,
             )
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> str:
-        """Execute a tool with a 30 s timeout. Returns text-only result."""
-        return (await self.call_tool_result(name, arguments)).text
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any], timeout: float = DEFAULT_TOOL_TIMEOUT
+    ) -> str:
+        """Execute a tool. Returns text-only result."""
+        return (await self.call_tool_result(name, arguments, timeout=timeout)).text
 
     async def stop(self) -> None:
         """Close session + subprocess cleanly."""
@@ -202,6 +211,7 @@ class ExternalMcpManager:
         server_names: list[str],
         tool_name: str,
         arguments: dict[str, Any],
+        timeout: float = DEFAULT_TOOL_TIMEOUT,
     ) -> ToolCallResult | None:
         """Try to call *tool_name* on any external server, keeping `isError`. ``None`` = not found."""
         for name in server_names:
@@ -209,7 +219,7 @@ class ExternalMcpManager:
                 continue
             client = self._clients.get(name)
             if client is not None and client.is_running and await client.has_tool(tool_name):
-                return await client.call_tool_result(tool_name, arguments)
+                return await client.call_tool_result(tool_name, arguments, timeout=timeout)
         return None
 
     async def try_call_tool(
@@ -217,9 +227,10 @@ class ExternalMcpManager:
         server_names: list[str],
         tool_name: str,
         arguments: dict[str, Any],
+        timeout: float = DEFAULT_TOOL_TIMEOUT,
     ) -> str | None:
         """Try to call *tool_name* on any external server. ``None`` = not found."""
-        result = await self.try_call_tool_result(server_names, tool_name, arguments)
+        result = await self.try_call_tool_result(server_names, tool_name, arguments, timeout=timeout)
         return result.text if result is not None else None
 
     def get_servers_for_voice(self, voice_name: str) -> list[str]:

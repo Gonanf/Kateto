@@ -18,13 +18,23 @@ Worktree: `~/proyectos/OpenaiBuildWeek/kateto-fix-listener-bargein`, rama `fix/l
    ```
    O sea: un frame de 1920x1080 **no alcanza a terminar en 30 s** y el cliente corta. Ese texto de 48 chars
    es exactamente el que aparece en el log del runtime del usuario.
-2. **Por qué tarda tanto**: en el log del VLM (`/var/log/llama-server.log`, alias `LFM2.5-VL-3B`, Q4_K_M):
+2. **Por qué tarda tanto: la resolución, no el peso del archivo.** Medido con el cliente real, mismo frame
+   escalado a distintas resoluciones (misma imagen, distinto tamaño en píxeles):
+   | resolución | data-URL | tiempo | resultado |
+   |---|---|---|---|
+   | 1920x1080 | 101 KB | 30.03s | timeout |
+   | 1600x900 | 319 KB | 30.02s | timeout |
+   | 1280x720 | 220 KB | 30.01s | timeout |
+   | **1024x576** | 183 KB | **20.29s** | caption OK |
+   | **896x504** | 142 KB | **11.01s** | caption OK |
+   Y recomprimir el MISMO 1080p a JPEG (233 KB) sigue dando 30.03s ⇒ lo que manda son los **tokens de
+   visión** (≈ área), no los bytes. En el log del VLM (`/var/log/llama-server.log`, alias `LFM2.5-VL-3B`):
    ```
    slot print_timing: id 0 | task 259 | prompt processing, n_tokens = 1319, progress = 0.56, t = 20.00 s / 65.95 tokens per second
    ```
-   una sola imagen de pantalla ≈ 2350 tokens de visión y el prefill va a ~66 tok/s ⇒ ~36 s sólo de prefill,
-   más la generación. Con 3 frames en la ventana, peor. El `mcp` del usuario manda la captura en resolución
-   nativa.
+   ⇒ una imagen 1080p ≈ 2350 tokens a ~66 tok/s. **Default recomendado para el ancho máximo: 1024 px**
+   (deja ~10 s de margen contra el timeout actual); 896 px es el punto cómodo (11 s).
+   Ojo: `frames=1/5` en el runtime confirma que también hay poquísimos frames por ventana.
 3. **Consecuencia en su runtime** (log, líneas textuales): el job corre cada 30 s, el describe muere por
    timeout y la narración se suprime:
    ```

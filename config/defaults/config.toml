@@ -169,4 +169,13 @@ capture_fps = 1.0
 describe_interval = "30s"
 vision_max_tokens = 300
 vision_timeout = 60.0
+# Frames por describe: cada frame cuesta ~2350 tokens de visión (~36 s de
+# prefill a ~66 tok/s), así que la narración periódica manda 2 (el más viejo
+# y el más nuevo). El sidecar usa max(vision_timeout, 120) de timeout.
+max_frames_per_describe = 2
+# Ancho máximo antes de mandar al sidecar (aspecto preservado, JPEG): medido
+# con el cliente real, 1280 px todavía da timeout (30.01 s) y 1024 px tarda
+# ~20 s (896 px ~11 s). Lo que no entra en el cap de ~1.5MB del sidecar se
+# descarta con log, nunca se manda.
+vision_sidecar_max_width = 1024
 device_index = 0

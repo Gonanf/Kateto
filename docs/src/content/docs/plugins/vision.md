@@ -89,7 +89,9 @@ after N attempts (is executor_scheduler enabled?)`).
 | `vision_endpoint` | unset | Primary OpenAI-compatible endpoint (required for real vision) |
 | `vision_model` | unset | Primary model |
 | `vision_max_tokens` | `300` | Per describe call |
-| `vision_timeout` | `60.0` | Seconds |
+| `vision_timeout` | `60.0` | Seconds (primary/fallback HTTP links) |
+| `max_frames_per_describe` | `2` | Frames per describe: oldest + newest (each costs ~2350 vision tokens, ~36 s prefill at ~66 tok/s) |
+| `vision_sidecar_max_width` | `1024` | Max width before sending to the sidecar (aspect kept, JPEG); over-cap frames are dropped with a log |
 | `vision_fallback_endpoint` | unset | Local VLM endpoint (llama-server style) |
 | `vision_fallback_model` | unset | Fallback model |
 | `device_index` | `0` | Webcam device |
@@ -116,6 +118,38 @@ see" reply — that is an answer, not ambient narration.
 When the sidecar link misses, the log names the cause: no MCP client
 configured (with the startup error when the process failed: missing binary,
 handshake, timeout) vs client running without the `describe_images` tool.
+
+### Sidecar timeout and recompression
+
+A native 1920x1080 frame costs the VLM ~2350 vision tokens at ~66 tok/s
+prefill (~36 s) plus generation, so the 30 s MCP default always loses. The
+sidecar call uses `max(vision_timeout, 120)` seconds — the configured vision
+timeout with a 120 s floor that also covers cold model loads — and every call
+logs it (`sending N frame(s) (... dropped over cap) with timeout Ts`).
+`call_tool_result` / `try_call_tool_result` accept a per-call `timeout`
+(default 30.0); only vision overrides it.
+
+Before sending, each frame is squeezed to `vision_sidecar_max_width` (default
+1024, aspect preserved) as JPEG (quality ladder 70→55→40, then smaller
+scales). The default is measured, not guessed: with the real client 1280 px
+still times out (30.01 s), 1024 px answers in ~20 s and 896 px in ~11 s —
+vision tokens scale with area, not bytes (recompressing the same 1080p to a
+233 KB JPEG still times out). Frames that already fit pass through byte-identical — never
+upscaled, never re-encoded for fun. Anything still over the sidecar ~1.5MB
+data-URL cap is dropped with a warning and never sent (the sidecar would
+reject it); when every frame drops, the sidecar link is skipped with the
+reason logged.
+
+At most `max_frames_per_describe` frames travel per describe (default 2: the
+oldest and the newest kept frame — what shows the change; capped against the
+request's `max_images`). The describe log reports the sent count
+(`frames=K/N`).
+
+When periodic vision starts (opt-in voices only), one minimal describe (1x1
+image) prewarms the VLM through the configured endpoint or the sidecar, after
+a 10 s grace so `external_mcp.start_all()` finishes first. Best-effort: a
+failed prewarm logs a warning and nothing else — no error event, no
+narration.
 
 ## Degraded behaviors
 
