@@ -336,6 +336,8 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
                 timeout=settings.timeout,
                 session_headers=headers,
                 manage_tools=False,
+                reasoning_effort=getattr(settings, "reasoning_effort", None),
+                thinking=settings.thinking,
             )
             mcp_servers = tuple(s for s in settings.mcp_servers if "cron" not in s.lower() and "schedule" not in s.lower())
         else:
@@ -347,6 +349,8 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
                 retries=settings.retries,
                 timeout=settings.timeout,
                 session_headers=headers,
+                reasoning_effort=getattr(settings, "reasoning_effort", None),
+                thinking=settings.thinking,
             )
             mcp_servers = tuple(settings.mcp_servers)
 

@@ -196,3 +196,155 @@ async def test_tools_path_still_builds_requests(monkeypatch: pytest.MonkeyPatch)
     assert response.text == "hi"
     assert captured["extra_body"] == {"conversation_id": "c1"}
     assert captured["max_tokens"] == 4096
+
+
+def _agent_stream_client(captured: dict[str, Any]) -> type:
+    class FakeDelta:
+        content = "hi"
+        tool_calls = None
+
+    class FakeChoice:
+        delta = FakeDelta()
+        finish_reason = "stop"
+
+    class FakeChunk:
+        choices = (FakeChoice(),)
+
+    class FakeStream:
+        def __aiter__(self) -> "FakeStream":
+            return self
+
+        async def __anext__(self) -> FakeChunk:
+            raise StopAsyncIteration
+
+    class FakeCompletions:
+        async def create(self, **kwargs: object) -> FakeStream:
+            captured.update(kwargs)
+            return FakeStream()
+
+    class FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.chat = type("Chat", (), {"completions": FakeCompletions()})()
+
+    return FakeClient
+
+
+@pytest.mark.asyncio
+async def test_agent_thinking_false_sends_reasoning_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: agent provider con thinking=false sin knob explícito.
+    from kateto.providers.agent import OpenAIAgentProvider
+
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        "kateto.providers.agent.AsyncOpenAI", _agent_stream_client(captured)
+    )
+    provider = OpenAIAgentProvider(
+        model="voice", endpoint="http://127.0.0.1:9921/v1", thinking=False
+    )
+
+    # When: se stremea con tools.
+    items = [
+        item
+        async for item in provider.chat_with_tools_stream(
+            messages=[{"role": "user", "content": "hi"}], tools=()
+        )
+    ]
+
+    # Then: extra_body lleva reasoning_effort=none (stream no rompe max_tokens).
+    assert captured["extra_body"] == {"reasoning_effort": "none"}
+    assert captured["max_tokens"] == 4096
+    assert items == []
+
+
+@pytest.mark.asyncio
+async def test_agent_thinking_true_sends_no_reasoning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: agent provider con thinking=true sin knob explícito.
+    from kateto.providers.agent import OpenAIAgentProvider
+
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        "kateto.providers.agent.AsyncOpenAI", _agent_stream_client(captured)
+    )
+    provider = OpenAIAgentProvider(
+        model="voice", endpoint="http://127.0.0.1:9922/v1", thinking=True
+    )
+
+    # When: se stremea con tools.
+    [
+        item
+        async for item in provider.chat_with_tools_stream(
+            messages=[{"role": "user", "content": "hi"}], tools=()
+        )
+    ]
+
+    # Then: ni la clave ni un extra_body vacío.
+    assert "extra_body" not in captured
+
+
+@pytest.mark.asyncio
+async def test_agent_explicit_reasoning_wins_over_thinking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: reasoning_effort explícito con thinking=false.
+    from kateto.providers.agent import OpenAIAgentProvider
+
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        "kateto.providers.agent.AsyncOpenAI", _agent_stream_client(captured)
+    )
+    provider = OpenAIAgentProvider(
+        model="voice",
+        endpoint="http://127.0.0.1:9923/v1",
+        thinking=False,
+        reasoning_effort="low",
+    )
+
+    # When: se stremea con tools.
+    [
+        item
+        async for item in provider.chat_with_tools_stream(
+            messages=[{"role": "user", "content": "hi"}], tools=()
+        )
+    ]
+
+    # Then: va low aunque thinking sea False.
+    assert captured["extra_body"] == {"reasoning_effort": "low"}
+
+
+@pytest.mark.asyncio
+async def test_hermes_merges_conversation_id_and_reasoning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: Hermes con thinking=false (todas las voces lo tienen así hoy).
+    from kateto.providers.agent import HermesProvider
+
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        "kateto.providers.agent.AsyncOpenAI", _agent_stream_client(captured)
+    )
+    provider = HermesProvider(
+        conversation_id="c1",
+        model="voice",
+        endpoint="http://127.0.0.1:9924/v1",
+        max_tokens=4096,
+        thinking=False,
+    )
+
+    # When: se stremea con tools.
+    [
+        item
+        async for item in provider.chat_with_tools_stream(
+            messages=[{"role": "user", "content": "hi"}], tools=()
+        )
+    ]
+
+    # Then: conserva conversation_id y suma reasoning_effort; max_tokens intacto.
+    assert captured["extra_body"] == {
+        "conversation_id": "c1",
+        "reasoning_effort": "none",
+    }
+    assert captured["max_tokens"] == 4096
