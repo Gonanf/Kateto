@@ -106,8 +106,82 @@ LOOK_AT_PREFIX = "[look-at "
 # al prompt que ve el modelo.
 _LOOK_AT_FRAMED_MARKERS = ("[Tu propia mirada", "[Your own look")
 
+# Bug 129: variedad estructural de la narración de visión. El marco viejo pedía
+# una reseña ("opiná… qué te parece") y el material era un caption neutral en
+# tercera persona, así que el modelo chico convergía siempre al mismo molde
+# ("me parece interesante que…", "el usuario está aprendiendo…"). Prohibida la
+# lista negra de palabras (sólo mueve la fórmula de lugar): el fix cambia la
+# FORMA por construcción — un ángulo distinto por narración (sin repetir el
+# anterior, rng inyectable) + memoria de lo ya dicho + backstop de similitud.
+NARRATION_ANGLES_ES: dict[str, str] = {
+    "queja": "una queja — decí qué te chirría de esto",
+    "pregunta": "una pregunta concreta y punzante sobre el contenido",
+    "prediccion": "una predicción — qué va a salir mal o qué sigue",
+    "chiste": "un chiste seco sobre lo que se ve",
+    "consejo": "un consejo — qué harías distinto",
+    "dato": "un dato concreto que salta a la vista en el OCR",
+}
+NARRATION_ANGLES_EN: dict[str, str] = {
+    "queja": "a gripe — say what rubs you the wrong way here",
+    "pregunta": "a sharp, concrete question about the content",
+    "prediccion": "a prediction — what will break or what comes next",
+    "chiste": "a dry joke about what you see",
+    "consejo": "a tip — what you would do differently",
+    "dato": "a concrete fact that jumps out of the OCR",
+}
+DEFAULT_NARRATION_ANGLE = "dato"
+NARRATION_ANGLES = frozenset(NARRATION_ANGLES_ES)
+# Backstop anti-repetición (mismo criterio que el gate de caption repetido,
+# fix-111): si la narración nueva se parece >= a esto a cualquiera de las
+# últimas 3, no se habla.
+NARRATION_REPEAT_RATIO = 0.85
 
-def frame_look_at_turn(block: str, response_language: str | None) -> str:
+
+def pick_narration_angle(
+    rng: Any, previous: str | None = None, lang: str | None = None
+) -> str:
+    """Sortea un ángulo del pool sin repetir el de la narración anterior.
+
+    `rng` es inyectable (tests deterministas): sirve cualquier objeto con
+    `.choice()` — `random.Random(seed)` o el módulo `random`.
+    """
+    import random
+
+    pool = (
+        NARRATION_ANGLES_EN
+        if (lang or "es").strip().casefold().startswith("en")
+        else NARRATION_ANGLES_ES
+    )
+    choices = [key for key in pool if key != previous] or list(pool)
+    return rng.choice(choices) if rng is not None else random.choice(choices)
+
+
+def narration_angle_label(angle: str, lang: str | None) -> str:
+    pool = (
+        NARRATION_ANGLES_EN
+        if (lang or "es").strip().casefold().startswith("en")
+        else NARRATION_ANGLES_ES
+    )
+    return pool.get(angle, pool[DEFAULT_NARRATION_ANGLE])
+
+
+def text_ratio(a: str, b: str) -> float:
+    """Case-insensitive similarity ratio between two texts (0..1). Espeja
+    `_caption_ratio` del plugin de visión (fix-111): mismo criterio."""
+    import difflib
+
+    return difflib.SequenceMatcher(
+        None, a.strip().casefold(), b.strip().casefold()
+    ).ratio()
+
+
+def frame_look_at_turn(
+    block: str,
+    response_language: str | None,
+    *,
+    angle: str | None = None,
+    recent: tuple[str, ...] | list[str] = (),
+) -> str:
     """Envuelve un bloque `[look-at …]` con la instrucción del turno (bug 121).
 
     Vive en la voz —opción (b)— y no en el plugin porque sólo la voz sabe su
@@ -116,34 +190,59 @@ def frame_look_at_turn(block: str, response_language: str | None) -> str:
     pedido por `vision_describe_result`). El plugin sigue mandando el caption
     pelado: no tiene cómo saber el idioma de cada voz. Va en el turno volátil
     (mensaje user / historial), nunca en el prompt estable congelado.
+
+    Bug 129: el marco ya no pide una reseña (registro que induce fórmulas de
+    reseñador); pide UNA línea corta hablándole al usuario de vos sobre el
+    contenido, con un ángulo sorteado (variedad por construcción) y —si hay—
+    las últimas narraciones como memoria anti-repetición.
     """
     if any(marker in block for marker in _LOOK_AT_FRAMED_MARKERS):
         return block
     lang = (response_language or "es").strip().casefold()
+    angle = angle if angle in NARRATION_ANGLES else DEFAULT_NARRATION_ANGLE
+    label = narration_angle_label(angle, lang)
     # ponytail: dos ramas, sin i18n infra; None cae a español (lengua del proyecto).
     if lang.startswith("en"):
+        recent_block = (
+            "You already said this — do not repeat the angle nor the opening shape: "
+            + " | ".join(f'"{line}"' for line in recent)
+            + ". "
+            if recent
+            else ""
+        )
         instruction = (
             "[Your own look — you just saw this yourself, the user sent you nothing. "
-            "Give your opinion in 1 or 2 sentences, in character and in English: "
-            "what you think, what catches your eye, what you would do or ask. "
+            "Say ONE short line (up to ~18 words), in character and in English, "
+            "talking TO the user about the CONTENT on screen —what the OCR says, "
+            "what is visible—, never about the user's activity nor naming the user "
+            f"in third person. This time: {label}. "
+            + recent_block +
             "The literal on-screen text comes in the `OCR:` section of this material: "
             "use it to speak with substance, but do not repeat it verbatim nor list "
             "what is already in any section (caption, OCR, or objects). "
-            "Do not repeat the literal description nor list what is already in the caption. "
             "Never ask for instructions or ask what to do with this information. "
-            "Do not invent anything not in the description.]"
+            "Do not invent anything not in the material.]"
         )
     else:
+        recent_block = (
+            "Ya dijiste esto — no repitas ni el ángulo ni la forma de arrancar: "
+            + " | ".join(f"«{line}»" for line in recent)
+            + ". "
+            if recent
+            else ""
+        )
         instruction = (
             "[Tu propia mirada — vos acabás de ver esto, el usuario no te mandó nada. "
-            "Opiná en 1 o 2 frases, en personaje y en español: "
-            "qué te parece, qué te llama la atención, qué harías o preguntarías. "
-            "El texto literal de la pantalla viene en la sección `OCR:` de este material: "
-            "usalo para opinar con sustancia, pero no repitas el literal ni enumeres lo "
-            "que ya está en ninguna sección (ni el caption, ni el OCR, ni los objetos). "
-            "No repitas la descripción literal ni enumeres lo que ya está en el caption. "
+            "Decí UNA sola línea corta (hasta ~18 palabras), en personaje y en español, "
+            "hablándole AL USUARIO de vos sobre el CONTENIDO de la pantalla —lo que "
+            "dice el OCR, lo que se ve—, nunca sobre su actividad ni nombrándolo en "
+            f"tercera persona. Esta vez: {label}. "
+            + recent_block +
+            "El texto literal viene en la sección `OCR:` de este material: usalo con "
+            "sustancia, pero no lo repitas verbatim ni enumeres lo que ya está en "
+            "ninguna sección (ni el caption, ni el OCR, ni los objetos). "
             "Nunca pidas instrucciones ni preguntes qué hacer con esta información. "
-            "No inventes nada que no esté en la descripción.]"
+            "No inventes nada que no esté en el material.]"
         )
     return f"{instruction}\n\n{block}"
 
@@ -513,6 +612,11 @@ class VoiceAgent(Plugin):
         self._stable_prompt_text: str | None = None
         self._followup_pending = False
         self._memory_block: str | None = None
+        # Bug 129: memoria anti-repetición de narraciones de visión + variedad
+        # de ángulo. `_narration_rng` es inyectable (tests deterministas).
+        self._recent_narrations: deque[str] = deque(maxlen=5)
+        self._last_narration_angle: str | None = None
+        self._narration_rng: Any | None = None
 
     @property
     def session_id(self) -> str:
@@ -929,6 +1033,33 @@ class VoiceAgent(Plugin):
             _PIPELINES[self.name] = pipeline
         return pipeline
 
+    def _narration_is_repeat(self, text: str) -> bool:
+        """Backstop bug 129: similitud >= 0.85 contra alguna de las últimas 3
+        narraciones (mismo criterio ratio que `_caption_ratio`, fix-111) ⇒ la
+        narración se descarta: no se habla ni se recuerda."""
+        candidate = text.strip()
+        if not candidate:
+            return False
+        recent = list(self._recent_narrations)[-3:]
+        for previous in recent:
+            ratio = text_ratio(candidate, previous)
+            if ratio >= NARRATION_REPEAT_RATIO:
+                log.info(
+                    "[{}] narración de visión descartada: similitud {:.2f} >= "
+                    "{:.2f} con una reciente ({!r})",
+                    self.name,
+                    ratio,
+                    NARRATION_REPEAT_RATIO,
+                    candidate[:120],
+                )
+                return True
+        return False
+
+    def _remember_narration(self, text: str) -> None:
+        stripped = text.strip()
+        if stripped:
+            self._recent_narrations.append(stripped)
+
     async def _stream_response(
         self,
         prompt: str,
@@ -954,6 +1085,12 @@ class VoiceAgent(Plugin):
             ),
         )
         log.debug("[{}] _settings.stream={}", self.name, self._settings.stream)
+        # Bug 129: si el turno es una narración de visión, el texto completo se
+        # acumula antes de hablar para poder aplicar el backstop anti-repetición
+        # (una línea corta: el costo de buffer es cero; el turno normal sigue
+        # streaming frase a frase sin tocar la latencia).
+        is_narration = prompt.lstrip().startswith(LOOK_AT_PREFIX)
+        narration_phrases: list[str] = []
         if self._settings.stream:
             log.debug("[{}] stream=true mode, pushing to pipeline", self.name)
             sequence = 0
@@ -967,13 +1104,19 @@ class VoiceAgent(Plugin):
                 if self._status is not VoiceStatus.TALKING:
                     await self._set_status(VoiceStatus.TALKING)
                 for phrase in segmenter.feed(token):
-                    await pipeline.token_queue.put(phrase)
-                    await self._emit_chunk(phrase, sequence, final=False)
+                    if is_narration:
+                        narration_phrases.append(phrase)
+                    else:
+                        await pipeline.token_queue.put(phrase)
+                        await self._emit_chunk(phrase, sequence, final=False)
                     sequence += 1
             tail = segmenter.flush()
             if tail is not None:
-                await pipeline.token_queue.put(tail)
-                await self._emit_chunk(tail, sequence, final=False)
+                if is_narration:
+                    narration_phrases.append(tail)
+                else:
+                    await pipeline.token_queue.put(tail)
+                    await self._emit_chunk(tail, sequence, final=False)
                 sequence += 1
             stream.set_meta(
                 usage=getattr(self._provider, "last_usage", None),
@@ -981,8 +1124,18 @@ class VoiceAgent(Plugin):
             )
             # ponytail: final_message() not awaited — no bus consumer for usage yet;
             # it is the seam for tests and future Zonos2 wiring.
-            await pipeline.token_queue.put(None)
-            await self._emit_chunk("", sequence, final=True)
+            if is_narration:
+                if self._narration_is_repeat("".join(narration_phrases)):
+                    await pipeline.token_queue.put(None)
+                else:
+                    self._remember_narration("".join(narration_phrases))
+                    for phrase in narration_phrases:
+                        await pipeline.token_queue.put(phrase)
+                    await pipeline.token_queue.put(None)
+                    await self._emit_chunk("", sequence, final=True)
+            else:
+                await pipeline.token_queue.put(None)
+                await self._emit_chunk("", sequence, final=True)
         else:
             log.debug("[{}] stream=false mode, accumulating tokens...", self.name)
             tokens: list[str] = []
@@ -997,9 +1150,14 @@ class VoiceAgent(Plugin):
             if tokens:
                 full = "".join(tokens)
                 log.debug("[{}] stream=false accumulated {} tokens -> {!r}", self.name, len(tokens), full)
-                await pipeline.token_queue.put(full)
-                await pipeline.token_queue.put(None)
-                await self._emit_chunk(full, 0, final=True)
+                if is_narration and self._narration_is_repeat(full):
+                    await pipeline.token_queue.put(None)
+                else:
+                    if is_narration:
+                        self._remember_narration(full)
+                    await pipeline.token_queue.put(full)
+                    await pipeline.token_queue.put(None)
+                    await self._emit_chunk(full, 0, final=True)
             else:
                 await pipeline.token_queue.put(None)
         manager = self.manager
@@ -1469,11 +1627,23 @@ class VoiceAgent(Plugin):
         # bug 121: el caption pelado `[look-at …]` llega como instrucción de
         # turno (mirada propia, en el idioma de la voz), no como dato. La
         # comparación de arriba usa el prompt crudo; el marco va sólo al turno.
-        turn_prompt = (
-            frame_look_at_turn(prompt, self._response_language)
-            if prompt.lstrip().startswith(LOOK_AT_PREFIX)
-            else prompt
-        )
+        # Bug 129: la narración de visión recibe un ángulo sorteado (sin
+        # repetir el anterior) y las últimas narraciones como memoria.
+        turn_prompt = prompt
+        if prompt.lstrip().startswith(LOOK_AT_PREFIX):
+            import random
+
+            rng = self._narration_rng if self._narration_rng is not None else random
+            angle = pick_narration_angle(
+                rng, self._last_narration_angle, self._response_language
+            )
+            self._last_narration_angle = angle
+            turn_prompt = frame_look_at_turn(
+                prompt,
+                self._response_language,
+                angle=angle,
+                recent=tuple(self._recent_narrations),
+            )
         return assemble_messages(
             stable=stable,
             history=history,
@@ -1491,10 +1661,17 @@ class VoiceAgent(Plugin):
                 raw = f"[look-at {seen.source} {span:.0f}s]: {seen.text}"
                 # bug 121: el resultado pedido también llega con marco (mirada
                 # propia + idioma de la voz); el bloque crudo va intacto abajo.
+                # Bug 129: el marco de memoria es determinista — reusa el último
+                # ángulo (o el default) y las últimas narraciones, sin sortear.
                 message = ChatMessage(
                     role="user",
                     content=self._bounded_event_text(
-                        frame_look_at_turn(raw, self._response_language)
+                        frame_look_at_turn(
+                            raw,
+                            self._response_language,
+                            angle=self._last_narration_angle,
+                            recent=tuple(self._recent_narrations),
+                        )
                     ),
                 )
             case TextChunk(text=text) if text:
