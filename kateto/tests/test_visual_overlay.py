@@ -324,6 +324,113 @@ def test_js_jaw_kinematics_suite():
     assert proc.returncode == 0, f"suite JS falló:\n{proc.stdout}\n{proc.stderr}"
 
 
+def _run_js_probe(probe: str):
+    """Evalúa un probe ESM contra kateto-avatar.js y devuelve el JSON impreso."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("sin node para evaluar el kinematics JS")
+    prelude = (
+        "globalThis.HTMLElement=class{};"
+        "globalThis.customElements={get:()=>undefined,define:()=>{}};"
+        f"const m=await import({json.dumps(str(WEB_DIR / 'kateto-avatar.js'))});"
+    )
+    proc = subprocess.run([node, "--input-type=module", "-e", prelude + probe], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"probe JS falló:\n{proc.stderr}"
+    return json.loads(proc.stdout)
+
+
+def test_js_idle_silencio_sin_lateral():
+    # Given: IdleMotion con rngs extremos (siempre 0, siempre ~1, alternado)
+    # When: se avanza 6 s en pasos de 50 ms y se combina en silencio (hablando o no)
+    # Then: jawOffsetX y jawOffsetY del idle son 0 exactos con cualquier rng,
+    #   el giro queda en ±3° y ni hablando el idle suma lateral a la voz
+    rows = _run_js_probe("""
+      const rngs = [() => 0, () => 0.999999, (() => { let i = 0; return () => (i++ % 2 ? 0.9 : 0.1); })()];
+      const rows = [];
+      for (const rng of rngs) {
+        const idle = new m.IdleMotion({ rng, startMs: 0 });
+        for (let t = 0; t <= 6000; t += 50) {
+          const pose = idle.update(t);
+          for (const speaking of [false, true]) {
+            const silent = m.combineIdleWithVoice(pose, { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 }, speaking);
+            const voice = m.combineIdleWithVoice(pose, { jawOffsetX: 5.25, jawOffsetY: -10, jawRotation: 1 }, speaking);
+            rows.push([pose.jawOffsetX, pose.jawOffsetY, silent.jawOffsetX, silent.jawOffsetY, silent.jawRotation, voice.jawOffsetX]);
+          }
+        }
+      }
+      console.log(JSON.stringify(rows));
+    """)
+    assert len(rows) > 0
+    for jx, jy, kx, ky, rot, vx in rows:
+        assert jx == 0 and jy == 0 and kx == 0 and ky == 0
+        assert abs(rot) <= 3.0 + 1e-9
+        assert vx == 5.25
+
+
+def test_js_jaw_envelope_attack_release():
+    # Given: rms fijo 0.5 (factor constante, la forma la pone solo el tiempo)
+    # When: se muestrea un ciclo completo del flap en pasos de 1 ms
+    # Then: la SUBIDA al pico es más corta que la BAJADA, sin saltos discretos
+    #   entre frames, con pico ≈ -factor*40 y cruces del neutro cada ciclo
+    data = _run_js_probe("""
+      const rms = 0.5, T = 1000 / m.FLAP_HZ, ys = [];
+      for (let t = 0; t <= Math.floor(T); t += 1) ys.push(m.computeJawKinematics(rms, t).jawOffsetY);
+      let peak = 0;
+      for (let i = 1; i < ys.length; i++) if (ys[i] < ys[peak]) peak = i;
+      let step = 0;
+      for (let i = 1; i < ys.length; i++) step = Math.max(step, Math.abs(ys[i] - ys[i - 1]));
+      const mid = (ys[peak] + ys[0]) / 2;
+      let crossings = 0;
+      const seq = [];
+      for (let t = 0; t <= 1000; t += 1) seq.push(m.computeJawKinematics(rms, t).jawOffsetY);
+      for (let i = 1; i < seq.length; i++) if ((seq[i-1] - mid) * (seq[i] - mid) < 0) crossings++;
+      console.log(JSON.stringify({ ys, peak, step, crossings }));
+    """)
+    ys, peak, step, crossings = data["ys"], data["peak"], data["step"], data["crossings"]
+    rise_ms, fall_ms = peak, (len(ys) - 1) - peak
+    # Then: apertura rápida (~25-35 ms) y cierre más lento
+    assert rise_ms < fall_ms
+    assert 20 <= rise_ms <= 40
+    # Then: continua entre frames (nada de saltos discretos)
+    assert step < 2.5
+    # Then: amplitud escalada por rms (factor 0.52 con rms 0.5, tope intacto)
+    factor = ((0.5 - 0.015) / 0.985) ** 0.52
+    assert math.isclose(ys[peak], -factor * 40.0, abs_tol=5e-2)
+    assert ys[0] == 0
+    # Then: cruza el neutro varias veces por segundo (2 por ciclo)
+    assert crossings >= 10
+
+
+def test_js_jaw_silencio_cero_exacto():
+    # Given: rms bajo el umbral de silencio (0.015)
+    # When: computeJawKinematics en varios instantes
+    # Then: transform exactamente 0 (sin piso ni deriva)
+    rows = _run_js_probe("""
+      const rows = [];
+      for (const rms of [0.0, 0.01, 0.014, 0.0149]) {
+        for (let t = 0; t <= 500; t += 37) rows.push(m.computeJawKinematics(rms, t));
+      }
+      console.log(JSON.stringify(rows));
+    """)
+    assert len(rows) > 0
+    for k in rows:
+        assert k["jawOffsetX"] == 0 and k["jawOffsetY"] == 0 and k["jawRotation"] == 0
+
+
+def test_css_jaw_head_sin_transicion_transform():
+    # Given: el fuente del web component
+    # When: se extraen los bloques .layer-jaw y .layer-head
+    # Then: ninguna declaración transition anima transform (el snap vive en
+    #   la cinemática; una transición re-suaviza cada frame del rAF)
+    import re
+
+    src = (WEB_DIR / "kateto-avatar.js").read_text()
+    for cls in (".layer-jaw", ".layer-head"):
+        block = re.search(re.escape(cls) + r"\s*\{(.*?)\}", src, re.DOTALL).group(1)
+        transitions = re.findall(r"transition\s*:\s*([^;]+);", block)
+        assert all(t.strip() == "none" for t in transitions), f"{cls} suaviza transform vía CSS: {transitions}"
+
+
 def test_shared_convention_js_backend_vs_python_puppet():
     """La convención es única entre computeBackendKinematics (JS) y
     map_rms_to_puppet_transform (Python): mismo signo en jaw (≤ 0 = abre,
