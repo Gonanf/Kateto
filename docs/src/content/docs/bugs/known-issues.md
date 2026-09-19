@@ -133,6 +133,7 @@ description: "Known Issues — índice de bugs"
 | 124 | Visión periódica: intervalo aleatorio dentro de un rango | Media | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/plugins/executor/__init__.py` | [124-vision-periodica-intervalo-aleatorio-en-rango.md](./bugs/124-vision-periodica-intervalo-aleatorio-en-rango.md) |
 | 126 | La voz no consume el OCR ni la detección de objetos del sidecar | Media | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/voices/base.py` | [126-vision-consume-ocr-y-objetos.md](./bugs/126-vision-consume-ocr-y-objetos.md) |
 | 127 | Barge-in: el video-rag y la narración que pide no se cortan cuando el usuario habla | Alta | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/plugins/system/turn_gate.py` | [127-bargein-no-corta-el-video-rag.md](./bugs/127-bargein-no-corta-el-video-rag.md) |
+| 129 | La narración de visión cae siempre en las mismas fórmulas de reseñador | Media | `kateto/voices/base.py` | [129-narracion-vision-molde-de-resenador.md](./bugs/129-narracion-vision-molde-de-resenador.md) |
 
 ---
 

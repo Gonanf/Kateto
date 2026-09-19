@@ -27,7 +27,7 @@ from kateto.plugins.executor.static_vision_plugin import (
     _dhash,
     _hamming,
 )
-from kateto.voices.base import frame_look_at_turn
+from kateto.voices.base import frame_look_at_turn, pick_narration_angle
 
 
 def _noise_frame(seed: int) -> bytes:
@@ -246,19 +246,29 @@ async def test_user_ask_same_screen_always_answers(monkeypatch: pytest.MonkeyPat
     await _teardown(manager, plugin.name, "results")
 
 
-def test_turn_instruction_asks_opinion_and_forbids_literal() -> None:
-    # Given: el caption pelado en ambos idiomas
+def test_turn_instruction_reacts_instead_of_reviewing() -> None:
+    # Given: el caption pelado en ambos idiomas y un ángulo fijo
     caption = "[look-at screen 5s]: terminal con código"
     # When: se enmarca el turno
-    es = frame_look_at_turn(caption, "es")
-    en = frame_look_at_turn(caption, "en")
-    # Then: pide opinion en personaje y prohibe repetir el literal
-    assert "Opiná" in es
-    assert "No repitas la descripción literal" in es
-    assert "qué te llama la atención" in es
-    assert "Give your opinion" in en
-    assert "Do not repeat the literal description" in en
-    assert "catches your eye" in en
+    es = frame_look_at_turn(caption, "es", angle="queja")
+    en = frame_look_at_turn(caption, "en", angle="queja")
+    # Then: una sola línea, dirigida al usuario, con el ángulo explícito
+    assert "UNA sola línea corta" in es
+    assert "AL USUARIO" in es
+    assert "Esta vez: una queja" in es
+    assert "ONE short line" in en
+    assert "TO the user" in en
+    assert "This time: a gripe" in en
+    # And: el registro viejo de reseña desapareció
+    assert "Opiná" not in es
+    assert "qué te parece" not in es
+    assert "qué te llama la atención" not in es
+    assert "Give your opinion" not in en
+    assert "catches your eye" not in en
+    # And: siguen las prohibiciones estructurales
+    assert "Nunca pidas instrucciones" in es
+    assert "No inventes" in es
+    assert "Never ask for instructions" in en
 
 
 def test_vlm_prompt_in_spanish_asks_standout() -> None:
