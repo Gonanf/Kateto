@@ -78,6 +78,7 @@ from kateto.voices.context import (
 )
 from kateto.voices.ledger import VoiceMemoryLedger
 from kateto.voices.memory import VoiceMemory
+from kateto.voices.sanitizer import sanitize_voice_output
 from kateto.voices.skills import LoadedSkill, load_skills
 
 # Data plane: direct channels bypassing the event bus for streaming data
@@ -1104,20 +1105,24 @@ class VoiceAgent(Plugin):
                 if self._status is not VoiceStatus.TALKING:
                     await self._set_status(VoiceStatus.TALKING)
                 for phrase in segmenter.feed(token):
-                    if is_narration:
-                        narration_phrases.append(phrase)
-                    else:
-                        await pipeline.token_queue.put(phrase)
-                        await self._emit_chunk(phrase, sequence, final=False)
-                    sequence += 1
+                    clean_phrase = sanitize_voice_output(phrase)
+                    if clean_phrase:
+                        if is_narration:
+                            narration_phrases.append(clean_phrase)
+                        else:
+                            await pipeline.token_queue.put(clean_phrase)
+                            await self._emit_chunk(clean_phrase, sequence, final=False)
+                            sequence += 1
             tail = segmenter.flush()
             if tail is not None:
-                if is_narration:
-                    narration_phrases.append(tail)
-                else:
-                    await pipeline.token_queue.put(tail)
-                    await self._emit_chunk(tail, sequence, final=False)
-                sequence += 1
+                clean_tail = sanitize_voice_output(tail)
+                if clean_tail:
+                    if is_narration:
+                        narration_phrases.append(clean_tail)
+                    else:
+                        await pipeline.token_queue.put(clean_tail)
+                        await self._emit_chunk(clean_tail, sequence, final=False)
+                        sequence += 1
             stream.set_meta(
                 usage=getattr(self._provider, "last_usage", None),
                 stop_reason=getattr(self._provider, "last_stop_reason", None),
@@ -1149,13 +1154,15 @@ class VoiceAgent(Plugin):
                 tokens.append(token)
             if tokens:
                 full = "".join(tokens)
+                full = sanitize_voice_output(full)
                 log.debug("[{}] stream=false accumulated {} tokens -> {!r}", self.name, len(tokens), full)
                 if is_narration and self._narration_is_repeat(full):
                     await pipeline.token_queue.put(None)
                 else:
                     if is_narration:
                         self._remember_narration(full)
-                    await pipeline.token_queue.put(full)
+                    if full:
+                        await pipeline.token_queue.put(full)
                     await pipeline.token_queue.put(None)
                     await self._emit_chunk(full, 0, final=True)
             else:
@@ -1213,15 +1220,19 @@ class VoiceAgent(Plugin):
                                 if self._status is not VoiceStatus.TALKING:
                                     await self._set_status(VoiceStatus.TALKING)
                                 for phrase in segmenter.feed(token):
-                                    await pipeline.token_queue.put(phrase)
-                                    await self._emit_chunk(phrase, sequence, final=False)
-                                    sequence += 1
+                                    clean_phrase = sanitize_voice_output(phrase)
+                                    if clean_phrase:
+                                        await pipeline.token_queue.put(clean_phrase)
+                                        await self._emit_chunk(clean_phrase, sequence, final=False)
+                                        sequence += 1
                             case AgentResponse() as response if response.tool_calls:
                                 tail = segmenter.flush()
                                 if tail is not None:
-                                    await pipeline.token_queue.put(tail)
-                                    await self._emit_chunk(tail, sequence, final=True)
-                                    sequence += 1
+                                    clean_tail = sanitize_voice_output(tail)
+                                    if clean_tail:
+                                        await pipeline.token_queue.put(clean_tail)
+                                        await self._emit_chunk(clean_tail, sequence, final=True)
+                                        sequence += 1
                                 turn_terminated = await self._handle_tool_calls(
                                     messages=messages, response=response, executor=executor,
                                 )
@@ -1229,15 +1240,19 @@ class VoiceAgent(Plugin):
                                 if turn_terminated:
                                     break
                             case AgentResponse() as response if response.text.strip():
+                                clean_text = sanitize_voice_output(response.text)
                                 if sequence == 0:
-                                    await pipeline.token_queue.put(response.text)
-                                    await self._emit_chunk(response.text, sequence, final=True)
+                                    if clean_text:
+                                        await pipeline.token_queue.put(clean_text)
+                                    await self._emit_chunk(clean_text, sequence, final=True)
                                 else:
                                     tail = segmenter.flush()
                                     if tail is not None:
-                                        await pipeline.token_queue.put(tail)
-                                        await self._emit_chunk(tail, sequence, final=False)
-                                        sequence += 1
+                                        clean_tail = sanitize_voice_output(tail)
+                                        if clean_tail:
+                                            await pipeline.token_queue.put(clean_tail)
+                                            await self._emit_chunk(clean_tail, sequence, final=False)
+                                            sequence += 1
                                     await self._emit_chunk("", sequence, final=True)
                                 had_tool_calls = False
                                 break
@@ -1247,9 +1262,11 @@ class VoiceAgent(Plugin):
                         break
                     tail = segmenter.flush()
                     if tail is not None:
-                        await pipeline.token_queue.put(tail)
-                        await self._emit_chunk(tail, sequence, final=False)
-                        sequence += 1
+                        clean_tail = sanitize_voice_output(tail)
+                        if clean_tail:
+                            await pipeline.token_queue.put(clean_tail)
+                            await self._emit_chunk(clean_tail, sequence, final=False)
+                            sequence += 1
                     await self._emit_chunk("", sequence, final=True)
                     if not had_tool_calls or turn_terminated:
                         break
@@ -1260,8 +1277,10 @@ class VoiceAgent(Plugin):
                     )
                     if not response.tool_calls:
                         if response.text and response.text.strip():
-                            await pipeline.token_queue.put(response.text)
-                            await self._emit_chunk(response.text, 0, final=True)
+                            clean_text = sanitize_voice_output(response.text)
+                            if clean_text:
+                                await pipeline.token_queue.put(clean_text)
+                                await self._emit_chunk(clean_text, 0, final=True)
                         break
                     turn_terminated = await self._handle_tool_calls(
                         messages=messages, response=response, executor=executor,
@@ -1315,14 +1334,18 @@ class VoiceAgent(Plugin):
                             if self._status is not VoiceStatus.TALKING:
                                 await self._set_status(VoiceStatus.TALKING)
                             for phrase in segmenter.feed(msg):
-                                await pipeline.token_queue.put(phrase)
-                                await self._emit_chunk(phrase, sequence, final=False)
-                                sequence += 1
+                                clean_phrase = sanitize_voice_output(phrase)
+                                if clean_phrase:
+                                    await pipeline.token_queue.put(clean_phrase)
+                                    await self._emit_chunk(clean_phrase, sequence, final=False)
+                                    sequence += 1
                     tail = segmenter.flush()
                     if tail is not None:
-                        await pipeline.token_queue.put(tail)
-                        await self._emit_chunk(tail, sequence, final=False)
-                        sequence += 1
+                        clean_tail = sanitize_voice_output(tail)
+                        if clean_tail:
+                            await pipeline.token_queue.put(clean_tail)
+                            await self._emit_chunk(clean_tail, sequence, final=False)
+                            sequence += 1
                     await pipeline.token_queue.put(None)
                     raw_output = result.get_output()
                     if inspect.isawaitable(raw_output):
@@ -1330,7 +1353,8 @@ class VoiceAgent(Plugin):
                     else:
                         final_text = raw_output
                     if sequence == 0 and final_text and isinstance(final_text, str):
-                        await self._emit_chunk(final_text, sequence, final=True)
+                        clean_final = sanitize_voice_output(final_text)
+                        await self._emit_chunk(clean_final, sequence, final=True)
                     else:
                         await self._emit_chunk("", sequence, final=True)
             else:
@@ -1341,8 +1365,10 @@ class VoiceAgent(Plugin):
                 )
                 output = result.output
                 if output and isinstance(output, str):
-                    await pipeline.token_queue.put(output)
-                    await self._emit_chunk(output, 0, final=True)
+                    clean_output = sanitize_voice_output(output)
+                    if clean_output:
+                        await pipeline.token_queue.put(clean_output)
+                        await self._emit_chunk(clean_output, 0, final=True)
                 await pipeline.token_queue.put(None)
         except asyncio.CancelledError:
             await pipeline.token_queue.put(None)
@@ -1616,6 +1642,7 @@ class VoiceAgent(Plugin):
             workflow_system=await self._workflow_system_message(workflow, phase_id),
             semantic_memories=await self._relevant_memories(prompt),
             journal=await self._memory.read_journal(),
+            journal_max_lines=self._settings.journal_max_lines,
         )
         # Bounded recent history prevents local LLM 8192-token context overflow
         recent_events = list(self._event_messages)[-8:]
@@ -1740,6 +1767,7 @@ class VoiceAgent(Plugin):
         return text[: self._event_message_limit]
 
     async def _emit_chunk(self, text: str, sequence: int, *, final: bool) -> None:
+        text = sanitize_voice_output(text)
         if not text and not final:
             return
         log.info(

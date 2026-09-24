@@ -2,16 +2,27 @@ from __future__ import annotations
 
 """ContextBuilder — the single module that assembles every voice's LLM prompt.
 
-Ordering (spec 2026-08-13-prompt-consistency, brainstorming §A2/G2/H1):
+Ordering (spec 2026-08-13-prompt-consistency, latencia 2026-09-23):
 
-    [SOUL stable] -> [Tool schemas] -> [Durable memory] -> [Recent history] -> [Volatile context]
+    [SOUL stable] -> [Tool schemas] -> [Durable memory] -> [Recent history]
+        -> [user: prompt + VOLATILE_MARKER + volatile context]
 
 The stable prefix (sections 1-3 plus fixed guidance) is built ONCE per voice
 spawn and reused byte-for-byte on every turn, so provider prefix caches
 (llama.cpp --cache-reuse, vLLM prefix caching, DeepSeek auto-caching) keep
 hitting on the same prefix. Volatile context (workflow phase contract,
-semantic memory, journal) is appended at the END of the message structure and
-never touches the frozen prefix.
+semantic memory, journal) rides INSIDE the last user turn, after the prompt,
+separated by :data:`VOLATILE_MARKER`.
+
+Why not a dedicated system message after the user (2026-09-23)? Three reasons:
+1. Lynneses de API distintas: varios gateways remotos reordenan o descartan un
+   system message que aparece DESPUÉS de un mensaje de usuario.
+2. El camino pydantic-ai filtra history a roles ("assistant", "user") — un
+   system intercalado se descartaría (misma razón que IGNORED_TRANSCRIPT_PREFIX
+   en base.py: el contenido que debe llegar a ambos caminos va en el content
+   del mensaje user).
+3. El journal crece una línea por turno: cuanto más tarde quede en el prompt,
+   menos tokens cambian entre turnos y menos re-prefill paga cada generación.
 
 Prompt caching contract:
 - ``prompt_cache_key`` is a fixed per-voice key (``kateto-voice-<voice_id>``).
@@ -24,12 +35,18 @@ Prompt caching contract:
 from kateto.providers import ChatMessage
 
 __all__ = [
+    "VOLATILE_MARKER",
     "assemble_messages",
     "prompt_cache_key",
     "session_headers",
     "stable_prompt",
     "volatile_block",
 ]
+
+# Separador entre el pedido del usuario y el contexto volátil que viaja en el
+# mismo turno. El modelo lee el bloque como memoria del sistema, no como un
+# segundo pedido.
+VOLATILE_MARKER = "[CONTEXTO INTERNO — memoria del sistema, no es el pedido del usuario]"
 
 
 def prompt_cache_key(voice_id: str) -> str:
@@ -99,7 +116,14 @@ def stable_prompt(
     if memories and memories.strip():
         sections.append(memories)
 
+    # [Restricción de brevedad de voz]: acota el turno conversacional a 1-2
+    # oraciones naturales (< 40 palabras) para evitar desbordes y finish_reason=length.
+    sections.append(
+        "Voice turn constraint: Always speak to the user in 1-2 short natural sentences (under 40 words). Never use lists, bullet points, headers, or markdown formatting."
+    )
+
     return "\n\n".join(sections)
+
 
 
 def volatile_block(
@@ -107,11 +131,13 @@ def volatile_block(
     workflow_system: str | None,
     semantic_memories: tuple[str, ...] = (),
     journal: str | None = None,
+    journal_max_lines: int | None = None,
 ) -> str | None:
     """Build the per-turn volatile context block (``None`` when empty).
 
-    Lives at the END of the message structure, after the recent history, so
-    the frozen prefix stays byte-stable across turns.
+    ``journal_max_lines`` caps the journal to its last N non-blank lines at
+    assembly time — the JOURNAL.md file is never touched, so the knob only
+    bounds the per-turn context and re-prefill, never the user's memory.
     """
     parts: list[str] = []
     if workflow_system:
@@ -119,8 +145,19 @@ def volatile_block(
     if semantic_memories:
         parts.append("Relevant memories:\n" + "\n".join(f"- {memory}" for memory in semantic_memories))
     if journal and journal.strip():
-        parts.append(journal)
+        journal = _cap_journal(journal, journal_max_lines)
+        if journal:
+            parts.append(journal)
     return "\n\n".join(parts) if parts else None
+
+
+def _cap_journal(journal: str, journal_max_lines: int | None) -> str:
+    if journal_max_lines is None:
+        return journal
+    if journal_max_lines <= 0:
+        return ""
+    lines = [line for line in journal.splitlines() if line.strip()]
+    return "\n".join(lines[-journal_max_lines:])
 
 
 def assemble_messages(
@@ -132,11 +169,14 @@ def assemble_messages(
 ) -> tuple[ChatMessage, ...]:
     """Assemble the ordered message structure for a voice turn.
 
-    [system: stable prefix] -> [recent history] -> [system: volatile context] -> [user: prompt]
+    [system: stable prefix] -> [recent history]
+        -> [user: prompt + VOLATILE_MARKER + volatile context]
     """
     messages = [ChatMessage(role="system", content=stable)]
     messages.extend(history)
     if volatile:
-        messages.append(ChatMessage(role="system", content=volatile))
-    messages.append(ChatMessage(role="user", content=prompt))
+        content = f"{prompt}\n\n{VOLATILE_MARKER}\n\n{volatile}"
+        messages.append(ChatMessage(role="user", content=content))
+    else:
+        messages.append(ChatMessage(role="user", content=prompt))
     return tuple(messages)
