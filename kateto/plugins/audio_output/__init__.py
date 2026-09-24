@@ -3,6 +3,7 @@ __all__ = [
     "BosonAudioOutput",
     "CambAudioOutput",
     "EdgeTTSAudioOutput",
+    "PiperTTSAudioOutput",
     "SoundDeviceOutputFactory",
     "ZonosAudioOutput",
 ]
@@ -30,6 +31,10 @@ def __getattr__(name):
         from .boson_tts_plugin import BosonAudioOutput
         globals()["BosonAudioOutput"] = BosonAudioOutput
         return BosonAudioOutput
+    if name == "PiperTTSAudioOutput":
+        from .piper_tts_plugin import PiperTTSAudioOutput
+        globals()["PiperTTSAudioOutput"] = PiperTTSAudioOutput
+        return PiperTTSAudioOutput
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -42,6 +47,7 @@ def create_plugins(ctx):
         ("audio_output_camb", "kateto.plugins.audio_output.camb", "CambAudioOutput", "audio_output_camb"),
         ("audio_output_edgetts", "kateto.plugins.audio_output.edgetts", "EdgeTTSAudioOutput", "audio_output_edgetts"),
         ("audio_output_boson", "kateto.plugins.audio_output.boson_tts_plugin", "BosonAudioOutput", "audio_output_boson"),
+        ("audio_output_piper", "kateto.plugins.audio_output.piper_tts_plugin", "PiperTTSAudioOutput", "audio_output_piper"),
         ("audio_output_player", "kateto.plugins.audio_output.player", "AudioOutputPlayer", "audio_output_player"),
     ]:
         settings = ctx.config.settings.plugin.get(settings_key)
@@ -64,6 +70,19 @@ def create_plugins(ctx):
                 | ({} if key_lang is None else {key_lang: getattr(vs, key_lang, None) if getattr(vs, key_lang, None) is not None else vs.get(key_lang)})
                 for name, vs in ctx.config.settings.voice.items()
                 if (getattr(vs, key_id, None) is not None or vs.get(key_id) is not None)
+            }
+            plugins.append(cls(settings, voice_map=voice_map))
+        elif settings_key == "audio_output_piper":
+            def voice_value(vs, key):
+                return getattr(vs, key, None) if getattr(vs, key, None) is not None else vs.get(key)
+            voice_map = {
+                name: {
+                    "piper_voice": str(v) if (v := voice_value(vs, "piper_voice")) is not None else "",
+                    "piper_length_scale": str(v) if (v := voice_value(vs, "piper_length_scale")) is not None else "",
+                    "piper_speaker_id": str(v) if (v := voice_value(vs, "piper_speaker_id")) is not None else "",
+                }
+                for name, vs in ctx.config.settings.voice.items()
+                if voice_value(vs, "piper_voice") is not None
             }
             plugins.append(cls(settings, voice_map=voice_map))
         else:
