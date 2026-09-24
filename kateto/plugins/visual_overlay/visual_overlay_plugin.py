@@ -4,9 +4,16 @@ import asyncio
 from typing import Any
 
 import base64
+from loguru import logger as log
 
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, InterruptData, OverlayLayout, TextChunk
+from kateto.core.event import (
+    AudioOutput,
+    InterruptData,
+    OverlayLayout,
+    TextChunk,
+    VisualExplanationData,
+)
 from kateto.core.plugin import Plugin
 from kateto.core.rms import (
     RMSProcessor,
@@ -32,6 +39,7 @@ class VisualOverlayPlugin(Plugin):
         self._default_processor = RMSProcessor()
         self._last_debate_state: dict[str, Any] | None = None
         self._debate_history: list[dict[str, Any]] = []
+        self._last_explanation: dict[str, Any] | None = None
 
         self._layout: str = "multi"
         self._voices: list[str] = ["jane", "doktor", "conquest", "whisperer"]
@@ -46,7 +54,20 @@ class VisualOverlayPlugin(Plugin):
                 self._stream_audio = bool(raw_audio)
 
     async def initialize(self) -> None:
-        pass
+        # Sin receiver, build_event_tools no expone la tool a las voces (tools.py:555-597).
+        self.required_manager.register_event("visual_explanation", VisualExplanationData)
+
+    async def on_visual_explanation(self, data: VisualExplanationData) -> None:
+        """Persistir el último diagrama y loguearlo; nunca entra a TTS (contrato aparte de text_chunk)."""
+        self._last_explanation = data.model_dump()
+        log.info(
+            "visual_explanation from {} kind={} title={!r} code={} chars msg_ref={}",
+            data.voice_id,
+            data.kind,
+            data.title,
+            len(data.code),
+            data.msg_ref,
+        )
 
     def _get_processor(self, voice_id: str | None = None) -> RMSProcessor:
         key = voice_id or ""

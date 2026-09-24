@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
@@ -115,6 +115,16 @@ class TextChunk(EventModel):
     sequence: int = Field(ge=0)
     final: bool = False
     voice_id: str | None = None
+
+
+class VisualExplanationData(EventModel):
+    """Diagrama generado por una voz para explicar visualmente (no se habla)."""
+
+    voice_id: str  # voz que lo emite (self.name)
+    kind: Literal["mermaid"] = "mermaid"
+    title: str = ""
+    code: str  # fuente mermaid (válido de parsear o fallback <pre>)
+    msg_ref: str | None = None  # opcional: correlación con un text_chunk (trace/count)
 
 
 class WordTiming(EventModel):
