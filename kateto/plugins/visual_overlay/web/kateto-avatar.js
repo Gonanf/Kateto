@@ -40,15 +40,21 @@ export const JAW_MAX_TILT_DEG = 6.5;
 export const JAW_MAX_SHAKE_PX = 16.0;
 export const HEAD_BOB_PX = 2.6;
 export const FLAP_HZ = 9;
+// Envolvente asimétrica attack/release (snap, no "suave"): cada ciclo del
+// flap (1/FLAP_HZ ≈ 111 ms) sube al máximo en JAW_ATTACK_MS (~30 ms, apertura
+// rápida) y baja al neutro en el resto del ciclo (~80 ms, cierre más lento).
+export const JAW_ATTACK_MS = 30;
 
 // Movimiento idle (issue 128): en silencio el avatar no debe quedar congelado.
-// Cada IDLE_TURN_PERIOD_MS se sortea un objetivo nuevo (giro de cabeza + sway
-// lateral hacia donde mira, MISMO signo) y la pose actual se acerca al
-// objetivo con suavizado exponencial (IDLE_EASE_TAU_MS): se lee como un giro
-// de cabeza, no como un temblor. Es movimiento de render: corre igual con voz
-// (escalado por IDLE_SPEAKING_SCALE) y sin voz (plena amplitud, boca cerrada).
+// Cada IDLE_TURN_PERIOD_MS se sortea un objetivo nuevo (giro leve de cabeza)
+// y la pose actual se acerca al objetivo con suavizado exponencial
+// (IDLE_EASE_TAU_MS): se lee como un giro de cabeza, no como un temblor.
+// El idle NUNCA aporta lateral a la mandíbula (jawOffsetX = 0 exacto, igual
+// que Y): el sway solo lo pone la voz. Es movimiento de render: corre igual
+// con voz (escalado por IDLE_SPEAKING_SCALE) y sin voz (plena amplitud, boca
+// cerrada).
 export const IDLE_TURN_PERIOD_MS = 1000;
-export const IDLE_TILT_DEG = 8.0;
+export const IDLE_TILT_DEG = 3.0;
 export const IDLE_SWAY_PX = 14.0;
 export const IDLE_EASE_TAU_MS = 300;
 export const IDLE_SPEAKING_SCALE = 0.5;
@@ -63,12 +69,23 @@ export function computeJawKinematics(rms, nowMs) {
   // Syllabic flap (~9Hz): multiplica la amplitud (0..1), nunca suma un piso
   // fijo — sin voz no hay desplazamiento (bug 112: el piso de 6px la dejaba
   // pegada arriba con wobble entre ~-3 y ~-46px sin cruzar el neutro).
-  // Ataque marcado: el flap se eleva a 1.25 para afilar el pico (cierra más
-  // tiempo, abre con más punch) sin dejar de volver a 0 varias veces por s.
-  const flap = 0.5 + 0.5 * Math.sin((t / 1000) * 2 * Math.PI * FLAP_HZ);
-  const shapedFlap = Math.pow(flap, 1.25);
+  // Envolvente ASIMÉTRICA attack/release (snap): subida rápida al máximo en
+  // JAW_ATTACK_MS y cierre más lento en el resto del ciclo. Función continua
+  // del tiempo (interpolada entre frames, sin saltos discretos) que toca el
+  // neutro 2 veces por ciclo. El snap se hace acá, no en CSS (la transición
+  // de 50 ms por frame era el "muy smoothly": seno puro y simétrico + CSS).
+  const periodMs = 1000 / FLAP_HZ;
+  const attackFrac = JAW_ATTACK_MS / periodMs;
+  const phase = (((t / periodMs) % 1) + 1) % 1;
+  let flap;
+  if (phase < attackFrac) {
+    const u = phase / attackFrac;
+    flap = 1 - (1 - u) * (1 - u); // ease-out: apertura rápida al máximo
+  } else {
+    flap = 1 - (phase - attackFrac) / (1 - attackFrac); // cierre lineal lento
+  }
   // Signo en un solo lugar (bug 125): negativo = la capa de ARRIBA sube = abre.
-  const openMovement = Number((-factor * JAW_MAX_TRAVEL_PX * shapedFlap).toFixed(2));
+  const openMovement = Number((-factor * JAW_MAX_TRAVEL_PX * flap).toFixed(2));
   const sideDir = (Math.random() * 2 - 1);
   const sideShake = Number((sideDir * factor * JAW_MAX_SHAKE_PX).toFixed(2));
   // Tilt acotado al mismo máximo del backend (antes llegaba a ±40°).
@@ -100,9 +117,9 @@ export function computeBackendKinematics(rms) {
 // --- Idle motion (issue 128) -------------------------------------------------
 // Clase con estado, rng y reloj INYECTABLES para tests deterministas (mismo
 // patrón que el intervalo aleatorio de visión, bug 112/fix-112).
-// Cada IDLE_TURN_PERIOD_MS sortea un objetivo nuevo: rotación en
-// ±IDLE_TILT_DEG y sway lateral en ±IDLE_SWAY_PX con el MISMO signo (el avatar
-// "se mueva hacia donde mira"). La pose se acerca al objetivo con easing
+// Cada IDLE_TURN_PERIOD_MS sortea un objetivo nuevo de rotación en
+// ±IDLE_TILT_DEG. (El sway lateral se sortea pero NO se aplica: el idle nunca
+// aporta lateral a la mandíbula.) La pose se acerca al objetivo con easing
 // exponencial (tau = IDLE_EASE_TAU_MS): sin saltos entre frames.
 export class IdleMotion {
   constructor({ rng = Math.random, startMs = 0 } = {}) {
@@ -137,19 +154,21 @@ export class IdleMotion {
     const alpha = dt > 0 ? 1 - Math.exp(-dt / IDLE_EASE_TAU_MS) : 0;
     this._pose.rotation += alpha * (this._target.rotation - this._pose.rotation);
     this._pose.sway += alpha * (this._target.sway - this._pose.sway);
-    // jawOffsetY SIEMPRE 0 exacto: el idle no abre la boca (bug 112).
-    return { jawRotation: this._pose.rotation, jawOffsetX: this._pose.sway, jawOffsetY: 0 };
+    // jawOffsetX y jawOffsetY SIEMPRE 0 exacto: el idle no abre la boca
+    // (bug 112) ni la corre de lado — el lateral lo pone solo la voz.
+    return { jawRotation: this._pose.rotation, jawOffsetX: 0, jawOffsetY: 0 };
   }
 }
 
 // Suma idle + cinemática de voz. `speaking` escala el idle (la boca es la
 // protagonista hablando); en silencio va a plena amplitud y jawOffsetY queda
-// en 0 exacto porque el idle nunca aporta Y y la voz silenciosa es 0.
+// en 0 exacto porque el idle nunca aporta Y. El idle tampoco aporta X NUNCA:
+// jawOffsetX sale solo de la voz (única fuente de pose idle: IdleMotion).
 export function combineIdleWithVoice(idlePose, voiceKinematics, speaking) {
   const s = speaking ? IDLE_SPEAKING_SCALE : 1.0;
   const voice = voiceKinematics || { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
   return {
-    jawOffsetX: voice.jawOffsetX + idlePose.jawOffsetX * s,
+    jawOffsetX: voice.jawOffsetX, // idle lateral = 0 exacto, no se suma
     jawOffsetY: voice.jawOffsetY + idlePose.jawOffsetY, // idle Y = 0 exacto
     jawRotation: voice.jawRotation + idlePose.jawRotation * s,
   };
@@ -280,7 +299,8 @@ export class KatetoAvatar extends HTMLElement {
           pointer-events: none;
           transform-origin: 50% 50%;
           will-change: transform;
-          transition: transform 0.05s ease-out;
+          /* sin transición: el rAF escribe cada frame, el snap vive en la cinemática */
+          transition: none;
         }
         .layer-jaw {
           position: absolute;
@@ -292,7 +312,8 @@ export class KatetoAvatar extends HTMLElement {
           z-index: 1;
           transform-origin: 50% 65%;
           will-change: transform;
-          transition: transform 0.04s ease-out;
+          /* sin transición: el rAF escribe cada frame, el snap vive en la cinemática */
+          transition: none;
           pointer-events: none;
         }
         .avatar-fallback {
@@ -419,14 +440,16 @@ export class KatetoAvatar extends HTMLElement {
       return;
     }
     // Modo backend (issue 128): el idle también corre aquí — es movimiento de
-    // render, no depende del RMS. Hablando se escala; la boca (jawOffsetY del
-    // backend) no se toca: silencio = 0 exacto (bug 112).
+    // render, no depende del RMS. UNA sola fuente de pose idle:
+    // combineIdleWithVoice (no reinyectar el lateral por este camino: el idle
+    // nunca aporta X ni Y; silencio = 0 exacto, bug 112).
     if (this._idleMotion) {
       const idle = this._idleMotion.update(performance.now());
       const speaking = Math.abs(jawOffsetY) > 0.5;
-      const s = speaking ? IDLE_SPEAKING_SCALE : 1.0;
-      jawOffsetX += idle.jawOffsetX * s;
-      jawRotation += idle.jawRotation * s;
+      const k = combineIdleWithVoice(idle, { jawOffsetX, jawOffsetY, jawRotation }, speaking);
+      jawOffsetX = k.jawOffsetX;
+      jawOffsetY = k.jawOffsetY;
+      jawRotation = k.jawRotation;
     }
     this._jaw.style.transform = `translate(${jawOffsetX}px, ${jawOffsetY}px) rotate(${jawRotation}deg)`;
     if (headOffsetY !== 0 || this._head.style.transform !== 'translateY(0px)') {

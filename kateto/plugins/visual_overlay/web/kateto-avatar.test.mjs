@@ -154,15 +154,14 @@ describe("idle motion (issue 128: rotación nueva cada segundo, se mueve hacia a
     assert.ok(changed >= 5, `el objetivo debería cambiar cada segundo; cambió ${changed}/6`);
   });
 
-  it("rotación dentro de ±IDLE_TILT_DEG, sway dentro de ±IDLE_SWAY_PX, mismo signo", () => {
-    const { frames } = runIdle(7);
+  it("rotación dentro de ±IDLE_TILT_DEG y jawOffsetX === 0 exacto (el idle nunca aporta lateral)", () => {
+    const { idle, frames } = runIdle(7);
     for (const { pose } of frames) {
       assert.ok(Math.abs(pose.jawRotation) <= IDLE_TILT_DEG, `rot ${pose.jawRotation} fuera de rango`);
-      assert.ok(Math.abs(pose.jawOffsetX) <= IDLE_SWAY_PX, `sway ${pose.jawOffsetX} fuera de rango`);
-      if (Math.abs(pose.jawRotation) > 0.01) {
-        assert.equal(Math.sign(pose.jawRotation), Math.sign(pose.jawOffsetX), "sway debe mirar hacia la rotación");
-      }
+      assert.equal(pose.jawOffsetX, 0, "el idle nunca debe correr la mandíbula de lado");
     }
+    // El objetivo de rotación sigue sorteándose en ±IDLE_TILT_DEG.
+    assert.ok(Math.abs(idle.target.rotation) <= IDLE_TILT_DEG);
   });
 
   it("el acercamiento es suave (sin saltos entre frames de ~50 ms)", () => {
@@ -177,13 +176,13 @@ describe("idle motion (issue 128: rotación nueva cada segundo, se mueve hacia a
 
   it("converge al objetivo dentro de cada turno (sin oscilar de más)", () => {
     const idle = new IdleMotion({ rng: makeRng(5) });
-    // Dentro de un turno el objetivo es fijo: la distancia a él debe decrecer.
+    // Dentro de un turno el objetivo es fijo: la distancia a él debe decrecer
+    // (solo rotación: el idle nunca aporta lateral, jawOffsetX = 0 exacto).
     idle.update(0);
     let prevDist = Infinity;
     for (let t = 50; t <= IDLE_TURN_PERIOD_MS - 50; t += 50) {
       const pose = idle.update(t);
-      const tgt = idle.target;
-      const dist = Math.hypot(pose.jawRotation - tgt.rotation, pose.jawOffsetX - tgt.sway);
+      const dist = Math.abs(pose.jawRotation - idle.target.rotation);
       assert.ok(dist <= prevDist + 1e-9, `distancia al objetivo creció: ${prevDist} → ${dist}`);
       prevDist = dist;
     }

@@ -20,6 +20,7 @@ from kateto.voices.base import (
     VoiceRole,
 )
 from kateto.voices.context import (
+    VOLATILE_MARKER,
     assemble_messages,
     prompt_cache_key,
     session_headers,
@@ -110,12 +111,17 @@ async def test_volatile_context_is_appended_not_inlined(tmp_path: Path) -> None:
         await manager.wait_for_idle()
 
         messages = provider.requests[0].messages
-        # Then: the journal text appears in a dedicated system message AFTER the user prompt.
-        volatile = next(
-            m for m in messages if m.role == "system" and "voice_idle" in m.content
-        )
-        assert messages.index(volatile) == len(messages) - 2
-        assert messages[-1].role == "user"
+        # Then: el journal viaja DENTRO del turno de usuario, después del prompt
+        # y separado por el marcador (2026-09-23). Un system intercalado se
+        # descartaría en el camino pydantic (filtro a roles assistant/user) y
+        # algunos gateways remotos reordenan system messages posteriores.
+        last = messages[-1]
+        assert last.role == "user"
+        assert last.content.startswith("Hi")
+        assert VOLATILE_MARKER in last.content
+        assert "voice_idle" in last.content
+        assert last.content.index("voice_idle") > last.content.index(VOLATILE_MARKER)
+        assert not any(m.role == "system" and "voice_idle" in m.content for m in messages)
     finally:
         await manager.close()
 
@@ -201,7 +207,7 @@ async def test_openai_compatible_provider_sends_session_headers(monkeypatch: pyt
     assert client_kwargs["timeout"] == 600
 
 
-def test_assemble_messages_orders_stable_history_volatile_user() -> None:
+def test_assemble_messages_embeds_volatile_in_last_user_turn() -> None:
     history = (ChatMessage(role="user", content="prev"),)
     messages = assemble_messages(
         stable="STABLE",
@@ -209,10 +215,24 @@ def test_assemble_messages_orders_stable_history_volatile_user() -> None:
         volatile="VOLATILE",
         prompt="Now",
     )
-    assert [m.role for m in messages] == ["system", "user", "system", "user"]
+    assert [m.role for m in messages] == ["system", "user", "user"]
     assert messages[0].content == "STABLE"
-    assert messages[2].content == "VOLATILE"
-    assert messages[3].content == "Now"
+    assert messages[1].content == "prev"
+    last = messages[-1].content
+    assert last.startswith("Now")
+    assert "VOLATILE" in last
+    assert last.index("VOLATILE") > last.index(VOLATILE_MARKER)
+
+
+def test_assemble_messages_bare_prompt_without_volatile() -> None:
+    messages = assemble_messages(
+        stable="STABLE",
+        history=(),
+        volatile=None,
+        prompt="Now",
+    )
+    assert [m.role for m in messages] == ["system", "user"]
+    assert messages[-1].content == "Now"
 
 
 def test_stable_prompt_skips_soul_when_duplicate_of_profile() -> None:
@@ -232,6 +252,52 @@ def test_stable_prompt_skips_soul_when_duplicate_of_profile() -> None:
 
 def test_volatile_block_none_without_inputs() -> None:
     assert volatile_block(workflow_system=None) is None
+
+
+def test_volatile_block_caps_journal_lines() -> None:
+    journal = "line1\n\nline2\nline3\n"
+    assert volatile_block(workflow_system=None, journal=journal) == journal
+    assert volatile_block(workflow_system=None, journal=journal, journal_max_lines=2) == "line2\nline3"
+    assert volatile_block(workflow_system=None, journal=journal, journal_max_lines=0) is None
+    assert volatile_block(workflow_system=None, journal=None, journal_max_lines=5) is None
+    assert volatile_block(workflow_system=None, journal=journal, journal_max_lines=100) == "line1\nline2\nline3"
+
+
+@pytest.mark.asyncio
+async def test_journal_cap_flows_from_voice_settings(tmp_path: Path) -> None:
+    # Given: un journal de 3 líneas y una voz con journal_max_lines=2.
+    _reference(tmp_path)
+    (tmp_path / "voices" / "jane" / "JOURNAL.md").write_text(
+        "line1\nline2\nline3\n", encoding="utf-8"
+    )
+    provider = RecordingProvider()
+    voice = VoiceAgent(
+        profile=VoiceProfile(
+            voice_id="jane",
+            display_name="Jane",
+            role=VoiceRole.SITUATIONAL_ABSURD,
+            system_prompt="system",
+            relevance_terms=frozenset(),
+        ),
+        config_dir=tmp_path,
+        provider=provider,
+        settings=VoiceSettings(journal_max_lines=2),
+    )
+    manager = PluginManager()
+    await manager.enable_plugin(voice)
+
+    try:
+        # When: se arma el turno.
+        await manager.emit("generate", GenerateData(prompt="Hi"), source="fixture")
+        await manager.wait_for_idle()
+
+        # Then: el journal llega capado a las últimas 2 líneas, sin tocar el archivo.
+        last = provider.requests[0].messages[-1].content
+        assert "line1" not in last
+        assert "line2" in last and "line3" in last
+        assert (tmp_path / "voices" / "jane" / "JOURNAL.md").read_text() == "line1\nline2\nline3\n"
+    finally:
+        await manager.close()
 
 
 def _reference(config_dir: Path) -> None:

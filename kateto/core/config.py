@@ -189,6 +189,11 @@ class VoiceSettings(_ExtensibleConfigModel):
     # KV-cache prefill of the system prompt at startup. Disable for harnesses
     # that manage conversation state themselves.
     prefill: bool = True
+    # Journal prompt budget: cuando está seteado, sólo las últimas N líneas no
+    # vacías del JOURNAL.md entran al bloque volátil de cada turno. El archivo
+    # nunca se toca — sólo acota el re-prefill y la contaminación de contexto
+    # del journal que crece una línea por turno. None = journal completo.
+    journal_max_lines: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def validate_dept_fields(self) -> Self:
