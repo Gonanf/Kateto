@@ -363,7 +363,9 @@ async def test_workflow_calls_real_voice_provider_for_automatic_request(tmp_path
 
         # Then: the targeted request reaches the provider with event-derived history.
         assert len(provider.requests) == 1
-        assert [message.content for message in provider.requests[0].messages].count("ask") == 1
+        # El ultimo mensaje del usuario lleva el prompt mas el bloque volatil detras del
+        # VOLATILE_MARKER, asi que se compara por prefijo, no por igualdad.
+        assert sum(m.content.startswith("ask") for m in provider.requests[0].messages) == 1
         assert [event.target for event in manager.get_events() if event.name == "generate"] == ["doktor"]
     finally:
         await manager.close()
