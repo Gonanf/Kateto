@@ -39,8 +39,11 @@ whispercpp = [
 llamacpp = [
     "llama-cpp-python>=0.3.0",
 ]
+piper = [
+    "piper-tts>=1.6.0",
+]
 all = [
-    "kateto[classifier,llamacpp,whispercpp]",
+    "kateto[classifier,llamacpp,whispercpp,piper]",
 ]
 
 [project.scripts]

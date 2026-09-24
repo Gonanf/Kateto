@@ -39,10 +39,20 @@ def _edgetts_prompt_block() -> str:
     )
 
 
+def _piper_prompt_block() -> str:
+    return (
+        "AUDIO GENERATION INSTRUCTION (Piper TTS):\n"
+        "Your speech is synthesized locally by Piper (CPU, no network). "
+        "Speak in clear, natural, complete sentences. Avoid inline markup tags, "
+        "code blocks, emoji, or unnatural punctuation."
+    )
+
+
 _PROMPT_BLOCK_REGISTRY: dict[str, Callable[[], str]] = {
     "boson": _boson_prompt_block,
     "edgetts": _edgetts_prompt_block,
     "edge_tts": _edgetts_prompt_block,
+    "piper": _piper_prompt_block,
 }
 
 
