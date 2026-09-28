@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from enum import StrEnum
+from typing import Any
 
 from loguru import logger
 
@@ -28,6 +29,20 @@ log = logger
 _IGNORE_WINDOW: int = 8
 
 
+def _eot_opt(settings: Any | None, key: str, default: Any) -> Any:
+    if settings is None:
+        return default
+    value = getattr(settings, key, None)
+    if value is None:
+        getter = getattr(settings, "get", None)
+        if callable(getter):
+            try:
+                value = getter(key, None)
+            except Exception:  # noqa: BLE001
+                value = None
+    return default if value is None else value
+
+
 class VoiceTurnState(StrEnum):
     IDLE = "idle"
     THINKING = "thinking"
@@ -50,8 +65,12 @@ class TurnGate(Plugin):
     queue. No global singleton: the gate is one more subscriber.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Any | None = None) -> None:
         super().__init__("turn_gate")
+        try:
+            self._eot_max_holds = max(0, int(_eot_opt(settings, "eot_max_holds", 2)))
+        except (TypeError, ValueError):
+            self._eot_max_holds = 2
         self._states: dict[str, VoiceTurnState] = {}
         self._active: str | None = None
         self._active_prompt: str | None = None
@@ -60,6 +79,16 @@ class TurnGate(Plugin):
         self._steering = False
         self._ignored: deque[str] = deque(maxlen=_IGNORE_WINDOW)
         self._pending: deque[QueuedTurn] = deque()
+        # ponytail: text-level hold only — provisional audio transcription
+        # (mic->whisper loop on partial audio) was skipped on purpose: holding
+        # the transcribed text here and merging it with the next turn needs
+        # zero changes in audio_input/audio_processor.
+        self._eot_pending: dict[str, str] = {}
+        # ponytail: hold counter, not a wall-clock flush timer — a voice held
+        # eot_max_holds times in a row executes anyway; upgrade to a timer
+        # flush (hold + deadline, pending text auto-released) if partial turns
+        # need time-based completion instead of a count bound.
+        self._eot_holds: dict[str, int] = {}
 
     async def initialize(self) -> None:
         manager = self.required_manager
@@ -185,6 +214,46 @@ class TurnGate(Plugin):
         self._active = voice
         self._active_prompt = prompt
         self._states[voice] = VoiceTurnState.THINKING
+
+    async def adecide_eot(self, *, voice: str, prompt: str, origin: str) -> Decision:
+        pending = self._eot_pending.pop(voice, None)
+        if pending:
+            prompt = f"{pending} {prompt}"
+        gate = self._eot_gate()
+        if gate is None:
+            self._eot_holds.pop(voice, None)
+            return self.decide(voice=voice, prompt=prompt, origin=origin)
+        from kateto.plugins.system.eot_gate import EotAction
+
+        try:
+            result = await gate.aclassify(prompt)
+        except Exception as error:  # noqa: BROAD_EXCEPT_OK
+            log.warning("turn_gate: eot classify raised ({}), fail-open", error)
+            self._eot_holds.pop(voice, None)
+            return self.decide(voice=voice, prompt=prompt, origin=origin)
+        if result.action is EotAction.WAIT:
+            holds = self._eot_holds.get(voice, 0)
+            if holds >= self._eot_max_holds:
+                self._eot_holds.pop(voice, None)
+                return self.decide(voice=voice, prompt=prompt, origin=origin)
+            self._eot_holds[voice] = holds + 1
+            self._eot_pending[voice] = prompt
+            return Decision.QUEUE
+        self._eot_holds.pop(voice, None)
+        if result.action is EotAction.SUPPRESS:
+            return Decision.DISCARD
+        return self.decide(voice=voice, prompt=prompt, origin=origin)
+
+    def _eot_gate(self):  # -> EotGate | None (lazy import: avoids a cycle)
+        from kateto.plugins.system.eot_gate import EotGate
+
+        manager = self.manager
+        if manager is None:
+            return None
+        gate = manager.get_plugin("eot_gate")
+        if not isinstance(gate, EotGate) or not gate.available:
+            return None
+        return gate
 
     def _consume_ignored(self, prompt: str) -> bool:
         for index, text in enumerate(self._ignored):

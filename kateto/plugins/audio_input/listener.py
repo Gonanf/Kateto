@@ -10,6 +10,7 @@ from asyncio import (  # noqa: ANYIO_OK
     get_running_loop,
     sleep,
     to_thread,
+    wait_for,
 )
 from collections.abc import Callable
 from contextlib import suppress
@@ -70,6 +71,13 @@ class AudioInputPlugin(Plugin):
         self._recording_status_emitted = False
         self._recording = False
         self._last_resume_gap_ms: float | None = None
+        # Phase B seam (EOT wait): an object exposing
+        # ``async def transcribe_parcial(pcm: bytes) -> str``, injected later by
+        # the partial-ASR task (ParakeetStreamProvider, other worktree). When
+        # set AND ``config.eot_partial_hold`` is true, a silence that would close
+        # the turn instead asks the EOT gate; if it says "wait", we keep
+        # accumulating. None by default -> turn closes exactly as today.
+        self._partial_transcriber: object | None = None
 
     @property
     def capture_task(self) -> Task[None] | None:
@@ -369,7 +377,51 @@ class AudioInputPlugin(Plugin):
         if self._turn_flush_task is not current_task():
             return
         self._turn_flush_task = None
+        # Phase B seam: if the EOT gate says this partial utterance is an
+        # incomplete turn ("wait"), keep accumulating instead of flushing.
+        # Off by default (config.eot_partial_hold) and no transcriber injected
+        # -> this returns False immediately, so the flush path is unchanged.
+        if await self._partial_wait_holds():
+            self._rearm_turn_flush()
+            return
         await self._flush_turn(reason="silence")
+
+    async def _partial_wait_holds(self) -> bool:
+        """True -> the silence should NOT close the turn (classifier says wait).
+
+        Fail-open by construction: any missing piece (flag off, no transcriber,
+        no gate, transcribe error, classify error/timeout) returns False and the
+        turn closes exactly as today. This is the only hook a ``transcribe_parcial``
+        provider (ParakeetStreamProvider, other worktree) needs to plug in.
+        """
+        if not self._config.eot_partial_hold:
+            return False
+        transcriber = self._partial_transcriber
+        if transcriber is None or not self._turn_buffer:
+            return False
+        manager = self.manager
+        if manager is None:
+            return False
+        gate = manager.get_plugin("eot_gate")
+        if gate is None or not getattr(gate, "available", False):
+            return False
+        try:
+            text = await transcriber.transcribe_parcial(bytes(self._turn_buffer))
+        except Exception as error:  # noqa: BLE001
+            log.info("[mic] partial transcribe failed ({}), closing turn as today", error)
+            return False
+        deadline = self._config.turn_silence_timeout + self._config.turn_hold_ms / 1000.0
+        from kateto.plugins.system.eot_gate import EotAction
+
+        try:
+            result = await wait_for(gate.aclassify(text), timeout=deadline)
+        except Exception as error:  # noqa: BLE001
+            log.info("[mic] eot partial classify failed ({}), closing turn as today", error)
+            return False
+        if result.action is not EotAction.WAIT:
+            return False
+        log.info("[mic] eot says 'wait' on partial turn, keeping accumulation open")
+        return True
 
     async def _flush_turn(self, *, reason: str = "silence") -> None:
         if not self._turn_buffer:

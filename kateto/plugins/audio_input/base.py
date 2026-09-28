@@ -102,6 +102,11 @@ class AudioInputConfig:
     playback_idle_timeout: float = DEFAULT_PLAYBACK_IDLE_TIMEOUT
     dept: str | None = "fun"
     callback_queue_capacity: int = 32
+    # Phase B (EOT wait): when true AND a `_partial_transcriber` is injected on
+    # the listener, a silence that would close the turn is transcribed as a
+    # partial and the EOT gate may keep accumulating ("wait"). Off by default:
+    # behavior is identical to today.
+    eot_partial_hold: bool = False
 
     @classmethod
     def from_settings(
@@ -187,6 +192,10 @@ class AudioInputConfig:
             dept=dept,
             callback_queue_capacity=(
                 32 if settings.callback_queue_capacity is None else settings.callback_queue_capacity
+            ),
+            eot_partial_hold=(
+                False if getattr(settings, "eot_partial_hold", None) is None
+                else bool(settings.eot_partial_hold)
             ),
         )
 

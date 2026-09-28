@@ -999,7 +999,14 @@ class VoiceAgent(Plugin):
         gate = self._turn_gate()
         if gate is None:
             return Decision.EXECUTE
-        decision = gate.decide(voice=self.name, prompt=prompt, origin=origin)
+        # EOT connection (brief 2, fase A). Todo el flujo del turno pasa por
+        # aquí (_pass_turn_gate), así que la puerta híbrida no puede ser un
+        # camino paralelo que nadie llama: decide() por sí solo ignoraba al
+        # clasificador. adecide_eot es async (corre el proceso hijo del
+        # clasificador vía asyncio.to_thread) y, cuando el gate no está,
+        # falle o diga "respond", delega en el decide() síncrono de siempre —
+        # comportamiento exacto de hoy. Solo cambia este punto de entrada.
+        decision = await gate.adecide_eot(voice=self.name, prompt=prompt, origin=origin)
         if decision is Decision.QUEUE:
             gate.enqueue(event=event, data=data, target=self.name, front=origin == "external")
             log.info("[{}] turn queued ({})", self.name, origin)
