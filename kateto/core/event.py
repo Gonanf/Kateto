@@ -54,6 +54,10 @@ class TranscriptionData(EventModel):
     language: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     duration_ms: float | None = Field(default=None, ge=0.0)
+    # Streaming (parakeet `--stream`): True = hipótesis intermedia, False = turno
+    # cerrado. Mismo evento `transcription` en ambos casos; quien hoy escucha sin
+    # filtrar sigue recibiendo solo finales si ignora el campo (compat total).
+    partial: bool = False
 
 
 class VisionFrameData(EventModel):

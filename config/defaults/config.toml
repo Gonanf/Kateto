@@ -35,6 +35,40 @@ enabled = true
 # gpu_device = 1 # whisper.cpp Vulkan device index (see vulkaninfo --summary)
 endpoint = "http://127.0.0.1:8090"
 
+# Local parakeet (CrispASR) STT — ALTERNATIVE to audio_processor_whisper.
+# Keep exactly ONE of the two `enabled = true`: both subscribe to `audio_chunk`
+# with capability `transcribe`, so both would transcribe every chunk.
+#
+# backend selects the transport:
+#   server (default) — talks to an externally-launched CrispASR `--server` process
+#                      (model resident; see ASR-PARAKEET.md for the launch command).
+#                      The process must be up BEFORE enabling the plugin.
+#   cli              — spawns the binary per invocation (full model load each turn).
+#   stream           — opens the binary ONCE in `--stream --stream-json` mode and
+#                      feeds raw PCM per audio_chunk (live partials + finals).
+[plugin.audio_processor_parakeet]
+enabled = false
+backend = "server"              # server (recommended) | cli | stream
+motor = "ultra"                 # ultra (quality) | redux (min TTFT profile). For
+                                # `cli`/`stream` it picks the model; for `server`
+                                # it is informational only (server holds its model).
+host = "127.0.0.1"
+port = 8098
+language = "es"                 # forced language (e.g. es, en), omitted when unset
+timeout = 120.0                 # per-transcription timeout (server can hang)
+# --- cli/stream-only overrides (ignored when backend = "server") ---
+# bin = "/run/media/chaos/secundario/proyectos/crispasr/crispasr-linux-x86_64-vulkan/crispasr"
+# model = ""        # e.g. .../parakeet-redux-q8_0.gguf to pin the redux motor file
+# gpu_backend = "vulkan"        # GPU backend passed to --gpu-backend (cpu = no GPU flags)
+# device = "1"
+# --- stream-only tuning (ignored unless backend = "stream") ---
+# stream_step_ms = 500                # accumulation window: bounds partial cadence
+# stream_final_on_silence_ms = 600    # silence after speech before the final closes
+# stream_max_restarts = 3             # child restarts before degrading to no-streaming
+# stream_final_wait_s = 30.0          # aclose() waits this long for the last final
+# ventana = 30   # sliding-window seconds — long audio only (ignored per-chunk)
+# solape = 3     # overlap seconds for sliding-window
+
 [plugin.executor_classifier]
 enabled = true
 # backend = "mmbert" # mmbert | llamacpp | http | command
