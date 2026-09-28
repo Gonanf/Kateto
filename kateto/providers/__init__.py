@@ -1,5 +1,6 @@
 from .agent import AgentResponse, OpenAIAgentProvider, ToolCall, ToolExecutor
 from ._models import WorkflowCandidate
+from .parakeet import ParakeetProvider, ParakeetServerProvider, ParakeetStreamProvider, create_parakeet_provider
 from .classifier import (
     ClassifierProvider,
     LlamaCppClassifierProvider,
@@ -46,6 +47,10 @@ __all__ = [
     "WhisperServerProcessProvider",
     "PyWhisperCppProvider",
     "LocalWhisperProvider",
+    "ParakeetProvider",
+    "ParakeetServerProvider",
+    "ParakeetStreamProvider",
+    "create_parakeet_provider",
     "WorkflowSelection",
     "ZonosProvider",
 ]
