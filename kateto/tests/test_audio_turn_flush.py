@@ -88,6 +88,7 @@ def make_settings(
     max_turn_secs: float | None = None,
     turn_hold_ms: float | None = None,
     silence_timeout: float = 0.1,
+    eot_partial_hold: bool | None = None,
 ) -> PluginSettings:
     return PluginSettings(
         device="fixture",
@@ -98,6 +99,7 @@ def make_settings(
         turn_silence_timeout=turn_silence_timeout,
         max_turn_secs=max_turn_secs,
         turn_hold_ms=turn_hold_ms,
+        eot_partial_hold=eot_partial_hold,
     )
 
 
@@ -280,3 +282,47 @@ async def test_turn_hold_ms_retains_and_cancels_on_speech_within_hold() -> None:
     finally:
         capture.stop()
         await manager.close()
+
+
+class FakePartialTranscriber:
+    def __init__(self, text: str = "eh... ya iba a decir") -> None:
+        self.text = text
+        self.pcm: bytes | None = None
+
+    async def transcribe_parcial(self, pcm: bytes) -> str:
+        self.pcm = pcm
+        return self.text
+
+
+def test_eot_partial_seam_is_off_by_default() -> None:
+    # Given: a mic with default settings (eot_partial_hold not set) and a
+    # transcriber injected anyway.
+    mic, _factory = make_microphone(vad_scores=[0.9])
+    mic._turn_buffer.extend(b"\x01\x00" * 3_200)
+    mic._partial_transcriber = FakePartialTranscriber()
+    # When/Then: the flag is off -> the seam never holds, flush stays today's.
+    assert mic._config.eot_partial_hold is False
+    assert asyncio.run(mic._partial_wait_holds()) is False
+
+
+@pytest.mark.asyncio
+async def test_eot_partial_seam_fails_open_without_transcriber_or_gate() -> None:
+    # Given: the hold flag enabled but no transcriber attached.
+    async def _run() -> bool:
+        settings = make_settings(eot_partial_hold=True)
+        mic = MicrophoneAudioInput(
+            settings,
+            vad=SileroVad(SequencedSileroModel([0.9]), threshold=0.5),
+            capture_factory=FixtureCaptureFactory(),
+        )
+        mic._turn_buffer.extend(b"\x01\x00" * 3_200)
+        manager = PluginManager()
+        await manager.enable_plugin(mic)
+        try:
+            # No _partial_transcriber -> fail-open False (turn closes as today).
+            assert await mic._partial_wait_holds() is False
+            return True
+        finally:
+            await manager.close()
+
+    assert await _run()

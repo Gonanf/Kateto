@@ -161,6 +161,22 @@ enabled = true
 host = "127.0.0.1"
 port = 8099
 
+# End-of-turn two-stage text gate (fail-open: off/disabled/missing classifier
+# behaves exactly like today — TurnGate.decide() path unchanged).
+# EOT_ETAPA2 env overrides etapa2 at runtime (base|ft; unknown -> base+warning).
+# Etapa 2 choice: only ft is servable (REPORTE-HIBRIDO.md, CPU batch 1: ft ridge
+# re-entrenada mismo forward F1 0.8412 @ ~44ms, p95 51.6, unica que cumple).
+# base has NO exported ONNX head (it needs a second forward of the pretrained
+# encoder under a single---onnx protocol), so base == gate off: the gate reports
+# unavailable with a warning and every classify fails open to RESPOND. Set
+# etapa2="ft" (or EOT_ETAPA2=ft) to actually run the classifier.
+[plugin.eot_gate]
+enabled = false
+timeout = 1.0
+python = "python3"
+script = "/run/media/chaos/secundario/proyectos/kateto-eot2/clasificador_hibrido.py"
+etapa2 = "base"
+
 [plugin.executor_vision]
 enabled = true
 source_default = "screen"

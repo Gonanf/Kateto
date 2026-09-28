@@ -18,6 +18,7 @@ from kateto.plugins.system.external_mcp import ExternalMcpManager
 from kateto.plugins.system.http_server import HttpServer
 from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
 from kateto.plugins.system.turn_gate import TurnGate
+from kateto.plugins.system.eot_gate import EotGate
 from kateto.plugins.system.voice_manager import VoiceManager
 
 
@@ -81,4 +82,6 @@ def create_plugins(ctx: DiscoveryContext) -> tuple[Plugin, ...]:
 
     from kateto.plugins.system.openai_server import OpenAIServerPlugin
     openai_plugin = OpenAIServerPlugin(manager=manager)
-    return TurnGate(), voice_manager, workflow_engine, openai_plugin
+    eot_gate_settings = ctx.config.settings.plugin.get("eot_gate")
+    eot_gate = EotGate(eot_gate_settings)
+    return TurnGate(), eot_gate, voice_manager, workflow_engine, openai_plugin
