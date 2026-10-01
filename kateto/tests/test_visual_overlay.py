@@ -1,6 +1,7 @@
 import json
 import math
 import shutil
+import socket
 import subprocess
 from pathlib import Path
 import struct
@@ -479,10 +480,14 @@ async def test_game_event_sin_rms_no_mueve_el_jaw(tmp_path: Path):
         manager = PluginManager()
         overlay = _FakeOverlay()
         manager.register_plugin(overlay)
-        server = HttpServer(manager, host="127.0.0.1", port=8997, config_dir=tmp_path)
+        # puerto efímero: otro test del mismo archivo puede fijar un puerto y colisionar
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        server = HttpServer(manager, host="127.0.0.1", port=port, config_dir=tmp_path)
         await server.start()
         try:
-            url = "http://127.0.0.1:8997/api/game/event"
+            url = f"http://127.0.0.1:{port}/api/game/event"
 
             # When: evento sin dato de audio, y evento con rms vacío
             for payload in (
