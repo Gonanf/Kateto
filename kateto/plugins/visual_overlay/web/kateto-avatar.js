@@ -26,11 +26,11 @@
 //   energía de la voz y el flap silábico (~9 Hz) la multiplica entre 0 y el
 //   máximo, así la mandíbula cruza el neutro varias veces por segundo.
 // - Recorrido máximo configurable en un solo lugar (JAW_MAX_TRAVEL_PX).
-// Muppet jaw: fast up/down flap PLUS random sideways shake and tilt via
-// Math.random(). The JAW layer alone may sway — the full character must never
-// move sideways (that was the card-level `transform` bug, fixed with the
-// independent CSS `scale` property). Primary animation path for both
-// synthetic TTS (pulseWord) and live audio (setRms).
+// Muppet jaw: fast up/down flap PLUS sideways sway and tilt. The JAW layer
+// alone may sway — the full character must never move sideways (that was the
+// card-level `transform` bug, fixed with the independent CSS `scale`
+// property). Primary animation path for both synthetic TTS (pulseWord) and
+// live audio (setRms).
 // Amplitud alta y agresiva (bugs 122, 125 y 128): el tope teórico es 40 px
 // con media ~12 px en habla normal — el recorrido anterior (32 px, media
 // ~10 px) seguía pareciendo corto a voz fuerte (issue 128). Todo en NEGATIVO
@@ -58,13 +58,27 @@ export const IDLE_TILT_DEG = 3.0;
 export const IDLE_SWAY_PX = 14.0;
 export const IDLE_EASE_TAU_MS = 300;
 export const IDLE_SPEAKING_SCALE = 0.5;
-export function computeJawKinematics(rms, nowMs) {
-  if (typeof rms !== 'number' || rms < 0.015) {
+// Umbral de "hablando" (bug 131): el MISMO 0.05 del backend
+// (computeBackendKinematics aquí y map_rms_to_puppet_transform en Python).
+// Antes el JS usaba 0.015, que es ruido de sala: con el mic abierto cualquier
+// rms por encima de ese valor entraba al camino que mueve la boca.
+export const VOICE_MIN_RMS = 0.05;
+// Lateral con objetivo persistente (bug 131): cada JAW_SWAY_PERIOD_MS se sortea
+// un objetivo nuevo dentro de ±JAW_MAX_SHAKE_PX y la pose se acerca con easing
+// exponencial (JAW_SWAY_EASE_TAU_MS), mismo patrón que el idle. Antes el signo
+// se sorteaba con Math.random() en CADA frame (60-120 Hz): eso no se leía como
+// sway, se leía como vibración.
+export const JAW_SWAY_PERIOD_MS = 160;
+export const JAW_SWAY_EASE_TAU_MS = 100;
+export function computeJawKinematics(rms, nowMs, swayPx = 0) {
+  if (typeof rms !== 'number' || rms < VOICE_MIN_RMS) {
     return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
   }
   const t = typeof nowMs === 'number' ? nowMs : Date.now();
   // Punchy response curve scaled by voice energy; -> 0 en silencio.
   // Exponente bajo (0.52): responde fuerte ya con poca voz.
+  // La curva conserva la normalización 0.015 (bugs 122/128): el bug 131 sube
+  // el umbral de la guarda, no cambia el movimiento vertical con voz.
   const factor = Math.min(1.0, Math.max(0.0, Math.pow((rms - 0.015) / 0.985, 0.52)));
   // Syllabic flap (~9Hz): multiplica la amplitud (0..1), nunca suma un piso
   // fijo — sin voz no hay desplazamiento (bug 112: el piso de 6px la dejaba
@@ -86,10 +100,14 @@ export function computeJawKinematics(rms, nowMs) {
   }
   // Signo en un solo lugar (bug 125): negativo = la capa de ARRIBA sube = abre.
   const openMovement = Number((-factor * JAW_MAX_TRAVEL_PX * flap).toFixed(2));
-  const sideDir = (Math.random() * 2 - 1);
-  const sideShake = Number((sideDir * factor * JAW_MAX_SHAKE_PX).toFixed(2));
-  // Tilt acotado al mismo máximo del backend (antes llegaba a ±40°).
-  const tilt = Number((sideDir * factor * JAW_MAX_TILT_DEG).toFixed(2));
+  // Lateral (bug 131): objetivo persistente ya eased (JawSwayMotion), escalado
+  // por la energía de la voz y acotado a ±JAW_MAX_SHAKE_PX. El signo NO se
+  // sortea por frame.
+  const sideShake = Number(
+    Math.max(-JAW_MAX_SHAKE_PX, Math.min(JAW_MAX_SHAKE_PX, swayPx * factor)).toFixed(2),
+  );
+  // Tilt: comportamiento intacto (el bug 131 solo toca el lateral).
+  const tilt = Number(((Math.random() * 2 - 1) * factor * JAW_MAX_TILT_DEG).toFixed(2));
 
   return {
     jawOffsetX: sideShake,
@@ -104,7 +122,7 @@ export function computeJawKinematics(rms, nowMs) {
 // jaw NEGATIVO (sube, abre), head POSITIVO leve (baja, ayuda a abrir).
 // Tilt sin invertir: es simétrico alrededor del pivote y se lee como boca.
 export function computeBackendKinematics(rms) {
-  if (typeof rms !== 'number' || rms < 0.05) {
+  if (typeof rms !== 'number' || rms < VOICE_MIN_RMS) {
     return { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0, headOffsetY: 0 };
   }
   const factor = Math.min(1.0, Math.max(0.0, (rms - 0.05) / 0.95));
@@ -157,6 +175,43 @@ export class IdleMotion {
     // jawOffsetX y jawOffsetY SIEMPRE 0 exacto: el idle no abre la boca
     // (bug 112) ni la corre de lado — el lateral lo pone solo la voz.
     return { jawRotation: this._pose.rotation, jawOffsetX: 0, jawOffsetY: 0 };
+  }
+}
+
+// Lateral de la voz (bug 131): estado, rng y reloj INYECTABLES, mismo patrón
+// que IdleMotion. Cada JAW_SWAY_PERIOD_MS sortea un objetivo nuevo en
+// ±JAW_MAX_SHAKE_PX (magnitud en [0.4, 1] del tope, nunca casi-cero) y la pose
+// se acerca con easing exponencial. El easing es monótono: dentro de un periodo
+// la pose no puede cambiar de signo, así que dos frames consecutivos no pueden
+// tener signo opuesto salvo que el objetivo haya cambiado.
+export class JawSwayMotion {
+  constructor({ rng = Math.random, startMs = 0 } = {}) {
+    this._rng = rng;
+    this._nowMs = startMs;
+    this._turnIndex = -1;
+    this._target = 0;
+    this._pose = 0;
+  }
+
+  get target() {
+    return this._target;
+  }
+
+  _pickTarget(turnIndex) {
+    this._turnIndex = turnIndex;
+    const mag = (0.4 + 0.6 * this._rng()) * JAW_MAX_SHAKE_PX;
+    this._target = (this._rng() < 0.5 ? -1 : 1) * mag;
+  }
+
+  update(nowMs) {
+    const t = typeof nowMs === 'number' ? nowMs : Date.now();
+    const turnIndex = Math.floor(t / JAW_SWAY_PERIOD_MS);
+    if (turnIndex !== this._turnIndex) this._pickTarget(turnIndex);
+    const dt = Math.max(0, t - this._nowMs);
+    this._nowMs = t;
+    const alpha = dt > 0 ? 1 - Math.exp(-dt / JAW_SWAY_EASE_TAU_MS) : 0;
+    this._pose += alpha * (this._target - this._pose);
+    return this._pose;
   }
 }
 
@@ -358,6 +413,7 @@ export class KatetoAvatar extends HTMLElement {
   _startIdleLoop() {
     if (this._idleAnim != null) return;
     if (!this._idleMotion) this._idleMotion = new IdleMotion();
+    if (!this._swayMotion) this._swayMotion = new JawSwayMotion();
     const loop = (now) => {
       this._renderCombined(typeof now === 'number' ? now : performance.now());
       this._idleAnim = requestAnimationFrame(loop);
@@ -375,10 +431,12 @@ export class KatetoAvatar extends HTMLElement {
   _renderCombined(nowMs) {
     if (!this._jaw) return;
     const idle = this._idleMotion.update(nowMs);
-    const speaking = typeof this._rms === 'number' && this._rms >= 0.015;
-    const voice = speaking
-      ? computeJawKinematics(this._rms, nowMs)
-      : { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
+    const speaking = typeof this._rms === 'number' && this._rms >= VOICE_MIN_RMS;
+    // El lateral se actualiza siempre (así la pose no queda congelada entre
+    // turnos de voz) pero solo se aplica si hay voz: en silencio la guarda de
+    // computeJawKinematics devuelve 0 exacto (bug 131).
+    const sway = this._swayMotion.update(nowMs);
+    const voice = computeJawKinematics(this._rms, nowMs, sway);
     const k = combineIdleWithVoice(idle, voice, speaking);
     this._jaw.style.transform = `translate(${k.jawOffsetX}px, ${k.jawOffsetY}px) rotate(${k.jawRotation}deg)`;
   }

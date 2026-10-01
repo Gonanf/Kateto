@@ -1,4 +1,4 @@
-// Medición QA del jaw del overlay (bugs 112/122/125).
+// Medición QA del jaw del overlay (bugs 112/122/125/131).
 //
 // Convención (bug 125): jawOffsetY NEGATIVO = la capa de ARRIBA sube = abre;
 // headOffsetY POSITIVO leve = la pieza de abajo baja = ayuda a abrir.
@@ -9,12 +9,16 @@
 //   3. silencio otra vez ~0.4 s.
 // Muestreo a ~60 Hz del `jawOffsetY` computado por computeJawKinematics
 // (el mismo valor que setRms vuelca en `style.transform` de la capa jaw).
-// Además compara contra computeBackendKinematics (path backend) con el mismo rms.
+// Además compara contra computeBackendKinematics (path backend) con el mismo rms
+// y mide el LATERAL (bug 131): min/max/mean + cambios de signo del mismo
+// protocolo, con el objetivo persistente (JawSwayMotion) contra el sorteado
+// por frame del código anterior.
 //
 // Uso: node script/qa/measure_jaw.mjs
 // Uso browser (mismo protocolo en Chromium real): ver jaw_harness.html.
 //
-// Los stats de jawOffsetY son deterministas (Math.random sólo afecta X/tilt).
+// Los stats de jawOffsetY son deterministas; el lateral se mide con rng sembrado
+// (el sorteo por frame del código anterior se emula con otro rng sembrado).
 
 // Stubs mínimos de DOM: el módulo define Custom Elements a nivel top-level,
 // pero las funciones medidas son puras y no tocan el DOM.
@@ -25,7 +29,8 @@ const modPath = new URL(
   "../../kateto/plugins/visual_overlay/web/kateto-avatar.js",
   import.meta.url,
 ).href;
-const { computeJawKinematics, computeBackendKinematics, IdleMotion } = await import(modPath);
+const { computeJawKinematics, computeBackendKinematics, IdleMotion, JawSwayMotion, combineIdleWithVoice, VOICE_MIN_RMS } =
+  await import(modPath);
 
 // RNG determinista para la serie idle (mulberry32).
 function makeRng(seed) {
@@ -149,6 +154,51 @@ function buildIdleSeries() {
 
 const idleSeries = buildIdleSeries();
 
+// --- Serie lateral (bug 131): mismo protocolo, pipeline de render completo
+// (idle + objetivo persistente + cinemática) a 60 Hz. El "antes" emula el
+// sorteado por frame del código anterior (signo nuevo en cada frame).
+function buildLateralSeries() {
+  const idle = new IdleMotion({ rng: makeRng(131) });
+  const sway = new JawSwayMotion({ rng: makeRng(1311) });
+  const oldRng = makeRng(13111);
+  const xs = [];
+  const oldXs = [];
+  let t = 0;
+  const push = (durMs, rmsFn) => {
+    for (let i = 0; i < Math.round(durMs / DT_MS); i++) {
+      const rms = rmsFn(i);
+      const idlePose = idle.update(Math.round(t));
+      const voice = computeJawKinematics(rms, Math.round(t), sway.update(Math.round(t)));
+      xs.push(combineIdleWithVoice(idlePose, voice, rms >= VOICE_MIN_RMS).jawOffsetX);
+      oldXs.push(rms > 0.05 ? (oldRng() * 2 - 1) * rms * 16 : 0);
+      t += DT_MS;
+    }
+  };
+  push(300, () => 0.0);
+  const speechFrom = xs.length;
+  push(1500, (idx) => rmsSeq[idx % rmsSeq.length]);
+  const speechTo = xs.length;
+  push(400, () => 0.0);
+  return { xs, oldXs, speechFrom, speechTo };
+}
+
+function signFlips(vals) {
+  let prev = 0;
+  let flips = 0;
+  for (const v of vals) {
+    const s = Math.sign(v);
+    if (s !== 0 && prev !== 0 && s !== prev) flips++;
+    if (s !== 0) prev = s;
+  }
+  return flips;
+}
+
+const lat = buildLateralSeries();
+const latSpeech = lat.xs.slice(lat.speechFrom, lat.speechTo);
+const latOldSpeech = lat.oldXs.slice(lat.speechFrom, lat.speechTo);
+const sLat = stats(latSpeech);
+const sLatOld = stats(latOldSpeech);
+
 const out = {
   protocol: "silencio 0.3s / habla 1.5s (rms 0.2-0.5-0.8) / silencio 0.4s @60Hz",
   speech: {
@@ -163,6 +213,19 @@ const out = {
     initialAllZero: localY.slice(0, speechStart).every((v) => v === 0),
     finalAllZero: silenceEnd.every((v) => v === 0),
   },
+  lateral: {
+    protocolo: "mismo speech/silence a 60 Hz, pipeline idle + JawSwayMotion + cinemática (rng sembrado)",
+    ahora: { min: sLat.min, max: sLat.max, mean: Number(sLat.mean.toFixed(2)), cambiosDeSigno: signFlips(latSpeech) },
+    antesSorteaPorFrame: {
+      min: sLatOld.min,
+      max: sLatOld.max,
+      mean: Number(sLatOld.mean.toFixed(2)),
+      cambiosDeSigno: signFlips(latOldSpeech),
+    },
+    silencioInicialX0: lat.xs.slice(0, lat.speechFrom).every((v) => v === 0),
+    silencioFinalX0: lat.xs.slice(lat.speechTo).every((v) => v === 0),
+    topePx: 16,
+  },
   idle: {
     protocol: "serie idle: 6 s, muestreo cada 100 ms, objetivo nuevo cada 1000 ms (silencio, rng sembrado)",
     targetChangesIn6s: idleSeries.targetChanges,
@@ -176,5 +239,7 @@ console.table([
   { metrica: "maxSubidaLocalPx", antes: -28, despues: Number(sLocal.min.toFixed(2)) },
   { metrica: "mediaLocalPx", antes: -10, despues: Number(sLocal.mean.toFixed(2)) },
   { metrica: "maxSubidaBackendPx", antes: -28, despues: Number(sBackend.min.toFixed(2)) },
+  { metrica: "lateralMaxAbsPx", antes: Number(Math.max(Math.abs(sLatOld.min), sLatOld.max).toFixed(2)), despues: Number(Math.max(Math.abs(sLat.min), sLat.max).toFixed(2)) },
+  { metrica: "lateralCambiosDeSignoEn1_5s", antes: signFlips(latOldSpeech), despues: signFlips(latSpeech) },
 ]);
 console.table(idleSeries.perSecond);

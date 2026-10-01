@@ -135,6 +135,7 @@ description: "Known Issues — índice de bugs"
 | 127 | Barge-in: el video-rag y la narración que pide no se cortan cuando el usuario habla | Alta | `kateto/plugins/executor/static_vision_plugin.py`, `kateto/plugins/system/turn_gate.py` | [127-bargein-no-corta-el-video-rag.md](./bugs/127-bargein-no-corta-el-video-rag.md) |
 | 129 | La narración de visión cae siempre en las mismas fórmulas de reseñador | Media | `kateto/voices/base.py` | [129-narracion-vision-molde-de-resenador.md](./bugs/129-narracion-vision-molde-de-resenador.md) |
 | 130 | Jaw sin snap (seno suave + transición CSS) y sway lateral del idle en silencio | Media | `kateto/plugins/visual_overlay/web/kateto-avatar.js` | [130-jaw-sin-snap-y-sway-lateral-idle.md](./bugs/130-jaw-sin-snap-y-sway-lateral-idle.md) |
+| 131 | El jaw se mueve de lado a lado sin que nadie hable | Media | `kateto/plugins/visual_overlay/web/kateto-avatar.js`, `kateto/plugins/system/http_server.py` | [131-jaw-lateral-sin-voz.md](./bugs/131-jaw-lateral-sin-voz.md) |
 
 ---
 
