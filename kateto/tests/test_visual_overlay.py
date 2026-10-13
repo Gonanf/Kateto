@@ -1,6 +1,7 @@
 import json
 import math
 import shutil
+import socket
 import subprocess
 from pathlib import Path
 import struct
@@ -461,4 +462,57 @@ def test_shared_convention_js_backend_vs_python_puppet():
         assert math.isclose(js["jawRotation"], py["jawRotation"], abs_tol=1e-2), f"rot difiere con rms={rms}"
         assert math.isclose(js["headOffsetY"], py["headOffsetY"], abs_tol=1e-2), f"head difiere con rms={rms}"
 
+
+class _FakeOverlay:
+    name = "visual_overlay"
+
+    def __init__(self) -> None:
+        self.payloads: list[dict] = []
+
+    async def _broadcast(self, payload: dict) -> None:
+        self.payloads.append(payload)
+
+
+@pytest.mark.asyncio
+async def test_game_event_sin_rms_no_mueve_el_jaw(tmp_path: Path):
+    # Given: el server de /api/game/event con un visual_overlay que captura
+    async with httpx.AsyncClient() as client:
+        manager = PluginManager()
+        overlay = _FakeOverlay()
+        manager.register_plugin(overlay)
+        # puerto efímero: otro test del mismo archivo puede fijar un puerto y colisionar
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        server = HttpServer(manager, host="127.0.0.1", port=port, config_dir=tmp_path)
+        await server.start()
+        try:
+            url = f"http://127.0.0.1:{port}/api/game/event"
+
+            # When: evento sin dato de audio, y evento con rms vacío
+            for payload in (
+                {"event_type": "move", "voice_id": "jane", "text": "hola"},
+                {"event_type": "move", "voice_id": "jane", "text": "hola", "rms": ""},
+            ):
+                resp = await client.post(url, json=payload)
+                assert resp.status_code == 200
+
+                # Then: sin audio no hay movimiento de boca (bug 131)
+                viseme = overlay.payloads[-2]
+                assert viseme["type"] == "viseme"
+                assert viseme["rms"] == 0.0
+                assert viseme["is_speaking"] is False
+                assert viseme["jawOffsetX"] == 0.0
+                assert viseme["jawOffsetY"] == 0.0
+                assert viseme["jawRotation"] == 0.0
+                assert viseme["headOffsetY"] == 0.0
+
+            # Y con rms de voz el payload sí mueve la boca (control positivo)
+            resp = await client.post(url, json={"event_type": "move", "voice_id": "jane", "text": "hola", "rms": 0.5})
+            assert resp.status_code == 200
+            speaking = overlay.payloads[-2]
+            assert speaking["is_speaking"] is True
+            assert speaking["jawOffsetY"] < 0
+        finally:
+            await server.stop()
 

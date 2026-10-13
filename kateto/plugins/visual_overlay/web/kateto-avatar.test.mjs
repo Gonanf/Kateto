@@ -1,4 +1,4 @@
-// Tests de la cinemática del jaw del overlay (bugs 112 y 125).
+// Tests de la cinemática del jaw del overlay (bugs 112, 125 y 131).
 //
 // Convención única: jawOffsetY NEGATIVO = la capa de ARRIBA sube = boca que
 // abre, neutro = 0 = cerrada (bug 125: avatar_jaw.png es la mitad superior).
@@ -20,6 +20,8 @@ const {
   computeJawKinematics,
   computeBackendKinematics,
   JAW_MAX_TRAVEL_PX,
+  JAW_MAX_SHAKE_PX,
+  JawSwayMotion,
   IdleMotion,
   combineIdleWithVoice,
   IDLE_TURN_PERIOD_MS,
@@ -27,6 +29,8 @@ const {
   IDLE_SWAY_PX,
   IDLE_EASE_TAU_MS,
   IDLE_SPEAKING_SCALE,
+  JAW_SWAY_PERIOD_MS,
+  VOICE_MIN_RMS,
 } = mod;
 
 // RNG determinista (mulberry32) y avance de tiempo fijo, como en fix-112.
@@ -221,5 +225,86 @@ describe("idle motion (issue 128: rotación nueva cada segundo, se mueve hacia a
     assert.ok(Math.abs(combined.jawOffsetX - idlePose.jawOffsetX) < 1e-9);
     assert.ok(Math.abs(combined.jawRotation - idlePose.jawRotation) < 1e-9);
     assert.equal(combined.jawOffsetY, 0);
+  });
+});
+
+// --- Bug 131: el jaw no se corre de lado cuando nadie habla ------------------
+// Antes el lateral salía de `Math.random()` POR FRAME (60-120 Hz): eso no se
+// leía como sway, se leía como vibración, y el umbral de 0.015 dejaba entrar
+// el ruido de sala al camino que mueve la boca. Ahora:
+// - sin voz (rms < VOICE_MIN_RMS) => jawOffsetX === 0 EXACTO, siempre;
+// - con voz => un objetivo sorteado que PERSISTE JAW_SWAY_PERIOD_MS y al que la
+//   pose se acerca con easing (JawSwayMotion), acotado a ±JAW_MAX_SHAKE_PX.
+describe("lateral del jaw (bug 131)", () => {
+  const FRAME_MS = 16;
+
+  // Pipeline de render del componente: idle + sway persistente + cinemática.
+  function runPipeline(seed, { rms = 0, totalMs = 2000, dtMs = FRAME_MS } = {}) {
+    const idle = new IdleMotion({ rng: makeRng(seed) });
+    const sway = new JawSwayMotion({ rng: makeRng(seed + 1) });
+    const xs = [];
+    for (let t = 0; t <= totalMs; t += dtMs) {
+      const idlePose = idle.update(t);
+      const voice = computeJawKinematics(rms, t, sway.update(t));
+      xs.push(combineIdleWithVoice(idlePose, voice, rms >= VOICE_MIN_RMS).jawOffsetX);
+    }
+    return xs;
+  }
+
+  // Cambios de signo entre muestras consecutivas; 0 es neutro y no cuenta.
+  function signFlips(xs) {
+    let prev = 0;
+    let flips = 0;
+    for (const x of xs) {
+      const s = Math.sign(x);
+      if (s !== 0 && prev !== 0 && s !== prev) flips++;
+      if (s !== 0) prev = s;
+    }
+    return flips;
+  }
+
+  it("barrido de rms bajo el umbral de habla: jawOffsetX === 0 en todas las llamadas", () => {
+    for (const rms of [0.0, 0.01, 0.02, 0.04]) {
+      for (let i = 0; i < 240; i++) {
+        // Se pasa un objetivo de sway pendiente a propósito: sin voz el lateral
+        // tiene que seguir siendo 0 exacto.
+        const { jawOffsetX } = computeJawKinematics(rms, i * FRAME_MS, JAW_MAX_SHAKE_PX);
+        assert.equal(jawOffsetX, 0, `rms ${rms} en el frame ${i} movió el lateral: ${jawOffsetX}px`);
+      }
+    }
+  });
+
+  it("2 s de silencio con el idle andando: jawOffsetX === 0 en todos los frames", () => {
+    const xs = runPipeline(3, { rms: 0, totalMs: 2000 });
+    assert.ok(xs.length >= 120, `la serie debe cubrir ~2 s, teve ${xs.length} frames`);
+    for (let i = 0; i < xs.length; i++) {
+      assert.equal(xs[i], 0, `frame ${i} movió el lateral en silencio: ${xs[i]}px`);
+    }
+  });
+
+  it("hablando: |jawOffsetX| <= JAW_MAX_SHAKE_PX en todos los frames (y se mueve de verdad)", () => {
+    const xs = runPipeline(4, { rms: 0.5, totalMs: 2000 });
+    for (let i = 0; i < xs.length; i++) {
+      assert.ok(Math.abs(xs[i]) <= JAW_MAX_SHAKE_PX, `frame ${i} pasó el tope: ${xs[i]}px`);
+    }
+    assert.ok(Math.max(...xs.map(Math.abs)) > 3.0, "con voz el lateral tiene que moverse");
+    // Tope estructural: ni una sway pose fuera de rango puede pasarlo.
+    assert.equal(computeJawKinematics(0.5, 0, 999).jawOffsetX, JAW_MAX_SHAKE_PX);
+  });
+
+  it("hablando: el signo no cambia más seguido que el periodo del objetivo", () => {
+    const totalMs = 2000;
+    const flips = signFlips(runPipeline(5, { rms: 0.5, totalMs }));
+    const maxFlips = Math.floor(totalMs / JAW_SWAY_PERIOD_MS);
+    assert.ok(flips <= maxFlips, `el signo cambió ${flips} veces (tope ${maxFlips}: una por periodo)`);
+    assert.ok(flips >= 1, "el objetivo tiene que cambiar de lado a veces (test no vacío)");
+  });
+
+  it("un objetivo lateral fijo no puede cambiar el signo entre frames", () => {
+    const signs = new Set();
+    for (let k = 0; k < 40; k++) {
+      signs.add(Math.sign(computeJawKinematics(0.5, k * FRAME_MS, 7.5).jawOffsetX));
+    }
+    assert.ok(signs.size <= 1, `un objetivo fijo dio ${signs.size} signos distintos`);
   });
 });

@@ -286,7 +286,11 @@ class HttpServer:
                     text = str(event_data.get("text") or "")
                     voice_id = str(event_data.get("voice_id") or "jane")
                     game = str(event_data.get("game") or "unknown")
-                    rms = float(event_data.get("rms", event_data.get("rms_hint", 0.12)) or 0.12)
+                    # Sin dato de audio no hay boca (bug 131): el default era
+                    # 0.12, por encima de los umbrales de voz (0.05), y movía
+                    # el jaw sin que existiera audio.
+                    raw_rms = event_data.get("rms", event_data.get("rms_hint"))
+                    rms = float(raw_rms or 0.0)
                     # subtitle
                     await vo._broadcast({
                         "event": "text_chunk",
