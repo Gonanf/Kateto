@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+import time
+from datetime import datetime, timezone
 from loguru import logger
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +29,35 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "visual_overlay" / "web"
 VALID_AVATAR_FILES = ("top.png", "mouth.png", "avatar_head.png", "avatar_jaw.png")
 ASSETS_DIR = (Path(__file__).resolve().parent.parent.parent.parent / "assets" / "bate_debate").resolve()
 SOUNDS_DIR = (Path(__file__).resolve().parent.parent / "bate_debate" / "sounds").resolve()
+
+# Turn framing for /events/stream (bug 100): a turn closes after TURN_STALE_S of
+# silence, and a trigger older than TRIGGER_MAX_AGE_S is not attributed to a turn.
+TURN_STALE_S = 2.0
+TRIGGER_MAX_AGE_S = 5.0
+_B64_KEYS = {"samples": "samples_b64", "frame": "frame_b64"}
+
+
+def _json_safe(data: dict[str, Any]) -> dict[str, Any]:
+    """Wire format for /events/stream: bytes -> ascii base64 (`<key>_b64`, plus
+    `encoding: "base64"`), datetimes -> ISO strings.
+
+    Bug 100: raw `bytes` in a payload made `send_json` raise `TypeError` inside a
+    fire-and-forget task, so `AudioOutput`/`AudioData`/`VisionFrameData` frames were
+    dropped silently. `core/event.py` and its models stay untouched.
+    """
+    out: dict[str, Any] = {}
+    encoded = False
+    for key, value in data.items():
+        if isinstance(value, (bytes, bytearray)):
+            out[_B64_KEYS.get(key, f"{key}_b64")] = base64.b64encode(bytes(value)).decode("ascii")
+            encoded = True
+        elif isinstance(value, datetime):
+            out[key] = value.isoformat()
+        else:
+            out[key] = value
+    if encoded:
+        out["encoding"] = "base64"
+    return out
 
 
 class EventListItem(BaseModel):
@@ -67,6 +100,8 @@ class HttpServer:
         self._app = self._build_app()
         self._server: Any = None
         self._observers: list[WebSocket] = []
+        self._open_turns: dict[str, dict[str, Any]] = {}
+        self._last_trigger: dict[str, dict[str, Any]] = {}
         log.info("Initialized HttpServer instance for {}:{}", self._host, self._port)
 
     def _build_app(self) -> FastAPI:
@@ -391,6 +426,24 @@ class HttpServer:
         return app
 
     def _on_event(self, envelope: EventEnvelope[Any]) -> None:
+        self._game_bridge_hooks(envelope)
+        payloads = self._frames_for(envelope)
+        if not payloads:
+            return
+        dead: list[WebSocket] = []
+        for ws in self._observers:
+            try:
+                asyncio.get_running_loop().create_task(self._send_frames(ws, payloads))
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self._observers.remove(ws)
+
+    async def _send_frames(self, ws: WebSocket, payloads: list[dict[str, Any]]) -> None:
+        for payload in payloads:
+            await ws.send_json(payload)
+
+    def _game_bridge_hooks(self, envelope: EventEnvelope[Any]) -> None:
         try:
             if envelope.name == "tool_call":
                 d = envelope.data.model_dump() if hasattr(envelope.data, "model_dump") else {}
@@ -421,22 +474,107 @@ class HttpServer:
                             break
         except Exception:
             pass
-        payload = {
+
+    @staticmethod
+    def _frame(name: str, data: dict[str, Any], trace_id: str | None, source: str = "http_server") -> dict[str, Any]:
+        return {
+            "name": name,
+            "source": source,
+            "target": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "trace_id": trace_id,
+            "data": data,
+        }
+
+    def _take_turn_end(self, voice_id: str, reason: str) -> dict[str, Any] | None:
+        turn = self._open_turns.pop(voice_id, None)
+        if turn is None:
+            return None
+        return self._frame("turn_end", {
+            "turn_id": turn["turn_id"],
+            "voice_id": voice_id,
+            "t_turn_end": time.time(),
+            "frames": turn["frames"],
+            "bytes": turn["bytes"],
+            "reason": reason,
+        }, turn["trace_id"])
+
+    def _open_turn(self, voice_id: str, envelope: EventEnvelope[Any], d: dict[str, Any], now: float) -> dict[str, Any]:
+        trigger = self._last_trigger.pop(voice_id, None)
+        t_in_audio = None
+        if trigger is not None and now - trigger["ts"] <= TRIGGER_MAX_AGE_S:
+            t_in_audio = trigger["ts"]
+        turn = {
+            "turn_id": uuid4().hex,
+            "frames": 0,
+            "bytes": 0,
+            "last_frame_ts": now,
+            "trace_id": envelope.trace_id,
+        }
+        self._open_turns[voice_id] = turn
+        return self._frame("turn_start", {
+            "turn_id": turn["turn_id"],
+            "voice_id": voice_id,
+            "trigger": (trigger or {}).get("name"),
+            "encoding": "base64",
+            "format": d.get("format") or "pcm_s16le",
+            "sample_rate": d.get("sample_rate"),
+            "channels": d.get("channels"),
+            "t_in_audio": t_in_audio,
+            "t_first_audio_byte": now,
+        }, envelope.trace_id)
+
+    def _audio_frames(self, voice_id: str, envelope: EventEnvelope[Any], d: dict[str, Any]) -> list[dict[str, Any]]:
+        now = time.time()
+        frames: list[dict[str, Any]] = []
+        turn = self._open_turns.get(voice_id)
+        if turn is not None and now - turn["last_frame_ts"] > TURN_STALE_S:
+            stale = self._take_turn_end(voice_id, "stale")
+            if stale is not None:
+                frames.append(stale)
+            turn = None
+        if turn is None and d.get("samples_b64"):
+            frames.append(self._open_turn(voice_id, envelope, d, now))
+            turn = self._open_turns[voice_id]
+        if turn is not None:
+            samples_b64 = d.get("samples_b64") or ""
+            turn["frames"] += 1
+            turn["bytes"] += len(base64.b64decode(samples_b64)) if samples_b64 else 0
+            turn["last_frame_ts"] = now
+        frames.append({
             "name": envelope.name,
             "source": envelope.source,
             "target": envelope.target,
             "timestamp": envelope.timestamp.isoformat(),
             "trace_id": envelope.trace_id,
-            "data": envelope.data.model_dump(),
-        }
-        dead: list[WebSocket] = []
-        for ws in self._observers:
-            try:
-                asyncio.get_event_loop().create_task(ws.send_json(payload))
-            except Exception:
-                dead.append(ws)
-        for ws in dead:
-            self._observers.remove(ws)
+            "data": d,
+        })
+        if turn is not None and d.get("final"):
+            end = self._take_turn_end(voice_id, "final")
+            if end is not None:
+                frames.append(end)
+        return frames
+
+    def _frames_for(self, envelope: EventEnvelope[Any]) -> list[dict[str, Any]]:
+        data = envelope.data
+        raw = data.model_dump() if hasattr(data, "model_dump") else {}
+        if envelope.name in ("audio_chunk", "text_chunk"):
+            self._last_trigger[raw.get("voice_id") or envelope.target or ""] = {
+                "ts": envelope.timestamp.timestamp(),
+                "name": envelope.name,
+                "voice_id": raw.get("voice_id") or envelope.target or "",
+            }
+        d = _json_safe(raw)
+        if envelope.name == "audio_output":
+            return self._audio_frames(raw.get("voice_id") or envelope.target or "", envelope, d)
+        return [{
+            "name": envelope.name,
+            "source": envelope.source,
+            "target": envelope.target,
+            "timestamp": envelope.timestamp.isoformat(),
+            "trace_id": envelope.trace_id,
+            "data": d,
+        }]
 
     async def start(self) -> None:
         import uvicorn
