@@ -1,5 +1,5 @@
 ---
-id: 100
+id: 132
 title: "/events/stream descartaba en silencio todo evento con bytes (el audio nunca salía)"
 severity: Alta
 status: resolved
@@ -7,7 +7,7 @@ component: kateto/plugins/system/http_server.py
 resolved: 2026-10-14
 ---
 
-## 100. /events/stream descartaba en silencio todo evento con bytes (el audio nunca salía)
+## 132. /events/stream descartaba en silencio todo evento con bytes (el audio nunca salía)
 
 **Severidad:** Alta
 **Componente:** `kateto/plugins/system/http_server.py`

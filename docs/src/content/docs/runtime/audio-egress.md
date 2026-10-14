@@ -40,7 +40,7 @@ Un turno de voz son tres tipos de frame, en este orden:
 | `final` | `audio_output` | bool | `true` = último chunk |
 | `samples_b64` | `audio_output` | string | base64 ascii del PCM crudo |
 | `t_turn_end` | `turn_end` | float | unix epoch (s), reloj del server |
-| `frames` | `turn_end` | int | chunks de audio del turno |
+| `frames` | `turn_end` | int | frames `audio_output` del turno, incluido el sentinel `final` con PCM vacío |
 | `bytes` | `turn_end` | int | bytes de PCM del turno (ya decodificado, sin contar base64) |
 | `reason` | `turn_end` | string | `"final"` (llegó el `final: true`) o `"stale"` (2 s de silencio) |
 
