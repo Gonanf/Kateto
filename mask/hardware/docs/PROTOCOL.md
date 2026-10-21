@@ -23,7 +23,9 @@ Los comandos son objetos JSON planos (sin anidamiento) con una o mas de las sigu
 | `jaw`   | Entero (grados)| 10 .. 85     | 85 (cerrada/reposo)   | Servo mandibula (movimiento cascanueces) |
 | `eye_x` | Entero (grados)| 25 .. 155    | 90 (centro)           | Servo eje horizontal de ambos ojos (pan) |
 | `eye_y` | Entero (grados)| 35 .. 145    | 90 (centro)           | Servo eje vertical de ambos ojos (tilt) |
-| `bell`  | Booleano / Int | true/false/1/0 | false               | Pulso de solenoide de campana (~120 ms) |
+| `bell`  | Booleano / Int | true/false/1/0 | false               | Pulso de solenoide de campana (~120 ms, edge-triggered) |
+
+*Nota de tipos:* Los ejes son **enteros**; un valor flotante o entre comillas (`"jaw":45.5`, `"jaw":"40"`) invalida el comando entero (`Malformed`) y no aplica ningun campo.
 
 ### Semantica de Claves Ausentes
 El protocolo es de estado incremental: cualquier clave omitida en el JSON conserva su valor objetivo previo (`current`). No es necesario reenviar todos los ejes si solo uno se modifica.
@@ -66,7 +68,7 @@ Cuando se produce un error, la pose actual y los objetivos en curso se mantienen
   - Mandibula: 600 °/s
   - Ojos (X e Y): 400 °/s
   - Calculo por tick: `floor(rate * dt / 1000)` con avance minimo garantizado de 1 grado y prevencion estricta de overshoot.
-- **Pulso de campana:** `bell: true` o `bell: 1` dispara un pulso de 120 ms que expira automaticamente en el `tick()` del firmware. Enviar `bell: false` no trunca un pulso ya iniciado.
+- **Pulso de campana:** Es **edge-triggered** — el pulso de 120 ms se dispara en el flanco `false -> true`; repetir `true` en cada frame **no** re-arma el pulso (un solenoide energizado continuo se quema); para otro click hay que mandar `false` y despues `true`. Enviar `bell: false` no trunca un pulso ya iniciado.
 - **Presupuesto de latencia:**
   - Serial TX/RX (96 bytes @ 115200 bps): < 1.0 ms
   - Parseo y planificacion en ESP32: < 0.2 ms

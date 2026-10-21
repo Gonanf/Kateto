@@ -204,9 +204,10 @@ void Engine::set_pose(const Pose& pose) {
   jaw_target_ = std::max(limits_.jaw_min, std::min(limits_.jaw_max, pose.jaw));
   eye_x_target_ = std::max(limits_.eye_x_min, std::min(limits_.eye_x_max, pose.eye_x));
   eye_y_target_ = std::max(limits_.eye_y_min, std::min(limits_.eye_y_max, pose.eye_y));
-  if (pose.bell) {
+  if (pose.bell && !bell_latch_) {
     pulse_bell(120);
   }
+  bell_latch_ = pose.bell;
 }
 
 void Engine::tick(uint32_t dt_ms) {
@@ -252,6 +253,7 @@ void Engine::neutral() {
   eye_x_target_ = 90;
   eye_y_target_ = 90;
   bell_remaining_ms_ = 0;
+  bell_latch_ = false;
 }
 
 }  // namespace maskservo

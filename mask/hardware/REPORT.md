@@ -68,3 +68,42 @@ python3 -m pytest mask/hardware/tools/test_cli.py -q
 2. **Control PWM sin librerias externas:** El sketch `.ino` emplea directamente el periferico LEDC nativo del ESP32 a 50 Hz y 16 bits de resolucion con la macro `angle_to_duty(angle)` para pulsos estandar de 500 a 2500 µs, eliminando la necesidad de `ESP32Servo`.
 3. **Watchdog de seguridad activo:** Ante desconexion del cable o caida del host superior a 2000 ms, el firmware fuerza la pose a `neutral()` (mandibula cerrada a 85°, ojos al centro a 90°, campana inactiva) para evitar calentamiento de motores contra topes mecanicos.
 4. **Validacion atomica en el CLI:** El script parser de `mask_servo_cli.py` valida y clampea todas las lineas del script antes de ejecutar o escribir en `--sim` / `--port`, asegurando que comandos malformados salgan con codigo 3 sin emitir lineas parciales.
+
+---
+
+## 5. Delta 1
+
+### Defecto Medido
+Con clientes transmitiendo el estado a 30 Hz con `bell:true` continuo, el pulso de 120 ms se re-armaba en cada comando:
+```
+bell energizada acumulada con bell:true repetido = 330 ms de 330
+```
+Esto causaba energizacion continua del solenoide, con riesgo de calentamiento y degradacion del componente.
+
+### Cambios Realizados
+1. **`servo_core.h`**: Se agrego `bool bell_latch_ = false;` en la seccion privada de `class Engine`.
+2. **`servo_core.cpp`**: Se implemento deteccion por flanco (`pose.bell && !bell_latch_`) en `Engine::set_pose` para disparar `pulse_bell(120)` unicamente en la transicion `false -> true` y registrar `bell_latch_ = pose.bell;`. En `Engine::neutral()` se agrego `bell_latch_ = false;`.
+3. **`test_servo_core.cpp`**: Se anadio el test `t13_bell_edge_triggered()` para verificar activacion inicial, ignorado de re-armado ante 5 frames repetidos con `bell:true`, re-disparo ante nuevo flanco tras `bell:false`, y limpieza de latch tras `neutral()`. Actualizado mensaje a `ALL TESTS PASSED (13)`.
+4. **`mask_servo_esp32.ino`**: En el bloque de timeout del watchdog (>= 2000 ms), se asignaron los valores objetivo de reposo (`current_pose.jaw = limits.jaw_max; current_pose.eye_x = 90; current_pose.eye_y = 90; current_pose.bell = false;`) en vez de la posicion interpolada instantanea, previniendo congelamientos por comandos parciales.
+5. **`PROTOCOL.md`**: Se documento la campana como edge-triggered (evitando quemado de solenoide) y la especificacion de que los ejes deben ser estrictamente enteros (valores flotantes generan `Malformed`).
+
+### Gates Ejecutados y Salida Real
+
+**Gate 1: Tests unitarios de firmware (C++17)**
+```bash
+g++ -std=c++17 -Wall -Wextra -o /tmp/msc_test mask/hardware/firmware/test/test_servo_core.cpp mask/hardware/firmware/mask_servo_esp32/servo_core.cpp && /tmp/msc_test
+```
+Salida:
+```
+ALL TESTS PASSED (13)
+```
+
+**Gate 2: Tests del CLI de host (pytest)**
+```bash
+python3 -m pytest mask/hardware/tools/test_cli.py -q
+```
+Salida:
+```
+......                                                                   [100%]
+6 passed in 0.28s
+```

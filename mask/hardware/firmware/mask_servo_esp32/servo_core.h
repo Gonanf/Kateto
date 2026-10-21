@@ -53,6 +53,7 @@ class Engine {
   int eye_y_curr_;
   int eye_y_target_;
   uint32_t bell_remaining_ms_;
+  bool bell_latch_ = false;
 };
 
 }  // namespace maskservo

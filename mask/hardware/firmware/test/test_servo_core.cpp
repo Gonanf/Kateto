@@ -183,6 +183,40 @@ static void t12_no_overshoot() {
   TEST_ASSERT(engine.jaw() == 85);
 }
 
+static void t13_bell_edge_triggered() {
+  current_test_name = "t13_bell_edge_triggered";
+  maskservo::Engine e;
+  maskservo::Pose p;
+  p.bell = true;
+  e.set_pose(p);
+  e.tick(33);
+  TEST_ASSERT(e.bell() == true);
+
+  e.tick(33);
+  e.tick(33);
+  e.tick(33);
+  TEST_ASSERT(e.bell() == false);
+
+  for (int i = 0; i < 5; ++i) {
+    e.set_pose(p);
+    e.tick(33);
+    TEST_ASSERT(e.bell() == false);
+  }
+
+  p.bell = false;
+  e.set_pose(p);
+  p.bell = true;
+  e.set_pose(p);
+  TEST_ASSERT(e.bell() == true);
+
+  p.bell = false;
+  e.set_pose(p);
+  e.neutral();
+  p.bell = true;
+  e.set_pose(p);
+  TEST_ASSERT(e.bell() == true);
+}
+
 int main() {
   t01_parse_full();
   t02_partial_keeps_current();
@@ -196,7 +230,8 @@ int main() {
   t10_converges_exact();
   t11_bell_pulse_expires();
   t12_no_overshoot();
+  t13_bell_edge_triggered();
 
-  std::printf("ALL TESTS PASSED (12)\n");
+  std::printf("ALL TESTS PASSED (13)\n");
   return 0;
 }

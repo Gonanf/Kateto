@@ -99,9 +99,9 @@ void loop() {
   // Watchdog de seguridad: 2000 ms sin comando valido -> pose neutral
   if (now - last_cmd_ms >= 2000) {
     engine.neutral();
-    current_pose.jaw = engine.jaw();
-    current_pose.eye_x = engine.eye_x();
-    current_pose.eye_y = engine.eye_y();
+    current_pose.jaw = limits.jaw_max;
+    current_pose.eye_x = 90;
+    current_pose.eye_y = 90;
     current_pose.bell = false;
   }
 
