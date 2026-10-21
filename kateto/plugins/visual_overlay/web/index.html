@@ -6,6 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <link rel="icon" href="data:," />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0b0b0f" />
   <title>Kateto Visual Overlay</title>
   <script type="module" src="/components/kateto-avatar.js?v=flap6"></script>
   <style>
@@ -186,6 +188,22 @@
     #caption-text .w-spoken {
       color: #f1f5f9;
     }
+
+    #offline-badge {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      z-index: 50;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: rgba(120, 53, 15, 0.92);
+      color: #fde68a;
+      font: 700 0.78rem/1 "JetBrains Mono", ui-monospace, monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    #offline-badge[hidden] { display: none; }
+    body.offline #caption-bar { opacity: 0.5; }
   </style>
 </head>
 <body>
@@ -213,8 +231,14 @@
     </div>
   </div>
 
+  <div id="offline-badge" hidden>offline · kateto inalcanzable</div>
+
   <script type="module">
     import { BrowserPcmPlayer, VOICE_NAMES } from '/components/kateto-avatar.js?v=flap6';
+    import { createOfflineShell } from '/components/kateto-offline.js?v=offline1';
+
+    const offlineShell = createOfflineShell({ doc: document, speech: window.speechSynthesis });
+    window.katetoOffline = offlineShell;
 
     // Parse URL parameters
     const params = new URLSearchParams(window.location.search);
@@ -655,6 +679,9 @@
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${proto}//${location.host}/ws/overlay`);
 
+      ws.onopen = () => { offlineShell.update({ type: 'ws_open' }); };
+      ws.onerror = () => { offlineShell.update({ type: 'ws_error' }); };
+
       ws.onmessage = (event) => {
         let msg;
         try { msg = JSON.parse(event.data); } catch { return; }
@@ -787,11 +814,16 @@
       };
 
       ws.onclose = () => {
+        offlineShell.update({ type: 'ws_close' });
         setTimeout(connectWs, 2000);
       };
     }
 
     connectWs();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/offline/sw.js', { scope: '/' }).catch(() => {});
+    }
   </script>
 </body>
 </html>

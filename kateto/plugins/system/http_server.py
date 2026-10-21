@@ -2,19 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 from loguru import logger
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from kateto.core.event import EventEnvelope, InterruptData, TextChunk
 from kateto.core.manager import PluginManager
+from kateto.plugins.system.offline_shell import (
+    ICON_SVG,
+    build_manifest,
+    collect_offline_assets,
+    local_ipv4_addresses,
+    phone_urls,
+    render_service_worker,
+)
 
 log = logger
 
@@ -209,6 +218,29 @@ class HttpServer:
                 raise HTTPException(status_code=404, detail="not found")
             # ponytail: no-store so overlay clients never run stale kinematics JS
             return FileResponse(path, headers={"Cache-Control": "no-store"})
+
+        @app.get("/offline/sw.js")
+        async def offline_service_worker() -> Response:
+            assets = collect_offline_assets(
+                WEB_DIR,
+                (self._config_dir / "voices") if self._config_dir else None,
+            )
+            return Response(
+                content=render_service_worker(assets),
+                media_type="application/javascript",
+                headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+            )
+
+        @app.get("/manifest.webmanifest")
+        async def web_manifest() -> Response:
+            return Response(
+                content=json.dumps(build_manifest(), indent=2, ensure_ascii=False),
+                media_type="application/manifest+json",
+            )
+
+        @app.get("/offline/icon.svg")
+        async def offline_icon() -> Response:
+            return Response(content=ICON_SVG, media_type="image/svg+xml")
 
         @app.get("/sounds/{file}")
         async def sound_asset(file: str) -> FileResponse:
@@ -436,6 +468,22 @@ class HttpServer:
     async def start(self) -> None:
         import uvicorn
         log.info("HttpServer.start called for {}:{}", self._host, self._port)
+        try:
+            if self._host in ("127.0.0.1", "localhost", "::1"):
+                log.warning(
+                    "HttpServer escucha en {}: el teléfono en la LAN no lo alcanza; "
+                    'poné plugin.http_server.host = "0.0.0.0"',
+                    self._host,
+                )
+            for url in phone_urls(
+                self._port,
+                socket.gethostname().split(".")[0],
+                local_ipv4_addresses(),
+            ):
+                log.info("phone url: {}", url)
+        except Exception:
+            # Un fallo de red local nunca debe impedir levantar el server.
+            pass
         config = uvicorn.Config(self._app, host=self._host, port=self._port, log_level="warning")
         self._server = uvicorn.Server(config)
         self._serve_task = asyncio.create_task(self._server.serve(), name="kateto-http-server")
