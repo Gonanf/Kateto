@@ -11,9 +11,16 @@ from pydantic import BaseModel
 import sounddevice
 
 from kateto.core.config import PluginSettings
-from kateto.core.event import AudioOutput, AudioOutputStatus, AudioOutputStatusData, EventEnvelope, InterruptData
+from kateto.core.event import (
+    AudioOutput,
+    AudioOutputStatus,
+    AudioOutputStatusData,
+    EventEnvelope,
+    InterruptData,
+    VisemeData,
+)
 from kateto.core.plugin import EventHandler, Plugin
-from kateto.core.rms import RMSProcessor
+from kateto.core.rms import RMSProcessor, map_rms_to_puppet_transform
 from kateto.voices.base import AudioPipeline, get_pipeline
 
 from .base import AudioOutputDeviceError, AudioOutputFormatError, PCM_S16LE
@@ -166,6 +173,7 @@ class AudioOutputPlayer(Plugin):
         # PCM bytes written to the device per lane since the lane started.
         # Lets viseme consumers map energy to sentence-relative playback time.
         self._lane_bytes: dict[str, int] = {}
+        self._viseme_seq: int = 0
 
     def _rms_for(self, voice_id: str) -> RMSProcessor:
         if voice_id not in self._rms_processors:
@@ -176,6 +184,7 @@ class AudioOutputPlayer(Plugin):
     async def initialize(self) -> None:
         self.required_manager.register_event("audio_output", AudioOutput)
         self.required_manager.register_event("audio_output_status", AudioOutputStatusData)
+        self.required_manager.register_event("viseme", VisemeData)
 
     @override
     async def enable(self) -> None:
@@ -586,6 +595,27 @@ class AudioOutputPlayer(Plugin):
                 await vo.update_viseme(voice_id, rms, text, audio_ms=audio_ms)
             except Exception:
                 pass
+        puppet = map_rms_to_puppet_transform(rms)
+        self._viseme_seq += 1
+        try:
+            _ = await self.manager.emit(
+                "viseme",
+                VisemeData(
+                    voice_id=voice_id,
+                    sequence=self._viseme_seq,
+                    rms=rms,
+                    is_speaking=bool(rms > 0.05),
+                    jaw_offset_x=puppet["jawOffsetX"],
+                    jaw_offset_y=puppet["jawOffsetY"],
+                    jaw_rotation=puppet["jawRotation"],
+                    head_offset_y=puppet["headOffsetY"],
+                    audio_ms=audio_ms,
+                    timestamp_us=time.monotonic_ns() // 1000,
+                ),
+                source=self.name,
+            )
+        except Exception:  # un consumidor roto nunca debe matar el mixer
+            pass
 
 
 def _configured_device(settings: PluginSettings) -> str | None:

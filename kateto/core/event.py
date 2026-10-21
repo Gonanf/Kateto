@@ -138,6 +138,21 @@ class AudioOutput(EventModel):
     words: list[WordTiming] | None = None
 
 
+class VisemeData(EventModel):
+    """Per-chunk viseme kinematics for the phone avatar (screen only)."""
+
+    voice_id: str | None = None
+    sequence: int = Field(default=0, ge=0)
+    rms: float = Field(default=0.0, ge=0.0, le=1.0)
+    is_speaking: bool = False
+    jaw_offset_x: float = 0.0
+    jaw_offset_y: float = 0.0
+    jaw_rotation: float = 0.0
+    head_offset_y: float = 0.0
+    audio_ms: float | None = None
+    timestamp_us: int = Field(default=0, ge=0)
+
+
 class OverlayLayout(EventModel):
     layout: str = "row"
     positions: dict[str, str] = Field(default_factory=dict)
