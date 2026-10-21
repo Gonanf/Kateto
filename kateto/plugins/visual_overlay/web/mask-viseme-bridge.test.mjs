@@ -1,6 +1,6 @@
 // Tests del mask-viseme-bridge (contrato `viseme` → avatar a 60 fps).
 // node --test mask-viseme-bridge.test.mjs — sin dependencias ni DOM.
-import { describe, it } from "node:test";
+import { describe, it, test } from "node:test";
 import assert from "node:assert/strict";
 
 const mod = await import("./mask-viseme-bridge.js");
@@ -177,3 +177,22 @@ describe("mask-viseme-bridge", () => {
     });
   });
 });
+
+test("reloj por defecto = performance.now() (no mezcla con Date.now)", () => {
+  const calls = [];
+  const avatar = { setJawTransform: (pose) => calls.push(pose) };
+  let pendingCb = null;
+  const animator = createVisemeAnimator(avatar, {
+    requestFrame: (cb) => { pendingCb = cb; return 1; },
+    cancelFrame: () => {},
+  });
+  const t0 = performance.now();
+  animator.start();
+  animator.push({ type: "viseme", jawOffsetY: -40 });
+  pendingCb(t0 + 16);
+  assert.ok(animator.stats.firstRenderLatencyMs !== null);
+  assert.ok(animator.stats.firstRenderLatencyMs >= 0);
+  assert.ok(animator.stats.firstRenderLatencyMs <= 50);
+  animator.stop();
+});
+

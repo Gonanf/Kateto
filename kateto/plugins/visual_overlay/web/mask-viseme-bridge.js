@@ -36,7 +36,11 @@ export function applyVisemeMessage(avatar, msg) {
 }
 
 export function createVisemeAnimator(avatar, options = {}) {
-  const now = options.now || (() => Date.now());
+  const defaultNow =
+    typeof performance !== "undefined" && typeof performance.now === "function"
+      ? () => performance.now()
+      : () => Date.now();
+  const now = options.now || defaultNow;
   const requestFrame =
     options.requestFrame ||
     (typeof requestAnimationFrame === "function" ? requestAnimationFrame : null);
@@ -93,7 +97,7 @@ export function createVisemeAnimator(avatar, options = {}) {
     stats.lastRenderMs = t;
     if (latencyPending) {
       const latency = t - (stats.lastPushMs ?? t);
-      if (latency >= 0) {
+      if (Number.isFinite(latency) && latency >= 0 && latency <= 1000) {
         stats.firstRenderLatencyMs = latency;
         latencyPending = false;
       }
