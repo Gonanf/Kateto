@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from fastapi import WebSocket
 
 from kateto.core.event import AudioOutput, InterruptData, WordTiming
 from kateto.mask.audio_bridge import MASK_PROTOCOL, MaskAudioBridge
@@ -239,7 +240,7 @@ async def test_end_to_end_websocket_roundtrip():
     async def mask_ws(ws: WebSocket) -> None:
         await bridge.serve(ws)
 
-    config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="error")
+    config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="error", ws="websockets")
     server = uvicorn.Server(config)
     task = asyncio.create_task(server.serve())
     try:

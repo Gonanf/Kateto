@@ -70,7 +70,10 @@ export class BrowserPcmPlayer {
 
   handleMessage(msg) {
     if (!msg || typeof msg !== "object") return "ignored";
-    if (msg.event === "audio_output" && msg.type === "audio") return this.enqueueFrame(msg);
+    if (
+      msg.event === "audio_output" &&
+      (msg.type === "audio" || msg.type === "viseme")
+    ) return this.enqueueFrame(msg);
     if (msg.event === "interrupt") {
       this.interrupt(msg.reason);
       return "stopped";
@@ -80,14 +83,15 @@ export class BrowserPcmPlayer {
 
   enqueueFrame(frame) {
     if (this._closed) return "ignored";
-    if (!frame.audio_b64 && !frame.final) return "ignored";
+    const b64 = frame.audio_b64 ?? frame.audio ?? null;
+    if (!b64 && !frame.final) return "ignored";
 
     const ctx = this._ensureContext();
     const rate = ctx.sampleRate || frame.sample_rate || 24000;
 
     let samples;
-    if (frame.audio_b64) {
-      const floats = pcm16ToFloat32(decodePcmS16le(frame.audio_b64));
+    if (b64) {
+      const floats = pcm16ToFloat32(decodePcmS16le(b64));
       samples =
         frame.sample_rate && frame.sample_rate !== rate
           ? resampleLinear(floats, frame.sample_rate, rate)
