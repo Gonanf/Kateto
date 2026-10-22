@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mask</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%; overflow: hidden;
+  background: #000; color: #eee;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+#app { position: fixed; inset: 0; height: 100dvh; overflow: hidden; background: #000; }
+kateto-avatar { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+
+#topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 12px 8px;
+}
+#hotspot {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  border-radius: 8px; background: rgba(0, 0, 0, .45);
+  cursor: pointer; user-select: none; touch-action: none;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.ok { background: #2ecc71; }
+.dot.warn { background: #f1c40f; }
+.dot.down { background: #e74c3c; }
+#statusText { font-size: 12px; opacity: .85; }
+
+#voices { display: flex; gap: 6px; flex: 1; justify-content: center; flex-wrap: wrap; }
+.pill {
+  background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .25);
+  color: #eee; padding: 6px 12px; border-radius: 999px; font-size: 13px; cursor: pointer;
+}
+.pill.active { background: #fff; color: #000; border-color: #fff; }
+
+#controls { display: flex; gap: 6px; }
+.ctl {
+  background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .25);
+  color: #eee; padding: 6px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+}
+.ctl.on { background: #2ecc71; border-color: #2ecc71; color: #000; }
+
+#banner {
+  position: absolute; top: 64px; left: 12px; right: 12px; z-index: 20;
+  background: #c0392b; color: #fff; padding: 10px 12px; border-radius: 8px;
+  font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .3s;
+}
+#banner.show { opacity: 1; pointer-events: auto; }
+
+#subtitle {
+  position: absolute; left: 0; right: 0; z-index: 10;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  margin: 0 auto; padding: 0 16px; max-width: 80%;
+  text-align: center; font-size: 16px; line-height: 1.3;
+  opacity: 0; transition: opacity .4s;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+#subtitle.show { opacity: 1; }
+
+#panel {
+  position: absolute; top: 56px; left: 12px; z-index: 30;
+  min-width: 200px; max-width: 90vw; padding: 12px;
+  background: rgba(0, 0, 0, .85); border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 10px; font-size: 12px; line-height: 1.6;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+#panel.open { opacity: 1; pointer-events: auto; }
+#panel h3 { margin: 0 0 8px; font-size: 13px; }
+#panel span { color: #8fd3ff; }
+
+#enter {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 40;
+  background: #fff; color: #000; border: none; padding: 16px 32px;
+  border-radius: 999px; font-size: 18px; cursor: pointer;
+}
+#camVideo, #camCanvas { display: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <kateto-avatar id="avatar" voice="doktor"></kateto-avatar>
+
+  <div id="topbar">
+    <div id="hotspot"><span id="statusDot" class="dot warn"></span><span id="statusText">—</span></div>
+    <div id="voices"></div>
+    <div id="controls">
+      <button id="micBtn" class="ctl">Mic</button>
+      <button id="camBtn" class="ctl">Cam</button>
+    </div>
+  </div>
+
+  <div id="banner"></div>
+  <div id="subtitle"></div>
+
+  <div id="panel">
+    <h3>Diagnóstico</h3>
+    <div>Sockets: <span id="pSockets"></span></div>
+    <div>Mic: <span id="pMic"></span></div>
+    <div>Cámara: <span id="pCam"></span></div>
+    <div>FPS: <span id="pFps"></span></div>
+    <div>Chunks: <span id="pChunks"></span></div>
+    <div>Error: <span id="pError"></span></div>
+  </div>
+
+  <button id="enter">Entrar</button>
+
+  <video id="camVideo" playsinline muted></video>
+  <canvas id="camCanvas"></canvas>
+</div>
+
+<script type="module">
+import { BrowserPcmPlayer, VOICE_NAMES } from '/components/kateto-avatar.js';
+
+const $ = (id) => document.getElementById(id);
+const avatar = $('avatar');
+const player = new BrowserPcmPlayer({ sampleRate: 24000 });
+
+const VOICES = ['doktor', 'jane', 'whisperer', 'conquest'];
+const DISPLAY = { doktor: 'Doktor', jane: 'Jane', whisperer: 'Whisperer', conquest: 'Conquest' };
+
+let currentVoice = 'doktor';
+try { const v = localStorage.getItem('mask.voice'); if (v) currentVoice = v; } catch (e) {}
+
+let micOn = false, camOn = false;
+let audioChunksSent = 0, camFramesThisSec = 0, camFps = 0;
+let lastError = '';
+let subTimer = null, bannerTimer = null;
+let ac = null, micStream = null, micSrc = null, micNode = null, micGain = null;
+let camStream = null, camVideo = null, camCanvas = null, camCtx = null, camTimer = null;
+
+const WS = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+
+function voiceLabel(id) {
+  if (VOICE_NAMES) {
+    if (VOICE_NAMES[id]) return VOICE_NAMES[id];
+    if (VOICE_NAMES[DISPLAY[id]]) return VOICE_NAMES[DISPLAY[id]];
+  }
+  return DISPLAY[id] || id;
+}
+
+// --- selector de voces ---
+const pillsEl = $('voices');
+VOICES.forEach((v) => {
+  const b = document.createElement('button');
+  b.className = 'pill';
+  b.textContent = voiceLabel(v);
+  b.dataset.voice = v;
+  b.addEventListener('click', () => setVoice(v));
+  pillsEl.appendChild(b);
+});
+function setVoice(v) {
+  if (!VOICES.includes(v)) v = 'doktor';
+  currentVoice = v;
+  try { localStorage.setItem('mask.voice', v); } catch (e) {}
+  avatar.setAttribute('voice', v);
+  if (typeof avatar.setVoice === 'function') avatar.setVoice(v);
+  Array.from(pillsEl.children).forEach((p) => p.classList.toggle('active', p.dataset.voice === v));
+}
+setVoice(currentVoice);
+
+// --- entrar / fullscreen / desbloqueo de audio ---
+$('enter').addEventListener('click', async () => {
+  const el = document.documentElement;
+  try {
+    if (el.requestFullscreen) await el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } catch (e) {}
+  try { player.enable(); } catch (e) {}
+  ensureAudioCtx();
+  $('enter').style.display = 'none';
+});
+
+function ensureAudioCtx() {
+  if (!ac) {
+    try { ac = new AudioContext({ sampleRate: 16000 }); }
+    catch (e) { ac = new AudioContext(); }
+  }
+  if (ac.state === 'suspended') ac.resume();
+  return ac;
+}
+
+// --- banner de error (no bloquea la página) ---
+function showBanner(msg) {
+  lastError = msg;
+  const b = $('banner');
+  b.textContent = msg;
+  b.classList.add('show');
+  if (bannerTimer) clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => b.classList.remove('show'), 7000);
+  const pe = $('pError');
+  if (pe) pe.textContent = lastError || '—';
+  updatePanel();
+}
+
+// --- micrófono ---
+async function toggleMic() {
+  if (micOn) { stopMic(); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showBanner('Micrófono no disponible: contexto no seguro (se requiere HTTPS o localhost).');
+    return;
+  }
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    showBanner('Micrófono denegado: ' + (e && e.message ? e.message : String(e)));
+    return;
+  }
+  const ctx = ensureAudioCtx();
+  try {
+    micSrc = ctx.createMediaStreamSource(micStream);
+    micNode = ctx.createScriptProcessor(1600, 1, 1);
+    micGain = ctx.createGain();
+    micGain.gain.value = 0;
+    micNode.onaudioprocess = (ev) => {
+      let input = ev.inputBuffer.getChannelData(0);
+      if (ctx.sampleRate !== 16000) {
+        input = resampleTo16k(input, ctx.sampleRate);
+      }
+      const b64 = abToB64(floatTo16(input).buffer);
+      const ws = sockets.mask.ws;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'mask_audio_input', audio: b64, sample_rate: 16000, channels: 1, format: 'pcm_s16le' }));
+        audioChunksSent++;
+      }
+    };
+    micSrc.connect(micNode);
+    micNode.connect(micGain);
+    micGain.connect(ctx.destination);
+    micOn = true;
+    $('micBtn').classList.add('on');
+    updatePanel();
+  } catch (e) {
+    showBanner('Micrófono: ' + (e && e.message ? e.message : String(e)));
+  }
+}
+function stopMic() {
+  micOn = false;
+  $('micBtn').classList.remove('on');
+  try { if (micSrc) micSrc.disconnect(); } catch (e) {}
+  try { if (micNode) micNode.disconnect(); } catch (e) {}
+  try { if (micGain) micGain.disconnect(); } catch (e) {}
+  try { if (micStream) micStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  micSrc = micNode = micGain = null;
+  updatePanel();
+}
+
+// --- cámara (POV de los ojos de la máscara) ---
+async function toggleCam() {
+  if (camOn) { stopCam(); return; }
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showBanner('Cámara no disponible: contexto no seguro (se requiere HTTPS o localhost).');
+    return;
+  }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch (e) {
+    showBanner('Cámara denegada: ' + (e && e.message ? e.message : String(e)));
+    return;
+  }
+  camVideo = $('camVideo');
+  camVideo.srcObject = camStream;
+  try { await camVideo.play(); } catch (e) {}
+  camCanvas = $('camCanvas');
+  camCtx = camCanvas.getContext('2d');
+  camOn = true;
+  $('camBtn').classList.add('on');
+  camTimer = setInterval(sendCamFrame, 500);
+  updatePanel();
+}
+function sendCamFrame() {
+  if (!camOn || !camVideo || !camVideo.videoWidth) return;
+  const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
+  const scale = Math.min(1, 640 / Math.max(vw, vh));
+  camCanvas.width = Math.max(1, Math.round(vw * scale));
+  camCanvas.height = Math.max(1, Math.round(vh * scale));
+  camCtx.drawImage(camVideo, 0, 0, camCanvas.width, camCanvas.height);
+  let b64;
+  try { b64 = camCanvas.toDataURL('image/jpeg', 0.6).split(',')[1]; } catch (e) { return; }
+  const ws = sockets.mask.ws;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'mask_camera_frame', frame: b64, dept: 'fun', ts: Date.now() }));
+    camFramesThisSec++;
+  }
+}
+function stopCam() {
+  camOn = false;
+  $('camBtn').classList.remove('on');
+  if (camTimer) { clearInterval(camTimer); camTimer = null; }
+  try { if (camStream) camStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  camStream = null;
+  updatePanel();
+}
+
+// --- sockets ---
+const sockets = {
+  mask: { url: '/ws/mask', ws: null, retry: 0, timer: null },
+  overlay: { url: '/ws/overlay', ws: null, retry: 0, timer: null },
+};
+function connect(name) {
+  const s = sockets[name];
+  clearTimeout(s.timer);
+  try { s.ws = new WebSocket(WS + s.url); }
+  catch (e) {
+    lastError = 'WS ' + name + ': ' + e;
+    s.retry = Math.min(s.retry ? s.retry * 2 : 500, 5000);
+    s.timer = setTimeout(() => connect(name), s.retry);
+    updateStatus();
+    return;
+  }
+  s.ws.onopen = () => { s.retry = 0; updateStatus(); };
+  s.ws.onmessage = (e) => handleMessage(name, e);
+  s.ws.onerror = () => {};
+  s.ws.onclose = () => {
+    s.retry = Math.min(s.retry ? s.retry * 2 : 500, 5000);
+    updateStatus();
+    s.timer = setTimeout(() => connect(name), s.retry);
+  };
+}
+function preferredName() {
+  if (sockets.mask.ws && sockets.mask.ws.readyState === WebSocket.OPEN) return 'mask';
+  if (sockets.overlay.ws && sockets.overlay.ws.readyState === WebSocket.OPEN) return 'overlay';
+  return null;
+}
+function preferredWs() {
+  const n = preferredName();
+  return n ? sockets[n].ws : null;
+}
+function handleMessage(name, e) {
+  let msg;
+  try { msg = JSON.parse(e.data); } catch (err) { return; }
+  if (!msg) return;
+  if (msg.type === 'error') {
+    const errText = msg.error ? String(msg.error) : 'Error del servidor';
+    showBanner(errText);
+    const pe = $('pError');
+    if (pe) pe.textContent = errText;
+    return;
+  }
+  if (msg.type === 'pong' || msg.type === 'heartbeat') {
+    return;
+  }
+  if (!msg.event) return;
+  const pref = preferredName();
+  if (pref && pref !== name) return; // dedupe por socket preferido: nunca reproducir dos veces
+  switch (msg.event) {
+    case 'audio_output': onAudioOutput(msg); break;
+    case 'text_chunk': onTextChunk(msg); break;
+    case 'interrupt': onInterrupt(msg); break;
+  }
+}
+function onAudioOutput(msg) {
+  if (msg.audio) {
+    try { player.playChunk(msg.audio, msg.sample_rate || 24000, msg.channels || 1); }
+    catch (err) { lastError = 'playChunk: ' + err; }
+  }
+  if (typeof avatar.setRms === 'function') avatar.setRms(msg.rms || 0);
+  else {
+    try {
+      avatar.setJawTransform({
+        jawOffsetX: msg.jawOffsetX || 0,
+        jawOffsetY: msg.jawOffsetY || 0,
+        jawRotation: msg.jawRotation || 0,
+        headOffsetY: msg.headOffsetY || 0,
+      });
+    } catch (err) {}
+  }
+}
+function onInterrupt() {
+  try { player.stop(); } catch (e) {}
+  if (typeof avatar.setRms === 'function') avatar.setRms(0);
+  try { avatar.setJawTransform({ jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0, headOffsetY: 0 }); } catch (e) {}
+}
+function onTextChunk(msg) {
+  const text = msg.data && msg.data.text != null ? msg.data.text : (msg.text != null ? msg.text : '');
+  if (!text) return;
+  const el = $('subtitle');
+  el.textContent = text;
+  el.classList.add('show');
+  if (subTimer) clearTimeout(subTimer);
+  const final = (msg.data && msg.data.final) || msg.final;
+  if (final) subTimer = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+// --- estado ---
+function stateStr(name) {
+  const s = sockets[name];
+  if (!s.ws) return '—';
+  const rs = s.ws.readyState;
+  return rs === WebSocket.OPEN ? 'conectado' : rs === WebSocket.CONNECTING ? 'conectando' : 'cerrado';
+}
+function updateStatus() {
+  const dot = $('statusDot'), txt = $('statusText');
+  const pref = preferredName();
+  let cls, label;
+  if (pref) { cls = 'ok'; label = pref; }
+  else if ((sockets.mask.ws && sockets.mask.ws.readyState === WebSocket.CONNECTING) ||
+           (sockets.overlay.ws && sockets.overlay.ws.readyState === WebSocket.CONNECTING) ||
+           sockets.mask.retry > 0 || sockets.overlay.retry > 0) { cls = 'warn'; label = 'reconectando'; }
+  else { cls = 'down'; label = 'caído'; }
+  dot.className = 'dot ' + cls;
+  txt.textContent = label;
+  updatePanel();
+}
+
+// --- panel de diagnóstico ---
+function updatePanel() {
+  $('pSockets').textContent = 'mask: ' + stateStr('mask') + ' · overlay: ' + stateStr('overlay');
+  $('pMic').textContent = micOn ? ('ON @' + (ac ? ac.sampleRate : 16000) + '→16000') : 'off';
+  $('pCam').textContent = camOn ? 'ON' : 'off';
+  $('pFps').textContent = camFps.toFixed(1);
+  $('pChunks').textContent = String(audioChunksSent);
+  $('pError').textContent = lastError || '—';
+}
+const hotspot = $('hotspot');
+let lpTimer = null;
+hotspot.addEventListener('pointerdown', () => {
+  lpTimer = setTimeout(() => { $('panel').classList.toggle('open'); updatePanel(); }, 3000);
+});
+['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) =>
+  hotspot.addEventListener(ev, () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } })
+);
+
+// --- controles ---
+$('micBtn').addEventListener('click', toggleMic);
+$('camBtn').addEventListener('click', toggleCam);
+
+// --- helpers ---
+function resampleTo16k(input, inRate) {
+  if (inRate === 16000 || !input.length) return input;
+  const outLen = Math.round(input.length * 16000 / inRate);
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * inRate / 16000;
+    const idx = Math.floor(pos);
+    const frac = pos - idx;
+    const s0 = input[idx] || 0;
+    const s1 = input[Math.min(idx + 1, input.length - 1)] || 0;
+    out[i] = s0 + frac * (s1 - s0);
+  }
+  return out;
+}
+function floatTo16(f) {
+  const b = new Int16Array(f.length);
+  for (let i = 0; i < f.length; i++) {
+    const s = Math.max(-1, Math.min(1, f[i]));
+    b[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return b;
+}
+function abToB64(buf) {
+  const bytes = new Uint8Array(buf);
+  let out = '';
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) {
+    out += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  }
+  return btoa(out);
+}
+
+// --- arranque ---
+connect('mask');
+connect('overlay');
+updateStatus();
+setInterval(() => { camFps = camFramesThisSec; camFramesThisSec = 0; updatePanel(); }, 1000);
+</script>
+</body>
+</html>

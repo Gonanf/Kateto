@@ -25,6 +25,7 @@ log = logger
 OVERLAY_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "index.html"
 COURTROOM_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "courtroom.html"
 DISCUSSION_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "discussion.html"
+MASK_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "mask.html"
 WEB_DIR = Path(__file__).resolve().parent.parent / "visual_overlay" / "web"
 VALID_AVATAR_FILES = ("top.png", "mouth.png", "avatar_head.png", "avatar_jaw.png")
 ASSETS_DIR = (Path(__file__).resolve().parent.parent.parent.parent / "assets" / "bate_debate").resolve()
@@ -241,6 +242,10 @@ class HttpServer:
         @app.get("/discussion")
         async def discussion() -> FileResponse:
             return FileResponse(DISCUSSION_HTML, headers={"Cache-Control": "no-store"})
+
+        @app.get("/mask")
+        async def mask() -> FileResponse:
+            return FileResponse(MASK_HTML, headers={"Cache-Control": "no-store"})
 
         @app.get("/components/{file}")
         async def component_asset(file: str) -> FileResponse:
