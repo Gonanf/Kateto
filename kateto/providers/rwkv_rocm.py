@@ -94,6 +94,106 @@ def _get_or_create_engine(
     return _GLOBAL_ENGINE
 
 
+# ── formato `rwkv-kateto` (el que VIO el modelo) ─────────────────────────────
+# No es ChatML ni RWKV-World. Marcadores en TEXTO (el vocab no tiene tokens
+# especiales): `<|im_user|>` (humano), `<|im_start|>{voz}` + `<|im_end|>` (la
+# propia voz) y `<|im_dev|>` (rol no-humano `developer`: eventos, workflows,
+# pedidos de otras voces).
+#
+# El esqueleto del turno humano/voz NO se copia acá: lo emite el formateador
+# canónico del motor (`KatetoInferenceEngine.format_chat_prompt`), que es el
+# anclaje que entrena y sirve byte a byte. El marcador `<|im_dev|>` todavía no
+# vive en ese formateador (su definición canónica está en `chat_template.py` del
+# repo de training, card FORMATO aparte): se serializa acá en UN solo lugar, con
+# la gramática de `<|im_user|>`, y se alinea cuando esa card aterrice.
+IM_DEV = "<|im_dev|>"
+IM_END = "<|im_end|>"
+
+
+def _turno_humano_abierto(texto: str, voice: str) -> str:
+    """Turno ABIERTO del motor: `<|im_user|>{texto}<|im_end|>\\n<|im_start|>{voz}\\n`."""
+    return KatetoInferenceEngine.format_chat_prompt(None, texto, voice, None, 1)
+
+
+def _encabezado_voz(voice: str) -> str:
+    """`<|im_start|>{voz}\\n`, tomado del formateador canónico (no copiado)."""
+    return _turno_humano_abierto("", voice).split("\n", 1)[1]
+
+
+def _destilar_prompt_debate(texto: str) -> str:
+    """Destila prompts verbose de bate_debate para modelos compactos."""
+    if "TEMA DEL DEBATE:" in texto and "TU POSTURA ASIGNADA:" in texto:
+        topic = stance = ""
+        for linea in texto.split("\n"):
+            if linea.startswith("TEMA DEL DEBATE:"):
+                topic = linea.replace("TEMA DEL DEBATE:", "").strip()
+            elif linea.startswith("TU POSTURA ASIGNADA:"):
+                stance = linea.replace("TU POSTURA ASIGNADA:", "").strip()
+        return (
+            f"Tema del debate: {topic}\nTu postura asignada: {stance}\n"
+            "Defendé tu posición con 2 oraciones contundentes en tono rioplatense:"
+        )
+    if "OBJECION" in texto and "INSTRUCCIONES:" in texto:
+        return texto.split("INSTRUCCIONES:")[0].strip() + "\nFormulá tu objeción de forma directa:"
+    if "INSTRUCCIONES:" in texto:
+        return texto.split("INSTRUCCIONES:")[0].strip()
+    return texto
+
+
+def _turnos(messages: Sequence[ChatMessage]) -> list[tuple[str, str, str | None]]:
+    """Agrupa la conversación en turnos `(rol, texto, respuesta|None)`.
+
+    Un turno lo abre un mensaje que NO es de la voz (`user` o `developer`) y lo
+    cierra la respuesta `assistant`. Los `system` (SOUL, schemas, memoria) NO se
+    serializan: el formato `rwkv-kateto` no tiene marcador de sistema y la
+    personalidad de la voz vive en sus pesos/estado, no en el prompt.
+    """
+    turnos: list[tuple[str, str, str | None]] = []
+    for msg in messages:
+        texto = msg.content.strip()
+        if not texto:
+            continue
+        if msg.role == "system":
+            continue
+        if msg.role == "assistant":
+            if turnos and turnos[-1][2] is None and turnos[-1][0] != "assistant":
+                rol, cabeza, _ = turnos[-1]
+                turnos[-1] = (rol, cabeza, texto)
+            else:
+                turnos.append(("assistant", texto, None))
+            continue
+        if msg.role == "user":
+            texto = _destilar_prompt_debate(texto)
+        turnos.append((msg.role, texto, None))  # user | developer
+    return turnos
+
+
+def format_messages_to_prompt(messages: Sequence[ChatMessage], voice: str) -> str:
+    """Serializa la conversación al formato `rwkv-kateto` con el rol correcto.
+
+    `user` -> `<|im_user|>…<|im_end|>`; `developer` -> `<|im_dev|>…<|im_end|>`;
+    `assistant` -> `<|im_start|>{voz}\\n…<|im_end|>`. El último turno queda
+    ABIERTO (sin cierre), que es el prefijo que el modelo continúa.
+    """
+    voz = "seco" if voice == "none" else voice
+    turnos = _turnos(messages)
+    partes: list[str] = []
+    for i, (rol, texto, respuesta) in enumerate(turnos):
+        ultimo = i == len(turnos) - 1
+        if rol == "assistant":
+            partes.append(_encabezado_voz(voz) + texto + IM_END)
+            continue
+        if rol == "developer":
+            cabeza = f"{IM_DEV}{texto}{IM_END}\n" + _encabezado_voz(voz)
+        else:  # user: el esqueleto canónico lo emite el motor
+            cabeza = _turno_humano_abierto(texto, voz)
+        if ultimo and respuesta is None:
+            partes.append(cabeza)  # prompt abierto: la voz responde acá
+        else:
+            partes.append(cabeza + (respuesta or "") + IM_END)
+    return "".join(partes)
+
+
 @dataclass
 class RWKVROCmProvider:
     """Proveedor nativo ROCm para RWKV-7 con State Swap y memoria asociativa ROSA."""
@@ -110,32 +210,10 @@ class RWKVROCmProvider:
     def __post_init__(self) -> None:
         _ = _get_or_create_engine(self.model_path, self.vocab_path, self.states_dir)
 
-    def _format_messages_to_prompt(self, messages: Sequence[ChatMessage]) -> str:
-        user_chunks = []
-        for msg in messages:
-            if msg.role == "user":
-                content = msg.content.strip()
-                # Destilar prompts verbose de bate_debate para modelos compactos
-                if "TEMA DEL DEBATE:" in content and "TU POSTURA ASIGNADA:" in content:
-                    lines = content.split("\n")
-                    topic = ""
-                    stance = ""
-                    for l in lines:
-                        if l.startswith("TEMA DEL DEBATE:"):
-                            topic = l.replace("TEMA DEL DEBATE:", "").strip()
-                        elif l.startswith("TU POSTURA ASIGNADA:"):
-                            stance = l.replace("TU POSTURA ASIGNADA:", "").strip()
-                    content = f"Tema del debate: {topic}\nTu postura asignada: {stance}\nDefendé tu posición con 2 oraciones contundentes en tono rioplatense:"
-                elif "OBJECION" in content and "INSTRUCCIONES:" in content:
-                    content = content.split("INSTRUCCIONES:")[0].strip() + "\nFormulá tu objeción de forma directa:"
-                elif "INSTRUCCIONES:" in content:
-                    content = content.split("INSTRUCCIONES:")[0].strip()
-                user_chunks.append(content)
-            elif msg.role == "assistant":
-                user_chunks.append(f"Assistant: {msg.content.strip()}")
-
-        prompt_body = "\n\n".join(user_chunks)
-        return f"User: {prompt_body}\n\nAssistant:"
+    def _format_messages_to_prompt(
+        self, messages: Sequence[ChatMessage], *, voice: str | None = None
+    ) -> str:
+        return format_messages_to_prompt(messages, voice or self.voice_id)
 
     async def stream(self, request: Any) -> AsyncIterator[str]:
         engine = _get_or_create_engine(self.model_path)
@@ -152,7 +230,7 @@ class RWKVROCmProvider:
         if mapped_state not in engine.states:
             mapped_state = "seco" if "seco" in engine.states else "none"
 
-        formatted = self._format_messages_to_prompt(messages)
+        formatted = self._format_messages_to_prompt(messages, voice=mapped_state)
         prompt_tokens = engine.tokenizer.encode(formatted)
 
         # Construir estado inicial con State-Tuning
@@ -166,7 +244,10 @@ class RWKVROCmProvider:
         # Autoregressive generation
         generated_tokens = []
         occurrence: dict[int, int] = {}
-        stop_markers = ["\n\n", "\nUser:", "User:", "\nAssistant:", "Assistant:", "<|endoftext|>"]
+        # Paradas del formato `rwkv-kateto` (el que vio el modelo). El cierre de
+        # turno es `<|im_end|>`; los marcadores viejos (`User:`/`Assistant:`) eran
+        # del template divorciado del entrenamiento y se eliminaron.
+        stop_markers = ["<|endoftext|>", "<|im_end|>", "<|im_user|>", IM_DEV, "<|im_start|>"]
 
         for _ in range(self.max_tokens):
             tok = sample_logits(
@@ -192,10 +273,6 @@ class RWKVROCmProvider:
                 if len(generated_tokens) > 3 and sm in text_so_far:
                     should_stop = True
                     break
-
-            # Si ya se articuló una idea completa de más de 20 tokens y hay un salto de línea
-            if len(generated_tokens) > 20 and "\n" in token_str:
-                should_stop = True
 
             if should_stop:
                 break

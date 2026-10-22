@@ -50,7 +50,7 @@ class VoiceManager(Plugin):
         if not eligible:
             log.warning("voice_manager: no eligible voices for generate")
             return
-        chosen = self._pick_voice(eligible)
+        chosen = data.voice if data.voice in eligible else self._pick_voice(eligible)
         log.info("voice_manager: routing to {} (probabilities: {})", chosen, self._probabilities)
         envelope = await manager.emit(
             "speak",

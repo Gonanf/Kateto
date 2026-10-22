@@ -1292,8 +1292,12 @@ class VoiceAgent(Plugin):
         pipeline = self._get_or_create_pipeline()
         messages = await self._messages_for(prompt, workflow=workflow, phase_id=phase_id)
         # For pydantic_agent message_history, skip system messages (agent already has its system prompt)
-        # and only pass actual dialogue turns (user / assistant):
-        dialogue_messages = tuple(m for m in messages[:-1] if m.role in ("assistant", "user"))[-6:]
+        # and only pass actual dialogue turns. `developer` (eventos, workflows,
+        # pedidos de otras voces) SÍ viaja: es contexto del modelo, no el system
+        # prompt del agente (spec de dataset §1.3).
+        dialogue_messages = tuple(
+            m for m in messages[:-1] if m.role in ("assistant", "user", "developer")
+        )[-6:]
         history = _to_pydantic_messages(dialogue_messages)
         user_prompt = messages[-1].content if messages else prompt
         from pydantic_ai.settings import ModelSettings
@@ -1619,10 +1623,14 @@ class VoiceAgent(Plugin):
         )
         # Bounded recent history prevents local LLM 8192-token context overflow
         recent_events = list(self._event_messages)[-8:]
+        # El evento que disparó este turno ya quedó en el historial (`developer`
+        # para Generate/VoiceRequest, `user` para la transcripción). Se saca para
+        # que el prompt actual aparezca UNA sola vez (al final, como turno del
+        # humano), no duplicado en el historial.
         history = tuple(
             message
             for message in recent_events
-            if not (message.role == "user" and message.content == prompt)
+            if not (message.role in ("user", "developer") and message.content == prompt)
         )
         # bug 121: el caption pelado `[look-at …]` llega como instrucción de
         # turno (mirada propia, en el idioma de la voz), no como dato. La
@@ -1652,6 +1660,15 @@ class VoiceAgent(Plugin):
         )
 
     def _remember_event(self, envelope: EventEnvelope[BaseModel]) -> None:
+        # Reparto por ROL (spec de dataset §1.3, decisión del dueño): el rol es
+        # información del input, no texto crudo. Si el humano, otra voz, un
+        # evento y un resultado de tool entran todos como `user`, el modelo no
+        # puede distinguirlos.
+        #   user      -> SOLO la transcripción del humano (`TranscriptionData`)
+        #   developer -> eventos, workflows, plugins y pedidos de otras voces
+        #   assistant -> lo que dice la propia voz + `tool_call` / `tool_result`
+        # El rol de una `TextChunk` propia es `assistant`; su marco de mirada
+        # (`VisionDescribeResultData`) es de otra fuente -> `developer`.
         message: ChatMessage | None = None
         match envelope.data:
             case TranscriptionData(text=text):
@@ -1664,7 +1681,7 @@ class VoiceAgent(Plugin):
                 # Bug 129: el marco de memoria es determinista — reusa el último
                 # ángulo (o el default) y las últimas narraciones, sin sortear.
                 message = ChatMessage(
-                    role="user",
+                    role="developer",
                     content=self._bounded_event_text(
                         frame_look_at_turn(
                             raw,
@@ -1677,9 +1694,9 @@ class VoiceAgent(Plugin):
             case TextChunk(text=text) if text:
                 message = ChatMessage(role="assistant", content=self._bounded_event_text(text))
             case VoiceRequestData(prompt=prompt):
-                message = ChatMessage(role="user", content=self._bounded_event_text(prompt))
+                message = ChatMessage(role="developer", content=self._bounded_event_text(prompt))
             case GenerateData(prompt=prompt) if prompt is not None:
-                message = ChatMessage(role="user", content=self._bounded_event_text(prompt))
+                message = ChatMessage(role="developer", content=self._bounded_event_text(prompt))
             case ToolCallData(tool_name=name, arguments=arguments):
                 details = json.dumps(arguments, separators=(",", ":"), sort_keys=True)
                 message = ChatMessage(
@@ -1694,41 +1711,41 @@ class VoiceAgent(Plugin):
                 )
             case WorkflowRunData(workflow=workflow, voice=voice):
                 message = ChatMessage(
-                    role="user",
+                    role="developer",
                     content=self._bounded_event_text(f"workflow_run {workflow} for {voice}"),
                 )
             case WorkflowStartedData(workflow=workflow, voice=voice):
                 message = ChatMessage(
-                    role="user",
+                    role="developer",
                     content=self._bounded_event_text(f"workflow_started {workflow} for {voice}"),
                 )
             case WorkflowPhaseStartData(workflow=workflow, phase_id=phase_id, instructions=instructions):
                 details = "; ".join(instructions)
                 message = ChatMessage(
-                    role="user",
+                    role="developer",
                     content=self._bounded_event_text(f"workflow_phase_start {workflow}/{phase_id}: {details}"),
                 )
             case WorkflowPhaseCompleteData(workflow=workflow, phase_id=phase_id, deliverables=deliverables):
                 details = "; ".join(deliverables)
                 message = ChatMessage(
-                    role="user",
+                    role="developer",
                     content=self._bounded_event_text(f"workflow_phase_complete {workflow}/{phase_id}: {details}"),
                 )
             case WorkflowCheckpointFailData(workflow=workflow, phase_id=phase_id, checkpoint=checkpoint):
                 message = ChatMessage(
-                    role="user",
+                    role="developer",
                     content=self._bounded_event_text(
                         f"workflow_checkpoint_fail {workflow}/{phase_id}: {checkpoint}"
                     ),
                 )
             case WorkflowCompletedData(workflow=workflow, voice=voice):
                 message = ChatMessage(
-                    role="user",
+                    role="developer",
                     content=self._bounded_event_text(f"workflow_completed {workflow} for {voice}"),
                 )
             case WorkflowStopData(workflow=workflow, voice=voice, reason=reason):
                 message = ChatMessage(
-                    role="user",
+                    role="developer",
                     content=self._bounded_event_text(f"workflow_stop {workflow} for {voice}: {reason}"),
                 )
             case _:

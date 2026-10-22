@@ -47,6 +47,8 @@ class AudioData(EventModel):
     format: str = "wav"
     source: str = ""
     duration_ms: float = Field(default=0.0, ge=0.0)
+    # voz pedida por la fuente (mask); va en el payload porque target filtraría el evento
+    voice: str | None = None
 
 
 class TranscriptionData(EventModel):
@@ -54,6 +56,8 @@ class TranscriptionData(EventModel):
     language: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     duration_ms: float | None = Field(default=None, ge=0.0)
+    # ruteo pedido, heredado de AudioData
+    voice: str | None = None
 
 
 class VisionFrameData(EventModel):
@@ -183,6 +187,8 @@ class GenerateData(EventModel):
     # None = el emisor no opina: la voz resuelve el origen como siempre
     # (followup si hay un followup pendiente, si no external).
     origin: str | None = None
+    # voz forzada por el pedido del audio; None = VoiceManager sortea
+    voice: str | None = None
 
 
 GENERATE_REQUEST_MAX_DEPTH: int = 3

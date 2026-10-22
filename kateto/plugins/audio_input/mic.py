@@ -14,6 +14,8 @@ class MicrophoneAudioInput(AudioInputPlugin):
         *,
         vad: SileroVad,
         capture_factory: CaptureFactory | None = None,
+        whisper_transcriber: object = None,
+        classifier_client: object = None,
     ) -> None:
         super().__init__(
             identity=AudioInputIdentity(
@@ -31,4 +33,6 @@ class MicrophoneAudioInput(AudioInputPlugin):
                 if capture_factory is None
                 else capture_factory
             ),
+            whisper_transcriber=whisper_transcriber,
+            classifier_client=classifier_client,
         )

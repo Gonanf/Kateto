@@ -64,13 +64,36 @@ class WhisperAudioProcessor(Plugin):
             await self._provider.aclose()
             self._provider = None
 
-    async def on_audio_chunk(self, data: AudioData) -> None:
+    async def transcribe(self, audio: AudioData) -> TranscriptionData:
         provider = self._provider
         if provider is None:
             msg = "whisper processor must be enabled before use"
             raise RuntimeError(msg)
+        return await provider.transcribe(audio)
+
+    async def transcribe_samples(
+        self,
+        samples: bytes,
+        *,
+        sample_rate: int = 16_000,
+        channels: int = 1,
+        format: str = "pcm_s16le",
+    ) -> TranscriptionData:
+        from kateto.plugins.audio_input.base import duration_ms
+
+        audio = AudioData(
+            samples=samples,
+            sample_rate=sample_rate,
+            channels=channels,
+            format=format,
+            source="gate",
+            duration_ms=duration_ms(samples),
+        )
+        return await self.transcribe(audio)
+
+    async def on_audio_chunk(self, data: AudioData) -> None:
         try:
-            transcription = await provider.transcribe(data)
+            transcription = await self.transcribe(data)
             if not transcription.text or not transcription.text.strip():
                 log.debug("[whisper] No speech detected in audio chunk")
                 return

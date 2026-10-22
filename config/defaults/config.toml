@@ -28,6 +28,16 @@ vad_model = "silero"
 # turn_silence_timeout = 2.0
 # max_turn_secs = 30.0
 # turn_hold_ms = 0.0
+# Semantic interrupt gate (prevents "ummm, si" and other backchannels from cutting Kateto playback):
+# interrupt_gate = "off"  # "off" | "lexical" | "classifier"
+# interrupt_gate_window_ms = 1200
+# interrupt_gate_timeout_ms = 800
+# interrupt_gate_min_confidence = 0.4
+# interrupt_gate_ignore_words = ["umm", "emm", "mmm", "eh", "ah", "aja", "ajá", "si", "sí", "sip", "claro", "claro que si", "claro que sí", "dale", "ok", "oka", "bueno", "ya", "ya se", "y bueno", "obvio", "seguro", "si si", "dale dale"]
+# interrupt_gate_classifier_url = "http://127.0.0.1:8091/v1/chat/completions"
+# interrupt_gate_model = ""  # e.g. "/home/chaos/proyectos/whisper.cpp/models/ggml-tiny.bin"
+# interrupt_gate_backend = "same"  # "same" | "server" | "pywhispercpp"
+# interrupt_gate_endpoint = "http://127.0.0.1:8092"
 
 [plugin.audio_processor_whisper]
 enabled = true
@@ -179,3 +189,28 @@ max_frames_per_describe = 2
 # descarta con log, nunca se manda.
 vision_sidecar_max_width = 1024
 device_index = 0
+
+[plugin.audio_input_mask]
+enabled = false
+sample_rate = 16000
+silence_timeout = 1.2
+vad_model = "silero"
+interrupt_on_vad = true
+turn_silence_timeout = 1.6
+# Barge-in del mask (sin AEC: el parlante del celular va pegado al micrófono).
+# Igual que el mic: la VAD dentro de barge_in_grace_ms tras el arranque de la
+# reproducción se trata como auto-bleed y el barge-in real debe superar el nivel
+# suavizado (x barge_in_level_factor) y sostenerse barge_in_min_speech_ms.
+# barge_in_grace_ms = 600.0
+# barge_in_level_factor = 1.6
+# barge_in_min_speech_ms = 350.0
+
+[plugin.audio_processor_parakeet]
+enabled = false
+endpoint = "http://127.0.0.1:8098"
+model = "parakeet"
+language = "es"
+timeout_s = 15.0
+# crispasr local con parakeet-ultra-q8_0.gguf (backend parakeet, vulkan).
+# Al poner enabled = true hay que apagar [plugin.audio_processor_whisper]
+# (enabled = false): un solo ASR puede consumir audio_chunk.

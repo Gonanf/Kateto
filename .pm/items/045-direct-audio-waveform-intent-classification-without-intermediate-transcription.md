@@ -5,5 +5,5 @@ description = 'Evaluate speech embeddings directly for fast voice routing before
 state = 'todo'
 type = 'feat'
 created = '2026-08-29T00:50:49-03:00'
-updated = '2026-08-29T00:50:49-03:00'
+updated = '2026-09-11T22:19:45-03:00'
 +++

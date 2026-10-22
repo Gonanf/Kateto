@@ -1297,6 +1297,7 @@ all = [
     { name = "huggingface-hub" },
     { name = "llama-cpp-python" },
     { name = "onnxruntime" },
+    { name = "piper-tts" },
     { name = "pywhispercpp" },
     { name = "tokenizers" },
 ]
@@ -1307,6 +1308,9 @@ classifier = [
 ]
 llamacpp = [
     { name = "llama-cpp-python" },
+]
+piper = [
+    { name = "piper-tts" },
 ]
 whispercpp = [
     { name = "pywhispercpp" },
@@ -1327,13 +1331,14 @@ requires-dist = [
     { name = "fastapi", specifier = "==0.140.0" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "huggingface-hub", marker = "extra == 'classifier'", specifier = ">=0.27.0" },
-    { name = "kateto", extras = ["classifier", "llamacpp", "whispercpp"], marker = "extra == 'all'" },
+    { name = "kateto", extras = ["classifier", "llamacpp", "whispercpp", "piper"], marker = "extra == 'all'" },
     { name = "llama-cpp-python", marker = "extra == 'llamacpp'", specifier = ">=0.3.0" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "mcp", specifier = "==1.28.1" },
     { name = "numpy", specifier = ">=2.5.1" },
     { name = "onnxruntime", marker = "extra == 'classifier'", specifier = ">=1.20.0" },
     { name = "openai", specifier = "==2.45.0" },
+    { name = "piper-tts", marker = "extra == 'piper'", specifier = ">=1.6.0" },
     { name = "pydantic", specifier = "==2.13.4" },
     { name = "pydantic-ai", specifier = ">=2.18.0" },
     { name = "pydantic-ai-harness", extras = ["codemode", "dynamic-workflow", "skills"], specifier = ">=0.11.0" },
@@ -1347,7 +1352,7 @@ requires-dist = [
     { name = "watchfiles", specifier = ">=1.2.0" },
     { name = "zodb", specifier = ">=6.3" },
 ]
-provides-extras = ["classifier", "whispercpp", "llamacpp", "all"]
+provides-extras = ["classifier", "whispercpp", "llamacpp", "piper", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2049,6 +2054,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pathvalidate"
+version = "3.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fa/2a/52a8da6fe965dea6192eb716b357558e103aea0a1e9a8352ad575a8406ca/pathvalidate-3.3.1.tar.gz", hash = "sha256:b18c07212bfead624345bb8e1d6141cdcf15a39736994ea0b94035ad2b1ba177", size = 63262, upload-time = "2025-06-15T09:07:20.736Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/70/875f4a23bfc4731703a5835487d0d2fb999031bd415e7d17c0ae615c18b7/pathvalidate-3.3.1-py3-none-any.whl", hash = "sha256:5263baab691f8e1af96092fa5137ee17df5bdfbd6cff1fcac4d6ef4bc2e1735f", size = 24305, upload-time = "2025-06-15T09:07:19.117Z" },
+]
+
+[[package]]
 name = "persistent"
 version = "6.7"
 source = { registry = "https://pypi.org/simple" }
@@ -2080,6 +2094,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/54/bc/d56f4f79e5ae06b18d378a65c241a7e2ef01d6e3fbaa304411e5b9635680/persistent-6.7-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:756bd3f7769a2b5a99c1462620aa4945ce5281b2b42f765f19d17c8666af4e05", size = 245366, upload-time = "2026-05-26T06:58:50.346Z" },
     { url = "https://files.pythonhosted.org/packages/08/0e/e8b2b1d40c2cefed61ab942b187dfb700e2e759fb65dc2785eeaaa5e9d92/persistent-6.7-cp314-cp314-win_amd64.whl", hash = "sha256:2c3f9bd6f5d60af6caf7be8f4064cb33a6f4c56baf464b41888bea342afa0916", size = 132084, upload-time = "2026-05-26T06:58:51.688Z" },
     { url = "https://files.pythonhosted.org/packages/cf/60/d6f12fe7f4aeda2cc67112dc7c6c0cbf06c122a668936396e0788e17f149/persistent-6.7-cp314-cp314-win_arm64.whl", hash = "sha256:ef3f6f034f8bab6e1fd353022e7db18d47be0c16a46a713392d31d7c6cede00c", size = 127253, upload-time = "2026-05-26T06:58:53.512Z" },
+]
+
+[[package]]
+name = "piper-tts"
+version = "1.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "onnxruntime" },
+    { name = "pathvalidate" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/02/cc/95b18b58d9c235d8e0bcece7321b7a7347873c14f9fea2c734b31ef04ff2/piper_tts-1.8.0.tar.gz", hash = "sha256:830588aded347df579c91a32703e0fc2a3685d84f1e3533b14f2de69135d4904", size = 24276117, upload-time = "2026-09-04T16:47:31.908Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a7/2f/ad6db2adc635f85e9d2abd8e59bed3f04062c7b33817d519347fd79ad19f/piper_tts-1.8.0-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:98c7dd791b2be0f8732e5c9cefd86c54200ac0360e43c643c937bf18ac0e941a", size = 34111822, upload-time = "2026-09-04T16:47:14.384Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/f9/90e75adb55b3470a73030598c36f9969fe568e8458c066fa9b4fbc78a4c1/piper_tts-1.8.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:33e7425933e9290fe651ae127916ed1ca6104cfa3d94e9049295dd3a5c449382", size = 34119781, upload-time = "2026-09-04T16:47:17.823Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/90/de832b09736db8c26c9b5dd25cb408ed065b1d9535e05c78947aec056e36/piper_tts-1.8.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3f60c1917de6d8e8033f395878ad3f88f6dfee88a8b05f98971a275f76a38484", size = 34131751, upload-time = "2026-09-04T16:47:21.094Z" },
+    { url = "https://files.pythonhosted.org/packages/84/81/0112a7d510911f33018dc24023d1655bb772f84a4e95fe7f0180f66bbd17/piper_tts-1.8.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:25b4d3f31ff70c8fa7151908e00aaa5650cbdf16bca8fcf21299f3941b89a7d3", size = 34131442, upload-time = "2026-09-04T16:47:24.326Z" },
+    { url = "https://files.pythonhosted.org/packages/12/9c/c736d1961cf9ce0655278731b9430df41892ca2ded7b09dabcb340612158/piper_tts-1.8.0-cp39-abi3-win_amd64.whl", hash = "sha256:5da9bfdb05dfe15da3536859d422e605483ffa6d2b3ec2c5b9593bae6b5aa6a4", size = 34119688, upload-time = "2026-09-04T16:47:28.339Z" },
 ]
 
 [[package]]

@@ -93,6 +93,7 @@ class ClassifierExecutor(Plugin):
         if classifier is None:
             msg = "classifier executor must be enabled before use"
             raise RuntimeError(msg)
+        requested = self._resolve_voice(data.voice)
         agents = self._collect_agent_names()
         workflows = ()  # Workflow classifier disabled
         classification = await classifier.classify(data.text, agents=agents)
@@ -112,7 +113,7 @@ class ClassifierExecutor(Plugin):
                 target = "voice_manager" if self._voice_manager_enabled() else None
                 _ = await manager.emit(
                     "generate",
-                    GenerateData(prompt=classification.text),
+                    GenerateData(prompt=classification.text, voice=requested),
                     source=self.name,
                     target=target,
                 )

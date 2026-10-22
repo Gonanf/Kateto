@@ -146,8 +146,18 @@ class PluginSettings(_ExtensibleConfigModel):
     command: str | None = None
     args: list[str] | None = None
     backend: str | None = None
+    # Semantic interrupt gate
+    interrupt_gate: str | None = None
+    interrupt_gate_window_ms: int | None = Field(default=None, gt=0)
+    interrupt_gate_timeout_ms: int | None = Field(default=None, gt=0)
+    interrupt_gate_min_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    interrupt_gate_ignore_words: list[str] | None = None
+    interrupt_gate_classifier_url: str | None = None
+    interrupt_gate_model: str | None = None
+    interrupt_gate_backend: str | None = None
+    interrupt_gate_endpoint: str | None = None
 
-    @field_validator("endpoint", "model_endpoint")
+    @field_validator("endpoint", "model_endpoint", "interrupt_gate_classifier_url", "interrupt_gate_endpoint")
     @classmethod
     def validate_endpoint(cls, value: str | None) -> str | None:
         if value is None:

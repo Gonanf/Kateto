@@ -49,6 +49,20 @@ DEFAULT_TURN_HOLD_MS: Final = 0.0
 # detection without false positives.  Raise via vad_threshold per plugin
 # if the environment is noisier.
 DEFAULT_VAD_THRESHOLD: Final = 0.2
+# ponytail: semantic gate default off preserves legacy acoustic barge-in.
+DEFAULT_INTERRUPT_GATE: Final = "off"
+DEFAULT_INTERRUPT_GATE_WINDOW_MS: Final = 1200
+DEFAULT_INTERRUPT_GATE_TIMEOUT_MS: Final = 800
+DEFAULT_INTERRUPT_GATE_MIN_CONFIDENCE: Final = 0.4
+DEFAULT_INTERRUPT_GATE_IGNORE_WORDS: Final[tuple[str, ...]] = (
+    "um", "umm", "ummm", "em", "emm", "emmm", "mmm", "eh", "ah", "aja", "ajá", "si", "sí", "sip",
+    "claro", "claro que si", "claro que sí", "dale", "ok", "oka", "bueno", "ya", "ya se", "y bueno",
+    "obvio", "seguro", "si si", "dale dale",
+)
+DEFAULT_INTERRUPT_GATE_CLASSIFIER_URL: Final = "http://127.0.0.1:8091/v1/chat/completions"
+DEFAULT_INTERRUPT_GATE_MODEL: Final = ""
+DEFAULT_INTERRUPT_GATE_BACKEND: Final = "same"
+DEFAULT_INTERRUPT_GATE_ENDPOINT: Final = "http://127.0.0.1:8092"
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +116,17 @@ class AudioInputConfig:
     playback_idle_timeout: float = DEFAULT_PLAYBACK_IDLE_TIMEOUT
     dept: str | None = "fun"
     callback_queue_capacity: int = 32
+    # Semantic interrupt gate (barge-in semantic filter)
+    interrupt_gate: str = DEFAULT_INTERRUPT_GATE
+    interrupt_gate_window_ms: int = DEFAULT_INTERRUPT_GATE_WINDOW_MS
+    interrupt_gate_timeout_ms: int = DEFAULT_INTERRUPT_GATE_TIMEOUT_MS
+    interrupt_gate_min_confidence: float = DEFAULT_INTERRUPT_GATE_MIN_CONFIDENCE
+    interrupt_gate_ignore_words: tuple[str, ...] = DEFAULT_INTERRUPT_GATE_IGNORE_WORDS
+    interrupt_gate_classifier_url: str = DEFAULT_INTERRUPT_GATE_CLASSIFIER_URL
+    interrupt_gate_model: str = DEFAULT_INTERRUPT_GATE_MODEL
+    interrupt_gate_backend: str = DEFAULT_INTERRUPT_GATE_BACKEND
+    interrupt_gate_endpoint: str = DEFAULT_INTERRUPT_GATE_ENDPOINT
+    language: str | None = None
 
     @classmethod
     def from_settings(
@@ -131,6 +156,45 @@ class AudioInputConfig:
             )
         device = "default" if not configured_device else configured_device
         dept = settings.dept or (settings.depts[0] if settings.depts else "fun")
+        interrupt_gate = (
+            DEFAULT_INTERRUPT_GATE
+            if getattr(settings, "interrupt_gate", None) is None
+            else settings.interrupt_gate
+        )
+        if interrupt_gate not in ("off", "lexical", "classifier"):
+            raise AudioInputConfigurationError(
+                field="interrupt_gate",
+                reason="must be 'off', 'lexical', or 'classifier'",
+            )
+        interrupt_gate_backend = (
+            DEFAULT_INTERRUPT_GATE_BACKEND
+            if getattr(settings, "interrupt_gate_backend", None) is None
+            else settings.interrupt_gate_backend
+        )
+        if interrupt_gate_backend not in ("same", "server", "pywhispercpp"):
+            raise AudioInputConfigurationError(
+                field="interrupt_gate_backend",
+                reason="must be 'same', 'server', or 'pywhispercpp'",
+            )
+        interrupt_gate_model = (
+            DEFAULT_INTERRUPT_GATE_MODEL
+            if getattr(settings, "interrupt_gate_model", None) is None
+            else settings.interrupt_gate_model
+        )
+        interrupt_gate_endpoint = (
+            DEFAULT_INTERRUPT_GATE_ENDPOINT
+            if getattr(settings, "interrupt_gate_endpoint", None) is None
+            else settings.interrupt_gate_endpoint
+        )
+        language = (
+            getattr(settings, "language", None)
+            or getattr(settings, "default_language", None)
+        )
+        ignore_words = (
+            DEFAULT_INTERRUPT_GATE_IGNORE_WORDS
+            if getattr(settings, "interrupt_gate_ignore_words", None) is None
+            else tuple(settings.interrupt_gate_ignore_words)
+        )
         return cls(
             source=source,
             device=device,
@@ -188,6 +252,32 @@ class AudioInputConfig:
             callback_queue_capacity=(
                 32 if settings.callback_queue_capacity is None else settings.callback_queue_capacity
             ),
+            interrupt_gate=interrupt_gate,
+            interrupt_gate_window_ms=(
+                DEFAULT_INTERRUPT_GATE_WINDOW_MS
+                if getattr(settings, "interrupt_gate_window_ms", None) is None
+                else settings.interrupt_gate_window_ms
+            ),
+            interrupt_gate_timeout_ms=(
+                DEFAULT_INTERRUPT_GATE_TIMEOUT_MS
+                if getattr(settings, "interrupt_gate_timeout_ms", None) is None
+                else settings.interrupt_gate_timeout_ms
+            ),
+            interrupt_gate_min_confidence=(
+                DEFAULT_INTERRUPT_GATE_MIN_CONFIDENCE
+                if getattr(settings, "interrupt_gate_min_confidence", None) is None
+                else settings.interrupt_gate_min_confidence
+            ),
+            interrupt_gate_ignore_words=ignore_words,
+            interrupt_gate_classifier_url=(
+                DEFAULT_INTERRUPT_GATE_CLASSIFIER_URL
+                if getattr(settings, "interrupt_gate_classifier_url", None) is None
+                else settings.interrupt_gate_classifier_url
+            ),
+            interrupt_gate_model=interrupt_gate_model,
+            interrupt_gate_backend=interrupt_gate_backend,
+            interrupt_gate_endpoint=interrupt_gate_endpoint,
+            language=language,
         )
 
 

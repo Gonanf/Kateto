@@ -60,7 +60,7 @@ _ALL_PHASES = (
 # suffix that forbids markdown/lists ("speak out loud, no bullets"). For a written
 # debate we strip it (mirrors gen_discussion.py `_doc_prompt`).
 _VOICE_CONSTRAINT = (
-    " You are a voice assistant in a live conversation. Never use symbols, bullet"
+    " Never use symbols, bullet"
     " points, markdown, or multi-line formatted text. Speak in short, natural"
     " sentences as if talking out loud. No lists, no headers, no dashes."
 )
