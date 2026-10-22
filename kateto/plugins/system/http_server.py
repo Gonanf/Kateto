@@ -17,10 +17,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from kateto.core.event import EventEnvelope, InterruptData, TextChunk
+from kateto.core.event import AudioData, EventEnvelope, InterruptData, TextChunk, VisionFrameData
 from kateto.core.manager import PluginManager
 
 log = logger
+
+
+async def _mask_heartbeat(ws: WebSocket) -> None:
+    try:
+        while True:
+            await asyncio.sleep(15)
+            await ws.send_json({"type": "heartbeat", "ts": time.time()})
+    except asyncio.CancelledError:
+        pass
+
 
 OVERLAY_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "index.html"
 COURTROOM_HTML = Path(__file__).resolve().parent.parent / "visual_overlay" / "web" / "courtroom.html"
@@ -422,6 +432,101 @@ class HttpServer:
                 pass
             finally:
                 await unregister(ws)
+
+        @app.websocket("/ws/mask")
+        async def mask_stream(ws: WebSocket) -> None:
+            await ws.accept()
+            plugin = self._manager.get_plugin("visual_overlay")
+            register = getattr(plugin, "register_websocket", None)
+            unregister = getattr(plugin, "unregister_websocket", None)
+            if register is not None and unregister is not None:
+                await register(ws)
+            heartbeat = asyncio.create_task(_mask_heartbeat(ws), name="kateto-mask-heartbeat")
+
+            async def _emit(name: str, data: Any) -> None:
+                try:
+                    await self._manager.emit(name, data, source="mask")
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("ws/mask emit {} failed: {}", name, exc)
+
+            try:
+                while True:
+                    msg = await ws.receive()
+                    if msg.get("type") == "websocket.disconnect":
+                        break
+                    if msg.get("bytes"):
+                        try:
+                            await _emit(
+                                "audio_chunk",
+                                AudioData(
+                                    samples=msg["bytes"],
+                                    sample_rate=16000,
+                                    channels=1,
+                                    format="pcm_s16le",
+                                    source="mask",
+                                ),
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            log.warning("ws/mask binary audio failed: {}", exc)
+                        continue
+                    text = msg.get("text")
+                    if not text:
+                        continue
+                    try:
+                        payload = json.loads(text)
+                    except Exception:  # noqa: BLE001
+                        await ws.send_json({"type": "error", "error": "invalid json"})
+                        continue
+                    if not isinstance(payload, dict):
+                        await ws.send_json({"type": "error", "error": "invalid payload"})
+                        continue
+                    kind = payload.get("type")
+                    if kind == "mask_audio_input":
+                        raw = payload.get("audio") or payload.get("data") or payload.get("samples")
+                        try:
+                            samples = base64.b64decode(raw, validate=True)
+                            await _emit(
+                                "audio_chunk",
+                                AudioData(
+                                    samples=samples,
+                                    sample_rate=int(payload.get("sample_rate") or 16000),
+                                    channels=1,
+                                    format="pcm_s16le",
+                                    source="mask",
+                                ),
+                            )
+                        except Exception:  # noqa: BLE001
+                            await ws.send_json({"type": "error", "error": "invalid audio payload"})
+                    elif kind == "mask_camera_frame":
+                        raw = payload.get("frame") or payload.get("data")
+                        try:
+                            frame = base64.b64decode(raw, validate=True)
+                            await _emit(
+                                "vision_frame",
+                                VisionFrameData(
+                                    frame=frame,
+                                    ts=time.time(),
+                                    dept=payload.get("dept") or "fun",
+                                    source="mask",
+                                ),
+                            )
+                        except Exception:  # noqa: BLE001
+                            await ws.send_json({"type": "error", "error": "invalid frame payload"})
+                    elif kind in ("interrupt", "mask_interrupt"):
+                        await _emit(
+                            "interrupt",
+                            InterruptData(reason=payload.get("reason") or "mask_interrupt"),
+                        )
+                    elif kind == "ping":
+                        await ws.send_json({"type": "pong", "ts": time.time()})
+                    else:
+                        await ws.send_json({"type": "error", "error": f"unknown type: {kind}"})
+            except WebSocketDisconnect:
+                pass
+            finally:
+                heartbeat.cancel()
+                if unregister is not None:
+                    await unregister(ws)
         try:
             from kateto.plugins.system.openai_server import create_openai_router
             app.include_router(create_openai_router(self._manager))
