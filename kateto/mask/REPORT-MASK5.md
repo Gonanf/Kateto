@@ -79,3 +79,66 @@ PATH=/home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/bin:$PATH PYTHONPATH=. \
 ```
 cd kateto/mask/web && node --test browser-pcm-player.test.mjs
 ```
+
+## Delta: contrato real de /ws/mask
+
+### Campos aceptados ahora en `enqueueFrame`
+
+| Campo base64 | Fuente |
+|---|---|
+| `audio_b64` | frame legacy del puente (`MaskAudioBridge.frame_for`) |
+| `audio` | frame real de `visual_overlay_plugin.on_audio_output` (tipo `viseme`) |
+
+La lectura es `frame.audio_b64 ?? frame.audio ?? null`. Si ninguno está presente y `final` no es `true`, el frame se descarta sin encolar y sin lanzar excepción.
+
+### Discriminante `handleMessage`
+
+```js
+// antes — sólo type: "audio"
+msg.event === "audio_output" && msg.type === "audio"
+
+// ahora — también type: "viseme"
+msg.event === "audio_output" && (msg.type === "audio" || msg.type === "viseme")
+```
+
+### Ejemplo del frame real de `/ws/mask`
+
+```json
+{
+  "event": "audio_output",
+  "type": "viseme",
+  "voice_id": "jane",
+  "rms": 0.12,
+  "is_speaking": true,
+  "jawOffsetX": 0, "jawOffsetY": 1.2, "jawRotation": 3, "headOffsetY": 0,
+  "text": "hola",
+  "audio": "<base64 pcm_s16le>",
+  "words": [{"text": "hola", "start_ms": 0, "end_ms": 200}],
+  "sample_rate": 22050, "channels": 1, "format": "pcm_s16le", "final": false,
+  "data": { "...": "copia de los mismos campos" }
+}
+```
+
+### Frame `update_viseme` (sin audio) — se ignora
+
+`visual_overlay_plugin.update_viseme()` emite también `type: "viseme"` pero sin campo `audio` ni `audio_b64`. Este frame es descartado limpiamente (`"ignored"`) sin encolar ni lanzar excepción.
+
+### `onFrame` y el jaw del avatar
+
+`_scheduleEntry` sigue llamando `onFrame` con `{ voiceId, rms, seq, playbackStartMs, durationMs, text }`. El `rms` proviene de `frame.rms` (presente en los frames viseme), por lo que `kateto-avatar` recibe el valor correcto para animar el jaw.
+
+### Resultado de los tests
+
+```
+node --test browser-pcm-player.test.mjs
+tests 16 · pass 16 · fail 0
+```
+
+10 tests anteriores: todos siguen pasando sin modificación.  
+6 tests nuevos: todos pasan.
+
+### Qué no se pudo verificar
+
+- Reproducción en teléfono real con el endpoint `/ws/mask` activo (requiere servidor corriendo y cliente móvil).
+- Sincronía jaw ↔ audio sobre red con latencia real (Wi-Fi/LTE).
+- Comportamiento cuando `data` contiene campos duplicados con valores distintos a los del nivel raíz.

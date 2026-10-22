@@ -246,3 +246,109 @@ describe("BrowserPcmPlayer", () => {
     assert.ok(Math.abs(seen[1].playbackStartMs - 100) < 1e-6);
   });
 });
+
+// Helper: builds a viseme frame as emitted by visual_overlay_plugin.on_audio_output
+function visemeFrameOf(samples, opts = {}) {
+  const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
+  return {
+    event: "audio_output",
+    type: "viseme",
+    voice_id: opts.voiceId ?? "jane",
+    rms: opts.rms ?? 0.12,
+    is_speaking: true,
+    jawOffsetX: 0,
+    jawOffsetY: 1.2,
+    jawRotation: 3,
+    headOffsetY: 0,
+    text: opts.text ?? "hola",
+    audio: Buffer.from(bytes).toString("base64"),
+    words: [{ text: "hola", start_ms: 0, end_ms: 200 }],
+    sample_rate: opts.sampleRate ?? 22050,
+    channels: 1,
+    format: "pcm_s16le",
+    final: opts.final ?? false,
+    data: {},
+  };
+}
+
+describe("BrowserPcmPlayer — contrato real /ws/mask", () => {
+  it("acepta el frame real de /ws/mask (type viseme con campo audio)", () => {
+    const { ctx, factory } = makeCtx();
+    const player = new BrowserPcmPlayer({ audioContextFactory: factory });
+    const frame = visemeFrameOf(int16Of(100, 22050));
+    const result = player.handleMessage(frame);
+    assert.equal(result, "queued");
+    assert.equal(ctx._sources.length, 1);
+    assert.equal(ctx._sources[0].startCalls.length, 1);
+  });
+
+  it("el frame legacy del puente (type audio + audio_b64) sigue andando", () => {
+    const { ctx, factory } = makeCtx();
+    const player = new BrowserPcmPlayer({ audioContextFactory: factory });
+    const result = player.handleMessage(frameOf(int16Of(100)));
+    assert.equal(result, "queued");
+    assert.equal(ctx._sources.length, 1);
+  });
+
+  it("un viseme sin audio (update_viseme) se ignora sin tirar", () => {
+    const { factory } = makeCtx();
+    const player = new BrowserPcmPlayer({ audioContextFactory: factory });
+    const updateVisemeFrame = {
+      event: "audio_output",
+      type: "viseme",
+      voice_id: "jane",
+      rms: 0.08,
+      is_speaking: true,
+      jawOffsetX: 0,
+      jawOffsetY: 0.5,
+      jawRotation: 1,
+      headOffsetY: 0,
+      text: "hola",
+      audio_ms: 120,
+    };
+    let result;
+    assert.doesNotThrow(() => {
+      result = player.handleMessage(updateVisemeFrame);
+    });
+    assert.equal(result, "ignored");
+  });
+
+  it("un viseme con audio y final true cierra el turno", () => {
+    const { ctx, factory } = makeCtx();
+    const states = [];
+    const player = new BrowserPcmPlayer({
+      audioContextFactory: factory,
+      onStateChange: (s) => states.push(s),
+    });
+    const frame = visemeFrameOf(int16Of(100, 22050), { final: true });
+    const result = player.handleMessage(frame);
+    assert.equal(result, "queued");
+    assert.equal(player.state, "playing");
+    ctx._sources[0].fireEnded();
+    assert.equal(player.state, "idle");
+    assert.ok(states.includes("idle"));
+  });
+
+  it("onFrame reporta rms del frame viseme", () => {
+    const { factory } = makeCtx();
+    const seen = [];
+    const player = new BrowserPcmPlayer({
+      audioContextFactory: factory,
+      onFrame: (info) => seen.push(info),
+    });
+    const frame = visemeFrameOf(int16Of(100, 22050), { rms: 0.12 });
+    player.handleMessage(frame);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].rms, 0.12);
+    assert.ok(typeof seen[0].playbackStartMs === "number");
+  });
+
+  it("un frame desconocido sigue devolviendo ignored", () => {
+    const { factory } = makeCtx();
+    const player = new BrowserPcmPlayer({ audioContextFactory: factory });
+    assert.equal(player.handleMessage({ event: "mask_ready", type: "ready" }), "ignored");
+    assert.equal(player.handleMessage({ event: "unknown_event", type: "foo" }), "ignored");
+    assert.equal(player.handleMessage(null), "ignored");
+    assert.equal(player.handleMessage("string"), "ignored");
+  });
+});
