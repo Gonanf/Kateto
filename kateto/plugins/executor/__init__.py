@@ -1,4 +1,5 @@
 from .classifier import ClassifierExecutor
+from .conversation_log import ConversationLogPlugin
 from .interrupt import InterruptExecutor
 from .scheduler import SchedulerPlugin
 from .todo_list import TodoListExecutor
@@ -10,6 +11,7 @@ log = logger
 
 __all__ = [
     "ClassifierExecutor",
+    "ConversationLogPlugin",
     "InterruptExecutor",
     "SchedulerPlugin",
     "TodoListExecutor",
@@ -19,6 +21,7 @@ __all__ = [
 
 def create_plugins(ctx):
     from .classifier import ClassifierExecutor
+    from .conversation_log import ConversationLogPlugin
     from .interrupt import InterruptExecutor
     from .static_vision_plugin import StaticVisionPlugin
     from .todo_list import TodoListExecutor
@@ -37,6 +40,9 @@ def create_plugins(ctx):
     todo_settings = ctx.config.settings.plugin.get("executor_todo_list")
     if todo_settings is None or todo_settings.enabled:
         plugins.append(TodoListExecutor(config_dir=ctx.config.paths.config_dir))
+    settings = ctx.config.settings.plugin.get("conversation_log")
+    if settings is None or settings.enabled:
+        plugins.append(ConversationLogPlugin(config_dir=ctx.config.paths.config_dir))
     # Scheduler is the autonomy heartbeat: it fires schedule_event jobs and
     # interval triggers (process-audio) on the bus. Always-on like Interrupt.
     scheduler_settings = ctx.config.settings.plugin.get("executor_scheduler")
