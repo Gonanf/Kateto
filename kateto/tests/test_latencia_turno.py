@@ -52,7 +52,64 @@ def test_latencia_turno_subprocess() -> None:
     assert data["turnos_partidos"] == 0
     assert data["audio_truncado"] == 0
     assert data["respondio_antes"] == 0
-    assert data["latencia_p50_ms"] >= 0
+    assert 3000 <= data["latencia_p50_ms"] <= 4600
+    assert data["config"]["silence_timeout_s"] == 1.5
+    assert data["config"]["turn_silence_timeout_s"] == 2.0
+    assert data["modo"] == "medicion"
+
+
+def test_resolver_config_timeouts() -> None:
+    # Given: módulo latencia_turno importado
+    mod = _import_latencia_turno_module()
+
+    # When: se resuelve la config contra el repo real
+    cfg = mod.resolver_config_timeouts()
+
+    # Then: contra el repo real devuelve 1.5 y 2.0, y la ruta termina en config/defaults/config.toml
+    assert cfg["silence_timeout_s"] == 1.5
+    assert cfg["turn_silence_timeout_s"] == 2.0
+    assert cfg["path"].endswith("config/defaults/config.toml")
+    assert cfg["origenes"]["silence_timeout"] == "config.toml"
+    assert cfg["origenes"]["turn_silence_timeout"] == "default_plugin"
+
+
+def test_latencia_turno_subprocess_probe_mode() -> None:
+    # Given: raíz del repo derivada de __file__ y el script latencia_turno.py
+    repo_root = Path(__file__).resolve().parents[2]
+    script_path = repo_root / "scripts" / "latencia_turno.py"
+    cmd = [
+        sys.executable,
+        str(script_path),
+        "3",
+        "--warmup",
+        "0",
+        "--turn-silence-timeout",
+        "0.5",
+    ]
+
+    # When: se ejecuta el script con override en turn_silence_timeout
+    result = subprocess.run(
+        cmd,
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+
+    # Then: rc == 2, última línea JSON con valido is False y modo == "probe"
+    assert result.returncode == 2, (
+        f"Se esperaba returncode 2 en probe mode, pero dio {result.returncode}.\n"
+        f"Stdout:\n{result.stdout}\nStderr:\n{result.stderr}"
+    )
+    lines = [line.strip() for line in result.stdout.strip().splitlines() if line.strip()]
+    assert lines, "Stdout vacío tras correr latencia_turno.py"
+    last_line = lines[-1]
+    assert last_line.startswith("{"), f"La última línea no es JSON: {last_line}"
+
+    data = json.loads(last_line)
+    assert data["valido"] is False
+    assert data["modo"] == "probe"
+    assert "--turn-silence-timeout" in data["probe_motivos"]
 
 
 def test_guardas_respondio_antes_invalida() -> None:
