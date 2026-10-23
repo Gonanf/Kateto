@@ -22,6 +22,7 @@ from kateto.core.rms import (
     map_rms_to_puppet_transform,
     normalize_rms,
 )
+from kateto.mask.turn_durability import TurnJournal, RESUME_EVENT
 
 
 class VisualOverlayPlugin(Plugin):
@@ -35,6 +36,7 @@ class VisualOverlayPlugin(Plugin):
         super().__init__(name=name, capabilities=("system", "visual_overlay"))
         self._settings = settings
         self._connected_websockets: set[Any] = set()
+        self._journal = TurnJournal()
         self._rms_processors: dict[str, RMSProcessor] = {}
         self._default_processor = RMSProcessor()
         self._last_debate_state: dict[str, Any] | None = None
@@ -94,6 +96,9 @@ class VisualOverlayPlugin(Plugin):
         self._connected_websockets.discard(ws)
 
     async def _broadcast(self, data: dict[str, Any]) -> None:
+        if data.get("event") == "audio_output":
+            audio = data.get("audio") or ""
+            data = self._journal.stamp(data, final=bool(data.get("final")), n_bytes=len(audio))
         dead = []
         for ws in list(self._connected_websockets):
             try:
@@ -102,6 +107,18 @@ class VisualOverlayPlugin(Plugin):
                 dead.append(ws)
         for ws in dead:
             self._connected_websockets.discard(ws)
+
+    def resume_frames(self, after_seq: int) -> dict[str, Any]:
+        """Envelope para un cliente que reconecta: frames que le faltaron desde after_seq."""
+        batch = self._journal.resume(int(after_seq))
+        return {
+            "event": RESUME_EVENT,
+            "type": "resume",
+            "after_seq": batch.after_seq,
+            "gap": batch.gap,
+            "turn_id": batch.turn_id,
+            "frames": batch.frames,
+        }
 
     async def on_text_chunk(self, data: TextChunk) -> None:
         if data.text:

@@ -115,6 +115,10 @@ kateto-avatar { display: block; position: absolute; inset: 0; width: 100%; heigh
 
 <script type="module">
 import { BrowserPcmPlayer, VOICE_NAMES } from '/components/kateto-avatar.js';
+import { createTurnDurability, RESUME_EVENT } from '/components/mask-durability.js';
+
+const durability = createTurnDurability();
+window.katetoDurability = durability;
 
 const $ = (id) => document.getElementById(id);
 const avatar = $('avatar');
@@ -312,10 +316,16 @@ function connect(name) {
     updateStatus();
     return;
   }
-  s.ws.onopen = () => { s.retry = 0; updateStatus(); };
+  s.ws.onopen = () => {
+    s.retry = 0;
+    const res = durability.onOpen();
+    if (res && s.ws && s.ws.readyState === WebSocket.OPEN) { try { s.ws.send(JSON.stringify(res)); } catch (e) {} }
+    updateStatus();
+  };
   s.ws.onmessage = (e) => handleMessage(name, e);
   s.ws.onerror = () => {};
   s.ws.onclose = () => {
+    durability.onClose();
     s.retry = Math.min(s.retry ? s.retry * 2 : 500, 5000);
     updateStatus();
     s.timer = setTimeout(() => connect(name), s.retry);
@@ -348,12 +358,19 @@ function handleMessage(name, e) {
   const pref = preferredName();
   if (pref && pref !== name) return; // dedupe por socket preferido: nunca reproducir dos veces
   switch (msg.event) {
+    case 'audio_resume': onAudioResume(msg); break;
     case 'audio_output': onAudioOutput(msg); break;
     case 'text_chunk': onTextChunk(msg); break;
     case 'interrupt': onInterrupt(msg); break;
   }
 }
+function onAudioResume(msg) {
+  const res = durability.acceptResume(msg);
+  for (const frame of res.frames) onAudioOutput(frame);
+}
 function onAudioOutput(msg) {
+  const verdict = durability.onFrame(msg);
+  if (!verdict.play) return;
   if (msg.audio) {
     try { player.playChunk(msg.audio, msg.sample_rate || 24000, msg.channels || 1); }
     catch (err) { lastError = 'playChunk: ' + err; }
