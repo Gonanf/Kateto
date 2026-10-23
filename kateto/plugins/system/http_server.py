@@ -529,6 +529,15 @@ class HttpServer:
                             )
                         except Exception:  # noqa: BLE001
                             await ws.send_json({"type": "error", "error": "invalid audio payload"})
+                    elif kind == "mask_resume":
+                        vo = self._manager.get_plugin("visual_overlay")
+                        resume = getattr(vo, "resume_frames", None)
+                        if resume is not None:
+                            try:
+                                after = int(payload.get("after_seq") or 0)
+                            except (TypeError, ValueError):
+                                after = 0
+                            await ws.send_json(resume(after))
                     elif kind == "mask_camera_frame":
                         raw = payload.get("frame") or payload.get("data")
                         try:
