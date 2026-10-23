@@ -13,6 +13,7 @@ from kateto.core.event import (
     ToolCallData,
     ToolResultData,
     TranscriptionData,
+    VoiceIdleData,
 )
 from kateto.core.manager import PluginManager
 from kateto.plugins.executor.conversation_log import ConversationLogPlugin
@@ -176,7 +177,7 @@ async def test_all_lines_parse_as_json(tmp_path):
     records = _read_lines(tmp_path / "logs")
     assert len(records) == 2
     for rec in records:
-        assert set(rec) == {"ts", "epoch", "event", "source", "voice", "text", "extra"}
+        assert set(rec) == {"ts", "epoch", "session_id", "turn_id", "event", "source", "voice", "text", "extra"}
         assert "\n" not in rec["text"]
     await manager.disable_plugin(plugin.name)
 
@@ -193,4 +194,148 @@ async def test_write_failure_never_raises(tmp_path):
     await manager.emit("transcription", TranscriptionData(text="hola"), source="whisper")
     # Then: the bus stays up and the plugin is not disabled
     assert plugin.enabled
+    await manager.disable_plugin(plugin.name)
+
+
+@pytest.mark.asyncio
+async def test_partial_transcription_does_not_open_turn_and_not_input(tmp_path):
+    # Given: an enabled conversation_log plugin
+    manager, plugin = await _enable(tmp_path)
+    # When: a partial transcription arrives
+    await manager.emit(
+        "transcription",
+        TranscriptionData(text="hola par...", language="es", partial=True),
+        source="whisper",
+    )
+    await manager.wait_for_idle()
+    # Then: logged as user_turn_partial with extra.partial=True and no turn opened
+    records = _read_lines(tmp_path / "logs")
+    assert len(records) == 1
+    assert records[0]["event"] == "user_turn_partial"
+    assert records[0]["extra"]["partial"] is True
+    assert plugin._current_turn_id is None
+    await manager.disable_plugin(plugin.name)
+
+
+@pytest.mark.asyncio
+async def test_consecutive_final_transcriptions_do_not_mix_turns(tmp_path):
+    manager, plugin = await _enable(tmp_path)
+    # When: two consecutive final transcriptions arrive
+    await manager.emit("transcription", TranscriptionData(text="primero"), source="whisper")
+    await manager.wait_for_idle()
+    await manager.emit("transcription", TranscriptionData(text="segundo"), source="whisper")
+    await manager.wait_for_idle()
+
+    # Then: turn 1 closes with closed_by="next_transcription" and turn 2 has distinct turn_id
+    records = _read_lines(tmp_path / "logs")
+    assert len(records) == 3
+    assert records[0]["event"] == "user_turn"
+    assert records[0]["text"] == "primero"
+    turn1_id = records[0]["turn_id"]
+
+    assert records[1]["event"] == "turn_end"
+    assert records[1]["turn_id"] == turn1_id
+    assert records[1]["closed_by"] == "next_transcription"
+    assert records[1]["input"] == "primero"
+
+    assert records[2]["event"] == "user_turn"
+    assert records[2]["text"] == "segundo"
+    turn2_id = records[2]["turn_id"]
+    assert turn1_id != turn2_id
+    await manager.disable_plugin(plugin.name)
+
+
+@pytest.mark.asyncio
+async def test_multi_voice_marks_ambiguous(tmp_path):
+    manager, plugin = await _enable(tmp_path)
+    # Given: a user turn
+    await manager.emit("transcription", TranscriptionData(text="pregunta a dos"), source="whisper")
+    # When: multiple voices answer
+    await manager.emit(
+        "text_chunk",
+        TextChunk(text="respuesta uno", sequence=0, final=True, voice_id="jane"),
+        source="jane",
+    )
+    await manager.emit(
+        "text_chunk",
+        TextChunk(text="respuesta dos", sequence=0, final=True, voice_id="doktor"),
+        source="doktor",
+    )
+    # And both voices report idle
+    await manager.emit("voice_idle", VoiceIdleData(voice="jane"), source="jane")
+    await manager.emit("voice_idle", VoiceIdleData(voice="doktor"), source="doktor")
+    await manager.wait_for_idle()
+
+    # Then: turn closes as ambiguous with ambiguity=["multi_voice"]
+    records = _read_lines(tmp_path / "logs")
+    assert len(records) == 4
+    end_rec = records[3]
+    assert end_rec["event"] == "turn_end"
+    assert end_rec["closed_by"] == "voice_idle"
+    assert end_rec["ambiguous"] is True
+    assert end_rec["ambiguity"] == ["multi_voice"]
+    assert len(end_rec["outputs"]) == 2
+    await manager.disable_plugin(plugin.name)
+
+
+@pytest.mark.asyncio
+async def test_dept_sherut_writes_no_lines(tmp_path):
+    manager, plugin = await _enable(tmp_path)
+    # When: event arrives with dept="sherut"
+    await manager.emit(
+        "transcription",
+        TranscriptionData(text="secreto de cliente"),
+        source="whisper",
+        dept="sherut",
+    )
+    await manager.wait_for_idle()
+
+    # And with casefold match
+    await manager.emit(
+        "transcription",
+        TranscriptionData(text="otro secreto"),
+        source="whisper",
+        dept="WorkMatch",
+    )
+    await manager.wait_for_idle()
+
+    # Then: no lines written at all
+    log_files = list((tmp_path / "logs").glob("session-*.jsonl"))
+    if log_files:
+        assert log_files[0].read_text().strip() == ""
+    else:
+        assert True
+    await manager.disable_plugin(plugin.name)
+
+
+@pytest.mark.asyncio
+async def test_long_text_5000_chars_arrives_complete_in_turn_end(tmp_path):
+    manager, plugin = await _enable(tmp_path)
+    long_input = "a" * 5000
+    long_output = "b" * 5000
+    await manager.emit("transcription", TranscriptionData(text=long_input), source="whisper")
+    await manager.emit(
+        "text_chunk",
+        TextChunk(text=long_output, sequence=0, final=True, voice_id="jane"),
+        source="jane",
+    )
+    await manager.emit("voice_idle", VoiceIdleData(voice="jane"), source="jane")
+    await manager.wait_for_idle()
+
+    records = _read_lines(tmp_path / "logs")
+    assert len(records) == 3
+    user_turn, voice_turn, turn_end = records[0], records[1], records[2]
+
+    # Event lines are capped at 4000 and marked truncated
+    assert len(user_turn["text"]) == 4000
+    assert user_turn["extra"]["truncated"] is True
+    assert len(voice_turn["text"]) == 4000
+    assert voice_turn["extra"]["truncated"] is True
+
+    # turn_end is NOT truncated
+    assert turn_end["event"] == "turn_end"
+    assert turn_end["input"] == long_input
+    assert len(turn_end["input"]) == 5000
+    assert turn_end["outputs"][0]["text"] == long_output
+    assert len(turn_end["outputs"][0]["text"]) == 5000
     await manager.disable_plugin(plugin.name)
