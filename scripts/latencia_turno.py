@@ -19,8 +19,10 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 def ensure_environment() -> None:
@@ -68,6 +70,56 @@ def ensure_environment() -> None:
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+
+def resolver_config_timeouts(repo_root: Path | None = None) -> dict[str, Any]:
+    """Resuelve los timeouts y su procedencia desde la config del producto.
+
+    Lee <repo_root>/config/defaults/config.toml, sección [plugin.audio_input_mic].
+    Falla cerrado con excepción si falta el archivo, la sección o silence_timeout.
+    """
+    from kateto.plugins.audio_input.base import DEFAULT_TURN_SILENCE_TIMEOUT
+
+    root = repo_root if repo_root is not None else _REPO_ROOT
+    config_path = root / "config" / "defaults" / "config.toml"
+    if not config_path.is_file():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    with config_path.open("rb") as f:
+        toml_data = tomllib.load(f)
+
+    plugin_cfg = toml_data.get("plugin")
+    if not isinstance(plugin_cfg, dict):
+        raise KeyError(f"Sección 'plugin' no encontrada en {config_path}")
+
+    mic_cfg = plugin_cfg.get("audio_input_mic")
+    if not isinstance(mic_cfg, dict):
+        raise KeyError(f"Sección [plugin.audio_input_mic] no encontrada en {config_path}")
+
+    if "silence_timeout" not in mic_cfg:
+        raise KeyError(
+            f"Clave 'silence_timeout' requerida no encontrada en [plugin.audio_input_mic] en {config_path}"
+        )
+
+    silence_timeout = float(mic_cfg["silence_timeout"])
+    silence_origen = "config.toml"
+
+    if "turn_silence_timeout" in mic_cfg:
+        turn_silence_timeout = float(mic_cfg["turn_silence_timeout"])
+        turn_origen = "config.toml"
+    else:
+        turn_silence_timeout = float(DEFAULT_TURN_SILENCE_TIMEOUT)
+        turn_origen = "default_plugin"
+
+    return {
+        "path": str(config_path.resolve()),
+        "silence_timeout_s": silence_timeout,
+        "turn_silence_timeout_s": turn_silence_timeout,
+        "origenes": {
+            "silence_timeout": silence_origen,
+            "turn_silence_timeout": turn_origen,
+        },
+    }
 
 # Frames de audio (100 ms mono s16LE a 16 kHz)
 SPEECH_FRAME = b"\x01\x00" * 1_600
@@ -323,11 +375,17 @@ async def run_benchmark(
     *,
     warmup: int = 3,
     intra_gap_ms: int = 200,
-    turn_silence_timeout: float = 2.0,
-    silence_timeout: float = 1.0,
+    turn_silence_timeout: float | None = None,
+    silence_timeout: float | None = None,
     seed: int = 1,
 ) -> tuple[GuardasResult, float, float, float, float, float]:
     del seed
+    if turn_silence_timeout is None or silence_timeout is None:
+        cfg = resolver_config_timeouts()
+        if turn_silence_timeout is None:
+            turn_silence_timeout = cfg["turn_silence_timeout_s"]
+        if silence_timeout is None:
+            silence_timeout = cfg["silence_timeout_s"]
     from loguru import logger
     logger.remove()
     logger.add(sys.stderr, level="WARNING")
@@ -420,7 +478,7 @@ async def run_benchmark(
     return guardas, p50, p90, lat_min, lat_max, pipe_p50
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Benchmark harness-latencia (latencia de turno de extremo a extremo)."
     )
@@ -430,41 +488,107 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--intra-gap-ms",
         type=int,
-        default=200,
-        help="Pausa intra-turno entre frames de habla en ms (default: 200)",
+        default=None,
+        help="Pausa intra-turno entre frames de habla en ms (override probe; default: 200)",
     )
     parser.add_argument(
         "--turn-silence-timeout",
         type=float,
-        default=2.0,
-        help="Turn silence timeout en segundos (default: 2.0)",
+        default=None,
+        help="Turn silence timeout en segundos (override probe; default: config del producto)",
     )
     parser.add_argument(
         "--silence-timeout",
         type=float,
-        default=1.0,
-        help="Silence timeout en segundos (default: 1.0)",
+        default=None,
+        help="Silence timeout en segundos (override probe; default: config del producto)",
+    )
+    parser.add_argument(
+        "--probe",
+        action="store_true",
+        help="Fuerza modo probe (inválido, rc=2)",
     )
     parser.add_argument(
         "--json-only",
         action="store_true",
         help="Imprime únicamente la línea JSON final",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main() -> None:
     ensure_environment()
     args = parse_args()
 
+    probe_motivos: list[str] = []
+    dial_flags = {
+        "--turn-silence-timeout": args.turn_silence_timeout is not None,
+        "--silence-timeout": args.silence_timeout is not None,
+        "--intra-gap-ms": args.intra_gap_ms is not None,
+    }
+    if getattr(args, "probe", False):
+        dial_flags["--probe"] = True
+
+    raw_argv = sys.argv[1:]
+    for token in raw_argv:
+        flag_name = token.split("=")[0]
+        if flag_name in dial_flags and dial_flags[flag_name] and flag_name not in probe_motivos:
+            probe_motivos.append(flag_name)
+
+    for flag_name, is_set in dial_flags.items():
+        if is_set and flag_name not in probe_motivos:
+            probe_motivos.append(flag_name)
+
+    modo = "probe" if probe_motivos else "medicion"
+
+    try:
+        config_fuente = resolver_config_timeouts()
+    except Exception as exc:
+        output_dict = {
+            "benchmark": "harness-latencia",
+            "n": args.n,
+            "latencia_p50_ms": 0.0,
+            "latencia_p90_ms": 0.0,
+            "latencia_min_ms": 0.0,
+            "latencia_max_ms": 0.0,
+            "latencia_pipeline_p50_ms": 0.0,
+            "turnos_medidos": 0,
+            "turnos_partidos": 0,
+            "audio_truncado": 0,
+            "respondio_antes": 0,
+            "valido": False,
+            "modo": modo,
+            "probe_motivos": probe_motivos,
+            "error": f"Error cargando config: {exc}",
+        }
+        sys.stderr.write(f"Config error: {exc}\n")
+        print(json.dumps(output_dict, separators=(",", ":")))
+        sys.exit(2)
+
+    effective_turn_silence_timeout = (
+        args.turn_silence_timeout
+        if args.turn_silence_timeout is not None
+        else config_fuente["turn_silence_timeout_s"]
+    )
+    effective_silence_timeout = (
+        args.silence_timeout
+        if args.silence_timeout is not None
+        else config_fuente["silence_timeout_s"]
+    )
+    effective_intra_gap_ms = (
+        args.intra_gap_ms
+        if args.intra_gap_ms is not None
+        else 200
+    )
+
     try:
         guardas, p50, p90, lat_min, lat_max, pipe_p50 = asyncio.run(
             run_benchmark(
                 args.n,
                 warmup=args.warmup,
-                intra_gap_ms=args.intra_gap_ms,
-                turn_silence_timeout=args.turn_silence_timeout,
-                silence_timeout=args.silence_timeout,
+                intra_gap_ms=effective_intra_gap_ms,
+                turn_silence_timeout=effective_turn_silence_timeout,
+                silence_timeout=effective_silence_timeout,
                 seed=args.seed,
             )
         )
@@ -481,6 +605,8 @@ def main() -> None:
         p50, p90, lat_min, lat_max, pipe_p50 = 0.0, 0.0, 0.0, 0.0, 0.0
         sys.stderr.write(f"Benchmark error: {exc}\n")
 
+    valido = guardas.valido if modo == "medicion" else False
+
     output_dict = {
         "benchmark": "harness-latencia",
         "n": args.n,
@@ -493,11 +619,14 @@ def main() -> None:
         "turnos_partidos": guardas.turnos_partidos,
         "audio_truncado": guardas.audio_truncado,
         "respondio_antes": guardas.respondio_antes,
-        "valido": guardas.valido,
+        "valido": valido,
+        "modo": modo,
+        "probe_motivos": probe_motivos,
+        "config_fuente": config_fuente,
         "config": {
-            "turn_silence_timeout_s": args.turn_silence_timeout,
-            "silence_timeout_s": args.silence_timeout,
-            "intra_gap_ms": args.intra_gap_ms,
+            "turn_silence_timeout_s": effective_turn_silence_timeout,
+            "silence_timeout_s": effective_silence_timeout,
+            "intra_gap_ms": effective_intra_gap_ms,
             "stubs": ["asr", "llm", "tts"],
             "plugins_omitidos": ["turn_gate", "eot_gate"],
         },
@@ -513,8 +642,12 @@ def main() -> None:
     if not args.json_only:
         print(f"=== Benchmark harness-latencia (N={args.n}, warmup={args.warmup}) ===")
         print(
-            f"Config: turn_silence={args.turn_silence_timeout}s, "
-            f"silence_timeout={args.silence_timeout}s, intra_gap={args.intra_gap_ms}ms"
+            f"Config: turn_silence={effective_turn_silence_timeout}s, "
+            f"silence_timeout={effective_silence_timeout}s, intra_gap={effective_intra_gap_ms}ms"
+        )
+        print(
+            f"Modo: {modo}"
+            + (f" (motivos: {', '.join(probe_motivos)})" if probe_motivos else "")
         )
         print(f"Turnos medidos: {guardas.turnos_medidos}/{args.n}")
         print(
@@ -523,11 +656,11 @@ def main() -> None:
         print(f"Latencia pipeline p50: {pipe_p50} ms")
         print(
             f"Guardas: partidos={guardas.turnos_partidos}, truncados={guardas.audio_truncado}, "
-            f"antes={guardas.respondio_antes} -> Valido: {guardas.valido}"
+            f"antes={guardas.respondio_antes} -> Valido: {valido}"
         )
 
     print(json_str)
-    sys.exit(0 if guardas.valido else 2)
+    sys.exit(0 if valido else 2)
 
 
 if __name__ == "__main__":
