@@ -88,6 +88,24 @@ One stable job per voice (`vision-describe-<voice>`), canceled on disable;
 re-enable never duplicates. Ticks deferred while the voice is talking wait
 for the next interval — never re-queued.
 
+### Ambient delivery: context vs speak
+
+Por defecto, la narración periódica se entrega como contexto de fondo (`ambient_delivery = "context"`) en lugar de forzar a la voz a generar un turno hablado (`ambient_delivery = "speak"`):
+
+```toml
+[plugin.executor_vision]
+ambient_delivery = "context"   # "context" = fondo (no habla); "speak" = genera turno (comportamiento previo)
+ambient_all_voices = false     # true = broadcast a todas las voces conocidas sin requerir opt-in individual
+ambient_exclude = []           # voces excluidas del contexto ambiental
+ambient_max_chars = 280        # tope de caracteres en una sola línea (~70 tokens)
+```
+
+En modo `ambient_delivery = "context"`:
+- Se agenda **un solo** job compartido (`vision-describe-ambient`) para todas las voces objetivo en vez de un describe por cada voz.
+- Cada describe procesa como máximo 2 frames (cada frame cuesta ~2350 tokens de visión al VLM).
+- El texto viaja en el evento `vision_describe_result` con `ambient=True` y se recorta en límite de palabra a `ambient_max_chars` (mínimo 40, colapsando saltos de línea a una sola línea).
+- En el historial de cada voz se retienen como máximo **2** bloques ambient (`[contexto visual] …`), descartando los más viejos para limitar el consumo de contexto (~140 tokens en total).
+
 Registration is ack-driven: the job counts as scheduled only when the
 scheduler's `schedule_result` ack arrives (the `[vision] scheduled ...` line
 logs at ack time, never at emit). If vision boots before `executor_scheduler`,
@@ -111,6 +129,10 @@ after N attempts (is executor_scheduler enabled?)`).
 | `window_secs` | `5.0` | Rolling window length |
 | `capture_fps` | `1.0` | Capture rate |
 | `describe_interval` | `"30s"` | Periodic interval expression |
+| `ambient_delivery` | `"context"` | Delivery mode: `"context"` for background prompt injection without speech; `"speak"` for spoken narration via generate |
+| `ambient_all_voices` | `false` | When true, broadcasts ambient visual context to all known voices (except `ambient_exclude`) |
+| `ambient_exclude` | `[]` | Voice names excluded from ambient visual context |
+| `ambient_max_chars` | `280` | Hard cap on ambient context line length (clamped to >= 40) |
 | `vision_endpoint` | unset | Primary OpenAI-compatible endpoint (required for real vision) |
 | `vision_model` | unset | Primary model |
 | `vision_max_tokens` | `300` | Per describe call |

@@ -90,6 +90,7 @@ class VisionDescribeResultData(EventModel):
     source: str
     via: str = "primary"
     correlation_id: str | None = None
+    ambient: bool = Field(default=False)  # fondo: entra al historial de la voz, no dispara turno
 
 
 class ProcessTranscriptionData(EventModel):

@@ -217,6 +217,12 @@ source_default = "screen"
 window_secs = 5.0
 capture_fps = 1.0
 describe_interval = "30s"
+# ambient_delivery = "context" no habla, sólo alimenta el prompt de las voces
+# como contexto visual de fondo sin disparar turnos de habla.
+ambient_delivery = "context"
+ambient_all_voices = false
+# ambient_exclude = []
+ambient_max_chars = 280
 vision_max_tokens = 300
 vision_timeout = 60.0
 # Frames por describe: cada frame cuesta ~2350 tokens de visión (~36 s de
