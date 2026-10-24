@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -93,23 +94,23 @@ async def test_hot_reload_ignores_non_watched_suffix(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_hot_reload_purges_module_for_changed_py(tmp_path: Path) -> None:
-    # Given: a fake module registered in sys.modules pointing at a temp file
+    # Given: a real importable module in sys.path
     controller, _ = _make_controller(tmp_path)
-    module_path = tmp_path / "plugin.py"
+    module_path = tmp_path / "hr_fake_plugin.py"
     module_path.write_text("VALUE = 1\n", encoding="utf-8")
-    module = ModuleType("_hot_reload_fake_plugin")
-    module.__file__ = str(module_path)
-    module.VALUE = 1
-    sys.modules["_hot_reload_fake_plugin"] = module
-    # When: the module's source file changes
-    module_path.write_text("VALUE = 2\n", encoding="utf-8")
-    reloaded = controller._reload_plugins(module_path)
-    # Then: the module remains in sys.modules as the same object and was reloaded
-    assert reloaded is True
-    assert "_hot_reload_fake_plugin" in sys.modules
-    assert sys.modules["_hot_reload_fake_plugin"] is module
-    assert getattr(module, "VALUE", None) == 2
-    sys.modules.pop("_hot_reload_fake_plugin", None)
+    sys.path.insert(0, str(tmp_path))
+    try:
+        module = importlib.import_module("hr_fake_plugin")
+        # When: the module's source file changes
+        module_path.write_text("VALUE = 2\n", encoding="utf-8")
+        await controller.handle_change(module_path)
+        # Then: the module remains in sys.modules as the same object and was reloaded in-place
+        assert "hr_fake_plugin" in sys.modules
+        assert sys.modules["hr_fake_plugin"] is module
+        assert getattr(module, "VALUE") == 2
+    finally:
+        sys.path.remove(str(tmp_path))
+        sys.modules.pop("hr_fake_plugin", None)
 
 
 @pytest.mark.asyncio
@@ -254,7 +255,8 @@ async def test_reload_keeps_a_single_singleton(
     pkg_dir = tmp_path / "pkg_singleton"
     pkg_dir.mkdir(parents=True, exist_ok=True)
     (pkg_dir / "__init__.py").write_text(
-        "from .plugin import DemoPlugin\n\n"
+        "from .plugin import DemoPlugin\n"
+        "from .plugin import REGISTRY\n\n"
         "def create_plugins(ctx=None):\n"
         "    from .plugin import DemoPlugin\n"
         "    return [DemoPlugin()]\n",
@@ -295,9 +297,10 @@ async def test_reload_keeps_a_single_singleton(
         )
         await controller.handle_change(plugin_py)
 
-        # Then: pkg_singleton.plugin.REGISTRY and the live plugin's singleton are the same object
+        # Then: cascade reload re-binds REGISTRY in the importer module to prevent duplicate singleton instances
         live_plugin = controller.manager.get_plugins()[0]
-        assert live_plugin.registry is sys.modules["pkg_singleton.plugin"].REGISTRY
+        assert live_plugin.registry is pkg_singleton.REGISTRY
+        assert pkg_singleton.REGISTRY is sys.modules["pkg_singleton.plugin"].REGISTRY
     finally:
         sys.path.remove(str(tmp_path))
         sys.modules.pop("pkg_singleton.plugin", None)
