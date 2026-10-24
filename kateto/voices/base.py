@@ -639,6 +639,9 @@ class VoiceAgent(Plugin):
     def settings(self) -> VoiceSettings:
         return self._settings
 
+    def _excluded_tools(self) -> frozenset[str]:
+        return frozenset(getattr(self._settings, "toolset_exclude", ()) or ())
+
     @property
     def loaded_skills(self) -> tuple[LoadedSkill, ...]:
         return self._skills
@@ -662,11 +665,14 @@ class VoiceAgent(Plugin):
         tool_executor: ToolExecutor,
         extra_tools: tuple[ChatCompletionToolParam, ...] = (),
     ) -> None:
-        from kateto.voices.tools import BUILTIN_TOOLS
+        from kateto.voices.tools import BUILTIN_TOOLS, filter_tool_names
         self._agent_provider = agent_provider
         self._tool_executor = tool_executor
         self._extra_tools = extra_tools
-        self._tools = (*BUILTIN_TOOLS, *extra_tools)
+        self._tools = (
+            *filter_tool_names(BUILTIN_TOOLS, self._excluded_tools()),
+            *filter_tool_names(extra_tools, self._excluded_tools()),
+        )
 
     def add_extra_tools(self, tools: tuple[ChatCompletionToolParam, ...]) -> None:
         self._extra_tools = (*self._extra_tools, *tools)
@@ -733,11 +739,15 @@ class VoiceAgent(Plugin):
     async def enable(self) -> None:
         manager = self.manager
         if manager is not None and self._tool_executor is not None:
-            from kateto.voices.tools import VoiceToolExecutor, BUILTIN_TOOLS, build_event_tools
+            from kateto.voices.tools import VoiceToolExecutor, BUILTIN_TOOLS, build_event_tools, filter_tool_names
             if isinstance(self._tool_executor, VoiceToolExecutor):
                 self._tool_executor.set_manager(manager)
                 event_tools = build_event_tools(manager)
-                self._tools = (*BUILTIN_TOOLS, *event_tools, *self._extra_tools)
+                self._tools = (
+                    *filter_tool_names(BUILTIN_TOOLS, self._excluded_tools()),
+                    *filter_tool_names(event_tools, self._excluded_tools()),
+                    *self._extra_tools,
+                )
         await self._set_status(VoiceStatus.IDLE)
 
     async def prefill(self) -> bool:
@@ -1545,7 +1555,11 @@ class VoiceAgent(Plugin):
             mcp_servers = getattr(self._tool_executor, "_mcp_server_names", ())
             if mcp_servers:
                 mcp_block = get_mcp_prompt_block(mcp_servers)
-        delegation_block = get_delegation_prompt_block() if self._pydantic_agent is not None else None
+        delegation_block = (
+            get_delegation_prompt_block()
+            if self._pydantic_agent is not None and "request_generation" not in self._excluded_tools()
+            else None
+        )
         tts_block = None
         current_tts = getattr(self._settings, "tts_provider", None) or (self._settings.get("tts_provider") if hasattr(self._settings, "get") else None)
         if current_tts:

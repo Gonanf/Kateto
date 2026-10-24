@@ -597,6 +597,21 @@ def build_event_tools(manager: PluginManager) -> tuple[ChatCompletionToolParam, 
     return tuple(tools)
 
 
+def filter_tool_names(
+    tools: tuple[ChatCompletionToolParam, ...], excluded: frozenset[str]
+) -> tuple[ChatCompletionToolParam, ...]:
+    """Devuelve las tools cuyo `function.name` no esta en `excluded`."""
+    if not excluded:
+        return tools
+    filtered: list[ChatCompletionToolParam] = []
+    for tool in tools:
+        fn = tool.get("function") if isinstance(tool, dict) else getattr(tool, "function", None)
+        fn_name = fn.get("name") if isinstance(fn, dict) else getattr(fn, "name", None)
+        if fn_name not in excluded:
+            filtered.append(tool)
+    return tuple(filtered)
+
+
 BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
     ChatCompletionToolParam(
         type="function",
