@@ -2,17 +2,23 @@ from __future__ import annotations
 
 """ContextBuilder — the single module that assembles every voice's LLM prompt.
 
-Ordering (spec 2026-08-13-prompt-consistency, latencia 2026-09-23):
+Ordering (spec 2026-08-13-prompt-consistency, latencia 2026-09-23, prefix-cache 2026-10-24):
 
-    [SOUL stable] -> [Tool schemas] -> [Durable memory] -> [Recent history]
+    [Shared prefix: language -> mcp -> delegation]
+        -> [Personality: profile -> soul]
+        -> [Voice tools: workflow -> boson -> skills]
+        -> [Durable memory]
+        -> [Voice turn constraint]
+        -> [Recent history]
         -> [user: prompt + VOLATILE_MARKER + volatile context]
 
-The stable prefix (sections 1-3 plus fixed guidance) is built ONCE per voice
-spawn and reused byte-for-byte on every turn, so provider prefix caches
-(llama.cpp --cache-reuse, vLLM prefix caching, DeepSeek auto-caching) keep
-hitting on the same prefix. Volatile context (workflow phase contract,
-semantic memory, journal) rides INSIDE the last user turn, after the prompt,
-separated by :data:`VOLATILE_MARKER`.
+The stable prefix is built ONCE per voice spawn and reused byte-for-byte on
+every turn, so provider prefix caches (llama.cpp --cache-reuse, vLLM prefix
+caching, DeepSeek auto-caching) keep hitting on the same prefix. Placing the
+voice-independent sections first (language, MCP guidance, delegation) maximizes
+KV-cache prefix reuse across voice switches. Volatile context (workflow phase
+contract, semantic memory, journal) rides INSIDE the last user turn, after the
+prompt, separated by :data:`VOLATILE_MARKER`.
 
 Why not a dedicated system message after the user (2026-09-23)? Three reasons:
 1. Lynneses de API distintas: varios gateways remotos reordenan o descartan un
@@ -81,43 +87,73 @@ def stable_prompt(
 ) -> str:
     """Build the frozen system prompt for a voice spawn.
 
-    Sections, in order: [SOUL stable] -> [Tool schemas/guidance] -> [Durable
-    memory]. This string MUST NOT change during a conversation: it is the
-    reusable cache prefix. Per-turn context belongs in :func:`volatile_block`.
+    Sections, in order (shared-prefix first, spec 2026-10-24):
+    1. response_language
+    2. mcp_block
+    3. delegation_block
+    4. profile_system_prompt
+    5. soul (skipped if duplicate of profile)
+    6. workflow_block
+    7. boson_block
+    8. skills instructions
+    9. memories
+    10. voice turn constraint (always last)
+
+    Voice-independent sections (1-3: language, mcp_servers, delegation) are
+    placed first so their tokens form a shared prefix in LLM KV-cache across
+    different voices, avoiding prefill overhead on voice switches. Voice-specific
+    personality (4-5) and specific workflows/tools (6-8) follow. The brevity
+    constraint (10) remains strictly at the end for behavioral weight.
     """
     sections: list[str] = []
 
-    # [SOUL estable]
-    if profile_system_prompt.strip():
-        sections.append(profile_system_prompt)
-    # ensure_soul() seeds SOUL.md with the profile prompt on a fresh voice;
-    # skip the duplicate instead of stacking the same personality twice.
-    if soul.strip() and soul.strip() != profile_system_prompt.strip():
-        sections.append(soul)
+    # 1. [response_language]
     if response_language:
         sections.append(
             "Always respond in the project's configured language: "
             f"{response_language}. This instruction overrides the language of the user input."
         )
 
-    # [Tool schemas + guidance]: the actual tool JSON schemas ride in the API
-    # request (stable per spawn); the text guidance blocks are frozen here so
-    # they never change mid-session.
-    for block in (workflow_block, mcp_block, delegation_block, boson_block):
-        if block:
-            sections.append(block)
+    # 2. [mcp_block]
+    if mcp_block:
+        sections.append(mcp_block)
+
+    # 3. [delegation_block]
+    if delegation_block:
+        sections.append(delegation_block)
+
+    # 4. [profile_system_prompt]
+    if profile_system_prompt.strip():
+        sections.append(profile_system_prompt)
+
+    # 5. [soul]
+    # ensure_soul() seeds SOUL.md with the profile prompt on a fresh voice;
+    # skip the duplicate instead of stacking the same personality twice.
+    if soul.strip() and soul.strip() != profile_system_prompt.strip():
+        sections.append(soul)
+
+    # 6. [workflow_block]
+    if workflow_block:
+        sections.append(workflow_block)
+
+    # 7. [boson_block]
+    if boson_block:
+        sections.append(boson_block)
+
+    # 8. [skills instructions]
     for skill in skills:
         instructions = getattr(skill, "instructions", None)
         if instructions:
             sections.append(instructions)
 
-    # [Memoria durable]: snapshot taken at spawn; writes apply at the next
+    # 9. [Memoria durable]: snapshot taken at spawn; writes apply at the next
     # spawn, never mid-session (keeps the prefix cacheable).
     if memories and memories.strip():
         sections.append(memories)
 
-    # [Restricción de brevedad de voz]: acota el turno conversacional a 1-2
+    # 10. [Restricción de brevedad de voz]: acota el turno conversacional a 1-2
     # oraciones naturales (< 40 palabras) para evitar desbordes y finish_reason=length.
+    # Queda última por decisión de diseño (instrucción de comportamiento más fuerte).
     sections.append(
         "Voice turn constraint: Always speak to the user in 1-2 short natural sentences (under 40 words). Never use lists, bullet points, headers, or markdown formatting."
     )

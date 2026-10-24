@@ -304,3 +304,95 @@ def _reference(config_dir: Path) -> None:
     path = config_dir / "voices" / "jane" / "reference.wav"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"RIFFfixtureWAVE")
+
+
+def test_stable_prompt_puts_voice_independent_head_first() -> None:
+    import os
+
+    prompt_jane = stable_prompt(
+        soul="You are Jane, the lead.",
+        profile_system_prompt="You are Jane, the lead.",
+        response_language="es_ar",
+        workflow_block=None,
+        mcp_block="[MCP Tools: system]",
+        delegation_block="[Delegation Guidance]",
+        boson_block=None,
+        skills=(),
+        memories=None,
+    )
+    prompt_doktor = stable_prompt(
+        soul="You are Doktor, the pedant.",
+        profile_system_prompt="You are Doktor, the pedant.",
+        response_language="es_ar",
+        workflow_block=None,
+        mcp_block="[MCP Tools: system]",
+        delegation_block="[Delegation Guidance]",
+        boson_block=None,
+        skills=(),
+        memories=None,
+    )
+
+    common = os.path.commonprefix([prompt_jane, prompt_doktor])
+    assert "Always respond in the project's configured language: es_ar" in common
+    assert "[MCP Tools: system]" in common
+    assert "[Delegation Guidance]" in common
+    assert "You are Jane" not in common
+    assert "You are Doktor" not in common
+    assert prompt_jane[len(common):].startswith("Jane")
+    assert prompt_doktor[len(common):].startswith("Doktor")
+
+
+def test_stable_prompt_content_is_order_only() -> None:
+    class DummySkill:
+        def __init__(self, instructions: str) -> None:
+            self.instructions = instructions
+
+    expected_blocks = [
+        "Always respond in the project's configured language: es_ar. This instruction overrides the language of the user input.",
+        "## MCP Tools Block",
+        "## Delegation Block",
+        "You are Jane, the lead.",
+        "A customized soul file.",
+        "## Workflow Block",
+        "## Boson Block",
+        "## Skill 1 instructions",
+        "## Durable memories",
+        "Voice turn constraint: Always speak to the user in 1-2 short natural sentences (under 40 words). Never use lists, bullet points, headers, or markdown formatting.",
+    ]
+
+    result = stable_prompt(
+        soul=expected_blocks[4],
+        profile_system_prompt=expected_blocks[3],
+        response_language="es_ar",
+        workflow_block=expected_blocks[5],
+        mcp_block=expected_blocks[1],
+        delegation_block=expected_blocks[2],
+        boson_block=expected_blocks[6],
+        skills=(DummySkill(expected_blocks[7]),),
+        memories=expected_blocks[8],
+    )
+
+    for block in expected_blocks:
+        assert block in result
+        assert result.count(block) == 1
+
+    assert result == "\n\n".join(expected_blocks)
+
+
+def test_voice_turn_constraint_stays_last() -> None:
+    brevity = (
+        "Voice turn constraint: Always speak to the user in 1-2 short natural sentences"
+        " (under 40 words). Never use lists, bullet points, headers, or markdown formatting."
+    )
+    prompt = stable_prompt(
+        soul="Custom soul",
+        profile_system_prompt="Custom profile",
+        response_language="es_ar",
+        workflow_block="Workflow",
+        mcp_block="MCP",
+        delegation_block="Delegation",
+        boson_block="Boson",
+        skills=(),
+        memories="Memories",
+    )
+    assert prompt.endswith(brevity)
