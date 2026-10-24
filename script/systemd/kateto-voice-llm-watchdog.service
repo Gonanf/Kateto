@@ -1,0 +1,8 @@
+[Unit]
+Description=Vigilante del LLM de voz — mide tok/s de :8092 y repara la degradacion silenciosa
+After=kateto-voice-llm.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/chaos/.local/bin/voice-llm-watchdog.py --url http://127.0.0.1:8092 --unit kateto-voice-llm.service
+TimeoutStartSec=300

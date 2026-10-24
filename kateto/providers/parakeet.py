@@ -303,6 +303,24 @@ class ParakeetServerProvider:
             duration_ms=audio.duration_ms if audio.duration_ms > 0 else None,
         )
 
+    async def transcribe_parcial(
+        self, pcm: bytes, *, sample_rate: int = 16_000
+    ) -> str:
+        """PCM crudo 16 kHz mono s16le -> texto (pasada parcial del EOT).
+
+        Mismo contrato de fallo que ``transcribe``: ``ProviderError`` aguas arriba.
+        Lo usa el mic sólo cuando ``eot_partial_hold`` está encendido; el llamador
+        hace fail-open, así que acá no se atrapa nada.
+        """
+        audio = AudioData(
+            samples=pcm,
+            sample_rate=sample_rate,
+            channels=1,
+            format="pcm_s16le",
+        )
+        transcription = await self.transcribe(audio)
+        return transcription.text
+
 
 class ParakeetStreamProvider:
     """Live streaming STT via the CrispASR ``--stream`` CLI path.

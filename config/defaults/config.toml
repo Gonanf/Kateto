@@ -15,6 +15,10 @@ backend = "vulkan"
 enabled = true
 sample_rate = 16000
 silence_timeout = 1.5
+# Cierre de turno semántico (EOT): cuando un silencio cerraría el turno, se
+# transcribe el buffer parcial y el gate decide si el enunciado terminó. Sólo
+# tiene efecto si el ASR activo expone transcribe_parcial (parakeet server).
+eot_partial_hold = true
 vad_model = "silero"
 # Barge-in vs self-bleed (no AEC): VAD inside this window after playback start
 # is treated as the speaker bleeding into the mic. Real barge-in must also be
@@ -205,11 +209,11 @@ port = 8099
 # unavailable with a warning and every classify fails open to RESPOND. Set
 # etapa2="ft" (or EOT_ETAPA2=ft) to actually run the classifier.
 [plugin.eot_gate]
-enabled = false
+enabled = true
 timeout = 1.0
 python = "python3"
 script = "/run/media/chaos/secundario/proyectos/kateto-eot2/clasificador_hibrido.py"
-etapa2 = "base"
+etapa2 = "ft"
 
 [plugin.executor_vision]
 enabled = true
@@ -217,6 +221,12 @@ source_default = "screen"
 window_secs = 5.0
 capture_fps = 1.0
 describe_interval = "30s"
+# ambient_delivery = "context" no habla, sólo alimenta el prompt de las voces
+# como contexto visual de fondo sin disparar turnos de habla.
+ambient_delivery = "context"
+ambient_all_voices = false
+# ambient_exclude = []
+ambient_max_chars = 280
 vision_max_tokens = 300
 vision_timeout = 60.0
 # Frames por describe: cada frame cuesta ~2350 tokens de visión (~36 s de

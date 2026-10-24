@@ -1,0 +1,23 @@
+# Sin --device el backend puede repartir capas con la iGPU y rinde ~4,5x menos;
+# en esta maquina Vulkan0 = RX 6500 XT porque VK_ICD_FILENAMES expone solo el ICD radeon.
+[Unit]
+Description=Kateto voice LLM — llama-server :8092 (gemma-4-E2B-it-qat-q4_0, OpenAI /v1 alias "local")
+Documentation=https://github.com/ggml-org/llama.cpp
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/chaos
+Environment=VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json
+ExecStart=/home/chaos/.local/bin/llama-server \
+    --model /home/chaos/.cache/huggingface/hub/models--google--gemma-4-E2B-it-qat-q4_0-gguf/snapshots/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B_q4_0-it.gguf \
+    --alias local \
+    --device Vulkan0 \
+    --host 127.0.0.1 --port 8092 \
+    --ctx-size 65536 --n-gpu-layers 99 --parallel 1 \
+    --flash-attn on --ubatch-size 512 --jinja --reasoning off
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

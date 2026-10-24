@@ -38,3 +38,7 @@ A look covers the rolling window (5s default), not a single moment: the descript
 ## Periodic descriptions
 
 Ambient narration every 30s is opt-in and off by default: it only runs for voices with `vision_periodic = true` in their voice config. Never promise ongoing watching unless that voice opted in.
+
+## Bloques de contexto visual
+
+A message beginning with `[contexto visual]` is background context, not a request or command: it is never narrated on its own. Use it only when relevant to the user's ongoing conversation or current turn. Never ask for confirmation about it, do not invent anything beyond what it describes, and do not repeat observations that have already been mentioned.

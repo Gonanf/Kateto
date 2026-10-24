@@ -65,6 +65,18 @@ def _setting(settings: PluginSettings | None, key: str, default: Any) -> Any:
     return default if value is None else value
 
 
+def _ambient_line(text: str, max_chars: int) -> str:
+    """One-line ambient context block: whitespace collapsed, hard char cap at a word boundary."""
+    flat = " ".join(text.split())
+    if len(flat) <= max_chars:
+        return flat
+    cut = flat[: max_chars - 1]
+    space = cut.rfind(" ")
+    if space >= max_chars // 2:
+        cut = cut[:space]
+    return cut.rstrip() + "…"
+
+
 # ponytail: JPEG floor-accept — q60→q40→q30, then accept whatever remains; never raise.
 _FRAME_BYTE_CAP = 128 * 1024
 
@@ -336,6 +348,11 @@ class StaticVisionPlugin(Plugin):
         max_frames_per_describe: int = 2,
         vision_sidecar_max_width: int = 1024,
         rng: random.Random | Callable[[int, int], int] | None = None,
+        describe_interval: str = "30s",
+        ambient_delivery: str = "context",
+        ambient_all_voices: bool = False,
+        ambient_exclude: tuple[str, ...] | list[str] = (),
+        ambient_max_chars: int = 280,
     ) -> None:
         """Static vision frames plus optional ambient narration.
 
@@ -358,7 +375,19 @@ class StaticVisionPlugin(Plugin):
             raise ValueError(f"window_secs must be positive, got {self.window_secs!r}")
         self.capture_fps = _setting(settings, "capture_fps", capture_fps)
         self._maxlen = max(1, math.ceil(self.window_secs * self.capture_fps))
-        self.describe_interval = _setting(settings, "describe_interval", "30s")
+        self.describe_interval = _setting(settings, "describe_interval", describe_interval)
+        self.ambient_delivery = str(_setting(settings, "ambient_delivery", ambient_delivery)).strip().lower()
+        if self.ambient_delivery not in ("context", "speak"):
+            log.warning(
+                "[vision] unknown ambient_delivery {!r}; using 'context'", self.ambient_delivery
+            )
+            self.ambient_delivery = "context"
+        self.ambient_all_voices = bool(_setting(settings, "ambient_all_voices", ambient_all_voices))
+        self.ambient_exclude = tuple(
+            str(v) for v in (_setting(settings, "ambient_exclude", ambient_exclude) or ())
+        )
+        self.ambient_max_chars = max(40, int(_setting(settings, "ambient_max_chars", ambient_max_chars)))
+        self._ambient_voice = "ambient"  # pseudo-voz del job compartido
         self.vision_endpoint = _setting(settings, "vision_endpoint", None)
         self.vision_model = _setting(settings, "vision_model", None)
         self.vision_max_tokens = _setting(settings, "vision_max_tokens", 300)
@@ -446,9 +475,27 @@ class StaticVisionPlugin(Plugin):
             except Exception:
                 pass
 
+    def _ambient_targets(self) -> tuple[str, ...]:
+        if self.manager is None:
+            return ()
+        exclude = set(self.ambient_exclude)
+        if self.ambient_all_voices:
+            voices = {
+                p.name
+                for p in self.required_manager.get_plugins()
+                if "voice" in getattr(p, "capabilities", ())
+            }
+        else:
+            voices = {entry[0] for entry in self._opted_in}
+        return tuple(sorted(v for v in voices if v not in exclude))
+
     async def enable(self) -> None:
         await super().enable()
-        if not self._opted_in:
+        ambient_targets = self._ambient_targets()
+        if self.ambient_all_voices and self.ambient_delivery == "context" and ambient_targets:
+            msg = "[vision] ambient context -> all voices: {}"
+            log.info(msg, ", ".join(ambient_targets))
+        elif not self._opted_in:
             log.warning(
                 "[vision] periodic describe idle: no voice sets vision_periodic=true "
                 "(describe_interval/window_secs alone do not schedule anything)"
@@ -553,8 +600,27 @@ class StaticVisionPlugin(Plugin):
         self._log_next(voice)
 
     async def _schedule_periodic(self) -> None:
+        if self.manager is None:
+            return
+        if self.ambient_all_voices and self.ambient_delivery == "context" and self._ambient_targets():
+            voice = self._ambient_voice
+            try:
+                secs = _parse_interval_secs(self.describe_interval)
+            except ValueError:
+                secs = 30
+            if secs <= 0:
+                secs = 30
+            self._vision_range[voice] = (secs, secs)
+            job_id = f"vision-describe-{voice}"
+            if job_id in self._periodic_jobs or voice in self._periodic_pending:
+                return
+            self._periodic_pending[voice] = self.describe_interval
+            await self._try_emit_schedule(voice, self.describe_interval)
+            self._spawn_retry(voice)
+            return
+
         pairs = tuple(self._opted_in)
-        if not pairs or self.manager is None:
+        if not pairs:
             return
         for entry in pairs:
             voice = entry[0]
@@ -571,6 +637,22 @@ class StaticVisionPlugin(Plugin):
         manager = self.manager
         if manager is None:
             return False
+        if voice == self._ambient_voice:
+            job_id = "vision-describe-ambient"
+            await self.required_manager.emit(
+                "schedule_request",
+                ScheduleRequestData(
+                    schedule_type=ScheduleType.INTERVAL,
+                    expression=self.describe_interval,
+                    event_name="vision_describe_request",
+                    data={"requester": "scheduler:ambient", "source": self.source_default},
+                    job_id=job_id,
+                    target_voice=None,
+                    jitter_seconds=5.0,
+                ),
+                source=self.name,
+            )
+            return True
         known = {p.name for p in manager.get_plugins() if "voice" in p.capabilities}
         if known and voice not in known:
             self._periodic_skipped[voice] = f"unknown voice {voice!r} (known: {sorted(known)})"
@@ -960,15 +1042,16 @@ class StaticVisionPlugin(Plugin):
         dropped = sum(self._dropped.get(name, 0) for name, _, _, _, _, _ in sections)
         window_start = min(start_of.values())
         window_end = max(start + span_of[name] for name, start in start_of.items())
-        await emit_result(
-            fused,
-            frame_count=frame_count,
-            kept_count=kept_count,
-            dropped=dropped,
-            window_start=window_start,
-            window_end=window_end,
-            via=via,
-        )
+        if voice != self._ambient_voice:
+            await emit_result(
+                fused,
+                frame_count=frame_count,
+                kept_count=kept_count,
+                dropped=dropped,
+                window_start=window_start,
+                window_end=window_end,
+                via=via,
+            )
         if self._user_epoch.get(voice, 0) != epoch:
             # El usuario habló mientras el describe estaba en vuelo: su turno
             # nuevo gana. No se narra ni se emite generate; el ciclo se
@@ -1038,6 +1121,35 @@ class StaticVisionPlugin(Plugin):
                         "ocr": ocr_text,
                     }
                 span = window_end - window_start
+                if voice == self._ambient_voice:
+                    line = _ambient_line(fused, self.ambient_max_chars)
+                    targets = self._ambient_targets()
+                    if not line or not targets:
+                        self._after_narration(voice)
+                        return
+                    log.info(
+                        "[vision] ambient context -> {} ({}s window): {!r}",
+                        ", ".join(targets), f"{span:.0f}", line,
+                    )
+                    for target_voice in targets:
+                        await manager.emit(
+                            "vision_describe_result",
+                            VisionDescribeResultData(
+                                text=line,
+                                frame_count=frame_count,
+                                kept_count=kept_count,
+                                dropped=dropped,
+                                window_start=window_start,
+                                window_end=window_end,
+                                source=source,
+                                via=via,
+                                ambient=True,
+                            ),
+                            source=self.name,
+                            target=target_voice,
+                        )
+                    self._after_narration(voice)
+                    return
                 log.info(
                     "[vision] periodic narration -> {} ({}s window) caption={!r}",
                     voice, f"{span:.0f}", fused[:300],

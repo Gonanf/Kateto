@@ -100,6 +100,7 @@ MIN_CLAUSE_TOKENS = 18
 IGNORED_TRANSCRIPT_PREFIX = "[IGNORADO POR EL CLASIFICADOR — NO RESPONDER]"
 
 LOOK_AT_PREFIX = "[look-at "
+VISION_AMBIENT_MAX_BLOCKS: int = 2
 
 # Marca de que el bloque ya viaja con instrucción (evita doble marco entre
 # el camino ambiental —generate— y el pedido —vision_describe_result—).
@@ -1705,23 +1706,29 @@ class VoiceAgent(Plugin):
             case TranscriptionData(text=text):
                 message = ChatMessage(role="user", content=self._bounded_event_text(text))
             case VisionDescribeResultData() as seen:
-                span = seen.window_end - seen.window_start
-                raw = f"[look-at {seen.source} {span:.0f}s]: {seen.text}"
-                # bug 121: el resultado pedido también llega con marco (mirada
-                # propia + idioma de la voz); el bloque crudo va intacto abajo.
-                # Bug 129: el marco de memoria es determinista — reusa el último
-                # ángulo (o el default) y las últimas narraciones, sin sortear.
-                message = ChatMessage(
-                    role="user",
-                    content=self._bounded_event_text(
-                        frame_look_at_turn(
-                            raw,
-                            self._response_language,
-                            angle=self._last_narration_angle,
-                            recent=tuple(self._recent_narrations),
-                        )
-                    ),
-                )
+                if seen.ambient:
+                    message = ChatMessage(
+                        role="user",
+                        content=self._bounded_event_text(f"[contexto visual] {seen.text}"),
+                    )
+                else:
+                    span = seen.window_end - seen.window_start
+                    raw = f"[look-at {seen.source} {span:.0f}s]: {seen.text}"
+                    # bug 121: el resultado pedido también llega con marco (mirada
+                    # propia + idioma de la voz); el bloque crudo va intacto abajo.
+                    # Bug 129: el marco de memoria es determinista — reusa el último
+                    # ángulo (o el default) y las últimas narraciones, sin sortear.
+                    message = ChatMessage(
+                        role="user",
+                        content=self._bounded_event_text(
+                            frame_look_at_turn(
+                                raw,
+                                self._response_language,
+                                angle=self._last_narration_angle,
+                                recent=tuple(self._recent_narrations),
+                            )
+                        ),
+                    )
             case TextChunk(text=text) if text:
                 message = ChatMessage(role="assistant", content=self._bounded_event_text(text))
             case VoiceRequestData(prompt=prompt):
@@ -1783,6 +1790,24 @@ class VoiceAgent(Plugin):
                 return
         if not self._event_messages or self._event_messages[-1] != message:
             self._event_messages.append(message)
+            if isinstance(envelope.data, VisionDescribeResultData) and envelope.data.ambient:
+                self._prune_ambient_messages()
+
+    def _prune_ambient_messages(self) -> None:
+        ambient_count = sum(
+            1 for m in self._event_messages if m.content.startswith("[contexto visual]")
+        )
+        if ambient_count <= VISION_AMBIENT_MAX_BLOCKS:
+            return
+        drop = ambient_count - VISION_AMBIENT_MAX_BLOCKS
+        kept: list[ChatMessage] = []
+        for m in self._event_messages:
+            if m.content.startswith("[contexto visual]") and drop > 0:
+                drop -= 1
+                continue
+            kept.append(m)
+        self._event_messages.clear()
+        self._event_messages.extend(kept)
 
     def _bounded_event_text(self, text: str) -> str:
         return text[: self._event_message_limit]

@@ -46,6 +46,11 @@ class ParakeetAudioProcessor(Plugin):
         self._settings: PluginSettings = settings
         self._provider: ParakeetProvider | ParakeetServerProvider | ParakeetStreamProvider | None = None
 
+    @property
+    def provider(self) -> object | None:
+        """Provider activo (None hasta ``enable()``); el mic lo usa para el hold EOT."""
+        return self._provider
+
     @override
     async def initialize(self) -> None:
         manager = self.required_manager

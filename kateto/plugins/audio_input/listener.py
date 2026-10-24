@@ -386,6 +386,26 @@ class AudioInputPlugin(Plugin):
             return
         await self._flush_turn(reason="silence")
 
+    def _resolve_partial_transcriber(self) -> object | None:
+        """Toma el provider del ASR activo si sabe hacer una pasada parcial.
+
+        Perezoso a propósito: el provider del plugin nace en ``enable()``, no en
+        ``initialize()``. Cachea en ``self._partial_transcriber`` (un test puede
+        inyectarlo a mano y esto lo respeta).
+        """
+        if self._partial_transcriber is not None:
+            return self._partial_transcriber
+        manager = self.manager
+        if manager is None:
+            return None
+        plugin = manager.get_plugin("audio_processor_parakeet")
+        provider = getattr(plugin, "provider", None)
+        if provider is None or not hasattr(provider, "transcribe_parcial"):
+            return None
+        self._partial_transcriber = provider
+        log.info("[mic] eot partial hold armado con {}", type(provider).__name__)
+        return provider
+
     async def _partial_wait_holds(self) -> bool:
         """True -> the silence should NOT close the turn (classifier says wait).
 
@@ -396,7 +416,7 @@ class AudioInputPlugin(Plugin):
         """
         if not self._config.eot_partial_hold:
             return False
-        transcriber = self._partial_transcriber
+        transcriber = self._resolve_partial_transcriber()
         if transcriber is None or not self._turn_buffer:
             return False
         manager = self.manager

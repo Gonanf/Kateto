@@ -1,0 +1,10 @@
+[Unit]
+Description=Vigilante del LLM de voz cada 5 minutos
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+Unit=kateto-voice-llm-watchdog.service
+
+[Install]
+WantedBy=timers.target

@@ -24,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+eot_gate: Any = None
+
 
 def ensure_environment() -> None:
     """Asegura que el script corra en el entorno virtual Python 3.12 del proyecto."""
@@ -416,6 +418,30 @@ async def run_benchmark(
         tts = TTSSink()
         factory = FixtureCaptureFactory()
 
+        global eot_gate
+        from kateto.plugins.system.eot_gate import EotGate
+
+        eot_gate = EotGate(
+            PluginSettings(
+                enabled=True,
+                etapa2="ft",
+                timeout=1.0,
+                python="python3",
+                script="/run/media/chaos/secundario/proyectos/kateto-eot2/clasificador_hibrido.py",
+            )
+        )
+
+        class BenchmarkPartialTranscriber:
+            """Parcial de frase completa: el gate tiene que contestar RESPOND.
+
+            El audio del bench es sintético (SPEECH_FRAME no es habla), así que un
+            ASR real devolvería basura. Acá se mide el costo del gate, no su F1.
+            """
+
+            async def transcribe_parcial(self, pcm: bytes) -> str:
+                del pcm
+                return "Hola, ¿cómo estás?"
+
         mic = MicrophoneAudioInput(
             PluginSettings(
                 device="fixture",
@@ -424,6 +450,7 @@ async def run_benchmark(
                 vad_model="silero",
                 interrupt_on_vad=True,
                 turn_silence_timeout=turn_silence_timeout,
+                eot_partial_hold=True,
             ),
             vad=SileroVad(DeterministicSileroModel(), threshold=0.5),
             capture_factory=factory,
@@ -432,7 +459,9 @@ async def run_benchmark(
         await manager.enable_plugin(whisper)
         await manager.enable_plugin(classifier)
         await manager.enable_plugin(tts)
+        await manager.enable_plugin(eot_gate)
         await manager.enable_plugin(mic)
+        mic._partial_transcriber = BenchmarkPartialTranscriber()
         capture = factory.captures[0]
 
         # Warmup turns (no entran en las mediciones)
@@ -628,7 +657,9 @@ def main() -> None:
             "silence_timeout_s": effective_silence_timeout,
             "intra_gap_ms": effective_intra_gap_ms,
             "stubs": ["asr", "llm", "tts"],
-            "plugins_omitidos": ["turn_gate", "eot_gate"],
+            "plugins_omitidos": ["turn_gate"],
+            "eot_gate_available": eot_gate.available,
+            "eot_partial_hold": True,
         },
         "entorno": {
             "python": platform.python_version(),
