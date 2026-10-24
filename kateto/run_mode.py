@@ -164,10 +164,12 @@ class RuntimeOwner:
             await self.stop()
             raise
         if self._config is not None and self._config.settings.kateto.hot_reload:
+            from kateto.core.hot_reload import default_source_roots
+
             controller = HotReloadController(
                 manager=self._manager,
                 watched_root=self._config.paths.config_dir,
-                source_roots=(Path(__file__).resolve().parent / "plugins",),
+                source_roots=default_source_roots(),
                 config=self._config,
                 shared=self._shared,
             )
