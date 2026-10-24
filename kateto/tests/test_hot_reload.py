@@ -164,3 +164,227 @@ async def test_hot_reload_emits_error_on_missing_config(tmp_path: Path) -> None:
     # Then: an error event is emitted and the bus stays up
     assert len(received) == 1
     assert "config.toml" in str(received[0])
+
+
+@pytest.mark.asyncio
+async def test_hot_reload_default_source_roots_include_plugins_and_voices(tmp_path: Path) -> None:
+    # Given: default_source_roots and a controller without explicit source_roots
+    from kateto.core.hot_reload import default_source_roots
+
+    defaults = default_source_roots()
+    assert len(defaults) == 2
+    for root in defaults:
+        assert root.is_dir()
+        assert root.exists()
+
+    manager = PluginManager()
+    controller = HotReloadController(manager=manager, watched_root=tmp_path)
+
+    # Then: controller.source_roots resolves default_source_roots with plugins and voices
+    assert controller.source_roots == tuple(root.resolve() for root in defaults)
+    assert any(root.name == "plugins" for root in controller.source_roots)
+    assert any(root.name == "voices" for root in controller.source_roots)
+
+
+@pytest.mark.asyncio
+async def test_hot_reload_run_mode_source_roots_include_plugins_and_voices(tmp_path: Path) -> None:
+    # Given: default_source_roots and RuntimeOwner configured with hot_reload = true
+    from kateto.core.config import load_config
+    from kateto.core.hot_reload import default_source_roots
+    from kateto.run_mode import RuntimeComponents, RuntimeOwner
+
+    expected_roots = tuple(root.resolve() for root in default_source_roots())
+    assert len(expected_roots) == 2
+    for root in expected_roots:
+        assert root.is_dir()
+        assert root.exists()
+
+    _write_config(tmp_path)
+    cfg_file = tmp_path / "config.toml"
+    cfg_file.write_text(
+        cfg_file.read_text(encoding="utf-8").replace("[kateto]", "[kateto]\nhot_reload = true\n"),
+        encoding="utf-8",
+    )
+    config = load_config(config_dir=tmp_path)
+    manager = PluginManager()
+    components = RuntimeComponents(plugins=(), mcp_servers=(), workflow_voices=())
+    owner = RuntimeOwner(
+        manager=manager,
+        plugins=(),
+        components=components,
+        config=config,
+    )
+
+    # When: RuntimeOwner starts with hot_reload enabled
+    await owner.start()
+    try:
+        # Then: controller created in run_mode references default_source_roots by behavior
+        assert owner._hot_reload is not None
+        assert owner._hot_reload.source_roots == expected_roots
+        for root in owner._hot_reload.source_roots:
+            assert root.is_dir()
+            assert root.exists()
+    finally:
+        await owner.stop()
+
+
+@pytest.mark.asyncio
+async def test_hot_reload_ignores_toml_that_is_not_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given: a controller with discover_plugins spy
+    _write_config(tmp_path)
+    controller, _ = _make_controller(tmp_path)
+    notes_file = tmp_path / "notes.toml"
+    notes_file.write_text("title = 'Notes'\n", encoding="utf-8")
+
+    calls = 0
+    import kateto.core.hot_reload
+
+    real_discover = kateto.core.hot_reload.discover_plugins
+
+    def spy_discover(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real_discover(*args, **kwargs)
+
+    monkeypatch.setattr(kateto.core.hot_reload, "discover_plugins", spy_discover)
+
+    # When: a .toml file that is not config changes
+    await controller.handle_change(notes_file)
+
+    # Then: discover_plugins is not triggered (0 calls)
+    assert calls == 0
+
+
+@pytest.mark.asyncio
+async def test_hot_reload_voice_toml_change_reloads_config(tmp_path: Path) -> None:
+    # Given: a controller with loaded config, and a voice.toml in voices/<voice>/
+    _write_config(tmp_path)
+    controller, _ = _make_controller(tmp_path)
+    old_config = controller._config
+    assert old_config is not None
+
+    voice_dir = tmp_path / "voices" / "doktor"
+    voice_dir.mkdir(parents=True, exist_ok=True)
+    voice_toml = voice_dir / "voice.toml"
+    voice_toml.write_text("[doktor]\nenabled = true\n", encoding="utf-8")
+
+    # When: voice.toml changes and _reload_config is called
+    new_config = controller._reload_config(voice_toml)
+
+    # Then: a new LoadedConfig object is returned and controller._config is updated
+    assert new_config is not None
+    assert new_config is not old_config
+    assert controller._config is new_config
+
+
+@pytest.mark.asyncio
+async def test_hot_reload_real_plugin_edit_replaces_live_instance(tmp_path: Path) -> None:
+    import subprocess
+
+    plugin_path = Path(__file__).resolve().parent.parent / "plugins" / "executor" / "todo_list.py"
+    status = subprocess.run(
+        ["git", "status", "--porcelain", str(plugin_path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    if status.stdout.strip():
+        pytest.skip(f"{plugin_path} has uncommitted changes, skipping live file test")
+
+    original_text = plugin_path.read_text(encoding="utf-8")
+
+    _write_config(tmp_path)
+    controller, plugins = _make_controller(tmp_path)
+    for p in plugins:
+        await controller.manager.enable_plugin(p)
+
+    active_before = next(
+        (p for p in controller.manager.get_plugins() if p.name == "executor_todo_list"),
+        None,
+    )
+    assert active_before is not None
+
+    try:
+        # When: append a comment to the real plugin source file
+        plugin_path.write_text(
+            original_text + "\n# hot reload test edit\n",
+            encoding="utf-8",
+        )
+        await controller.handle_change(plugin_path)
+
+        # Then: active plugin is replaced by an instance of a different class
+        active_after = next(
+            (p for p in controller.manager.get_plugins() if p.name == "executor_todo_list"),
+            None,
+        )
+        assert active_after is not None
+        assert active_after is not active_before
+        assert type(active_after) is not type(active_before)
+    finally:
+        plugin_path.write_text(original_text, encoding="utf-8")
+        controller._purge_plugins(plugin_path)
+        restored_text = plugin_path.read_text(encoding="utf-8")
+        if restored_text != original_text:
+            pytest.fail(f"Failed to restore {plugin_path} to its original content")
+
+
+@pytest.mark.asyncio
+async def test_hot_reload_watcher_fires_on_source_root_edit(tmp_path: Path) -> None:
+    import asyncio
+    import subprocess
+
+    plugin_path = Path(__file__).resolve().parent.parent / "plugins" / "executor" / "todo_list.py"
+    status = subprocess.run(
+        ["git", "status", "--porcelain", str(plugin_path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    if status.stdout.strip():
+        pytest.skip(f"{plugin_path} has uncommitted changes, skipping live file test")
+
+    original_text = plugin_path.read_text(encoding="utf-8")
+
+    _write_config(tmp_path)
+    controller, plugins = _make_controller(tmp_path)
+    for p in plugins:
+        await controller.manager.enable_plugin(p)
+
+    active_before = next(
+        (p for p in controller.manager.get_plugins() if p.name == "executor_todo_list"),
+        None,
+    )
+    assert active_before is not None
+
+    await controller.start()
+    await asyncio.sleep(0.5)
+    try:
+        # When: editing the real plugin in source_roots while awatch is running
+        plugin_path.write_text(
+            original_text + "\n# hot reload watcher test edit\n",
+            encoding="utf-8",
+        )
+
+        # Wait up to 10s for the live instance to change class
+        deadline = asyncio.get_event_loop().time() + 10.0
+        reloaded = False
+        while asyncio.get_event_loop().time() < deadline:
+            active_now = next(
+                (p for p in controller.manager.get_plugins() if p.name == "executor_todo_list"),
+                None,
+            )
+            if active_now is not None and type(active_now) is not type(active_before):
+                reloaded = True
+                break
+            await asyncio.sleep(0.1)
+
+        assert reloaded, "Watcher did not trigger plugin reload within 10 seconds"
+    finally:
+        await controller.close()
+        plugin_path.write_text(original_text, encoding="utf-8")
+        controller._purge_plugins(plugin_path)
+        restored_text = plugin_path.read_text(encoding="utf-8")
+        if restored_text != original_text:
+            pytest.fail(f"Failed to restore {plugin_path} to its original content")

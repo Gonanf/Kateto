@@ -16,7 +16,14 @@ from kateto.core.manager import PluginManager
 from kateto.core.plugin import Plugin
 
 _WATCHED_SUFFIXES: Final = frozenset({".py", ".toml"})
+_CONFIG_TOML_NAMES: Final = frozenset({"config.toml", "voice.toml"})
 _DEBOUNCE_MS: Final = 300
+
+
+def default_source_roots() -> tuple[Path, ...]:
+    """Dirs del paquete con código de plugins: se observan siempre por defecto."""
+    package = Path(__file__).resolve().parent.parent  # .../kateto
+    return (package / "plugins", package / "voices")
 
 
 class HotReloadController:
@@ -38,7 +45,7 @@ class HotReloadController:
     ) -> None:
         self.manager = manager
         self.watched_root = watched_root.resolve()
-        self.source_roots = tuple(root.resolve() for root in source_roots)
+        self.source_roots = tuple(root.resolve() for root in (source_roots or default_source_roots()))
         self._config = config
         self._shared = shared or {}
         self._debounce_ms = debounce_ms
@@ -80,8 +87,8 @@ class HotReloadController:
             await self._emit_error(error)
 
     def _reload_config(self, path: Path) -> LoadedConfig | None:
-        if path.name != "config.toml":
-            return self._config
+        if path.name not in _CONFIG_TOML_NAMES:
+            return None          # no es un archivo de config: no se recarga NADA
         config_path = self.watched_root / "config.toml"
         if not config_path.is_file():
             raise ConfigError("config.toml is missing after change")
