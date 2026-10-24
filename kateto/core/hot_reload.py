@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Final
 
 import watchfiles
@@ -22,8 +24,8 @@ _DEBOUNCE_MS: Final = 300
 class HotReloadController:
     """Watches plugin/config files and swaps changed plugins on the live bus.
 
-    Modules are purged from sys.modules (not reloaded) so sub-imports are
-    re-resolved; plugins are replaced only when their class changed.
+    Modules are reloaded in-place in sys.modules and cascade-rebound to importers;
+    plugins are replaced only when their class changed.
     """
 
     def __init__(
@@ -72,11 +74,11 @@ class HotReloadController:
             return
         try:
             config = self._reload_config(path)
-            changed = self._purge_plugins(path)
+            changed = self._reload_plugins(path)
             if not changed and config is None:
                 return
             await self._refresh(config)
-        except ConfigError as error:
+        except Exception as error:
             await self._emit_error(error)
 
     def _reload_config(self, path: Path) -> LoadedConfig | None:
@@ -88,18 +90,112 @@ class HotReloadController:
         self._config = load_config(config_dir=self.watched_root)
         return self._config
 
-    def _purge_plugins(self, path: Path) -> bool:
+    def _reload_plugins(self, path: Path) -> bool:
         if path.suffix.casefold() != ".py":
             return False
         importlib.invalidate_caches()
         target = path.resolve()
-        purged = False
+        matching_mods: list[ModuleType] = []
         for name in tuple(sys.modules):
-            module_file = getattr(sys.modules[name], "__file__", None)
-            if isinstance(module_file, str) and Path(module_file).resolve() == target:
-                del sys.modules[name]
-                purged = True
-        return purged
+            mod = sys.modules.get(name)
+            if mod is None:
+                continue
+            module_file = getattr(mod, "__file__", None)
+            if isinstance(module_file, str):
+                try:
+                    if Path(module_file).resolve() == target:
+                        matching_mods.append(mod)
+                except (OSError, ValueError):
+                    continue
+        if not matching_mods:
+            return False
+        for mod in matching_mods:
+            self._reload_module(mod)
+            self._cascade_reload(mod)
+        return True
+
+    def _reload_module(self, mod: ModuleType) -> None:
+        importlib.invalidate_caches()
+        file_path = getattr(mod, "__file__", None)
+        if file_path:
+            try:
+                pyc = Path(importlib.util.cache_from_source(file_path))
+                if pyc.is_file():
+                    pyc.unlink(missing_ok=True)
+            except Exception:
+                pass
+        try:
+            importlib.reload(mod)
+        except ModuleNotFoundError:
+            if file_path and Path(file_path).is_file():
+                code = compile(
+                    Path(file_path).read_text(encoding="utf-8"),
+                    file_path,
+                    "exec",
+                )
+                exec(code, mod.__dict__)
+
+    def _cascade_reload(self, target_mod: ModuleType) -> None:
+        target_name = getattr(target_mod, "__name__", None)
+        if not target_name:
+            return
+        importers_to_reload: list[ModuleType] = []
+        for name in tuple(sys.modules):
+            if not name or name == target_name or name == "kateto.core" or name.startswith("kateto.core."):
+                continue
+            mod = sys.modules.get(name)
+            if mod is None or not isinstance(mod, ModuleType):
+                continue
+            stale = False
+            for attr_val in getattr(mod, "__dict__", {}).values():
+                if getattr(attr_val, "__module__", None) == target_name:
+                    qualname = getattr(attr_val, "__qualname__", getattr(attr_val, "__name__", None))
+                    if isinstance(qualname, str):
+                        curr: Any = target_mod
+                        for part in qualname.split("."):
+                            curr = getattr(curr, part, None)
+                            if curr is None:
+                                break
+                        if curr is not None and curr is not attr_val:
+                            stale = True
+                            break
+            if stale:
+                importers_to_reload.append(mod)
+
+        parent_name = target_name.rpartition(".")[0]
+        if parent_name and parent_name in sys.modules:
+            parent_mod = sys.modules.get(parent_name)
+            if (
+                parent_mod is not None
+                and isinstance(parent_mod, ModuleType)
+                and parent_mod not in importers_to_reload
+                and not parent_name.startswith("kateto.core")
+            ):
+                importers_to_reload.append(parent_mod)
+
+        for importer in importers_to_reload:
+            try:
+                importlib.reload(importer)
+            except Exception:
+                pass
+
+        for name in tuple(sys.modules):
+            if not name or name == target_name or name == "kateto.core" or name.startswith("kateto.core."):
+                continue
+            mod = sys.modules.get(name)
+            if mod is None or not isinstance(mod, ModuleType):
+                continue
+            for attr_name, attr_val in list(getattr(mod, "__dict__", {}).items()):
+                if getattr(attr_val, "__module__", None) == target_name:
+                    qualname = getattr(attr_val, "__qualname__", getattr(attr_val, "__name__", None))
+                    if isinstance(qualname, str):
+                        curr = target_mod
+                        for part in qualname.split("."):
+                            curr = getattr(curr, part, None)
+                            if curr is None:
+                                break
+                        if curr is not None and curr is not attr_val:
+                            setattr(mod, attr_name, curr)
 
     async def _refresh(self, config: LoadedConfig | None) -> None:
         loaded = config if config is not None else self._config

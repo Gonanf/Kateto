@@ -163,6 +163,11 @@ class PluginSettings(_ExtensibleConfigModel):
 class VoiceSettings(_ExtensibleConfigModel):
     enabled: bool = True
     skills: list[str] = Field(default_factory=list)
+    # Nombres de tools que esta voz NO ofrece al modelo (builtin o evento de plugin).
+    # Vacio = todas: comportamiento historico.
+    toolset_exclude: list[str] = Field(default_factory=list)
+    # Nombres canonicos de capabilities que esta voz NO monta (ver _CAPABILITIES_BY_NAME).
+    capabilities_exclude: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(default_factory=list)
     dept: str | None = None
     depts: list[str] | None = None

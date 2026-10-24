@@ -137,6 +137,31 @@ def _ensure_voice_skills(config_dir: Path, voice_name: str) -> Path:
     return voice_skills_dir
 
 
+_CAPABILITIES_BY_NAME: dict[str, str] = {
+    "discovery": "DiscoveryCapability",
+    "memory": "Memory",
+    "filesystem": "FileSystem",
+    "tool_search": "ToolSearch",
+    "thinking": "Thinking",
+    "system_reminders": "SystemReminders",
+    "conversation_search": "ConversationSearch",
+    "planning": "Planning",
+    "capability_creation": "CapabilityCreation",
+    "spend_limits": "SpendLimits",
+    "skills": "Skills",
+    "code_mode": "CodeMode",
+    "shell": "Shell",
+    "workflow": "WorkflowCapability",
+}
+
+
+def _capabilities_excluded(names: list[str]) -> frozenset[str]:
+    """Devuelve los nombres de clase a omitir (set() si la lista viene vacia; un nombre fuera del mapa se ignora)."""
+    if not names:
+        return frozenset()
+    return frozenset(_CAPABILITIES_BY_NAME[n] for n in names if n in _CAPABILITIES_BY_NAME)
+
+
 def _capabilities_for(
     voice,
     profile: VoiceProfile,
@@ -148,7 +173,10 @@ def _capabilities_for(
 ) -> list[Any]:
     from kateto.voices.discovery_capability import DiscoveryCapability
 
-    capabilities: list[Any] = [DiscoveryCapability(executor)]
+    excluded = _capabilities_excluded(getattr(settings, "capabilities_exclude", []) or [])
+    capabilities: list[Any] = []
+    if "DiscoveryCapability" not in excluded:
+        capabilities.append(DiscoveryCapability(executor))
     voice_name = profile.voice_id
     voice_dir = config_dir / "voices" / voice_name
     voice_skills_dir = _ensure_voice_skills(config_dir, voice_name)
@@ -160,28 +188,31 @@ def _capabilities_for(
     try:
         from pydantic_ai_harness.memory import FileStore, Memory
 
-        capabilities.append(Memory(store=FileStore(voice_dir / "memory")))
+        if "Memory" not in excluded:
+            capabilities.append(Memory(store=FileStore(voice_dir / "memory")))
     except ImportError:
         pass
 
     try:
         from pydantic_ai_harness.filesystem import FileSystem
 
-        capabilities.append(FileSystem(root_dir=str(voice_dir)))
+        if "FileSystem" not in excluded:
+            capabilities.append(FileSystem(root_dir=str(voice_dir)))
     except ImportError:
         pass
 
     try:
         from pydantic_ai.capabilities import ToolSearch
 
-        capabilities.append(ToolSearch())
+        if "ToolSearch" not in excluded:
+            capabilities.append(ToolSearch())
     except ImportError:
         pass
 
     try:
         from pydantic_ai.capabilities import Thinking
 
-        if settings.thinking:
+        if settings.thinking and "Thinking" not in excluded:
             capabilities.append(Thinking())
     except (ImportError, ValueError):
         pass  # model does not support thinking
@@ -189,7 +220,8 @@ def _capabilities_for(
     try:
         from pydantic_ai_harness.system_reminders import Reminder, SystemReminders
 
-        capabilities.append(SystemReminders(reminders=[Reminder(content=_VOICE_CONSTRAINT)]))
+        if "SystemReminders" not in excluded:
+            capabilities.append(SystemReminders(reminders=[Reminder(content=_VOICE_CONSTRAINT)]))
     except (ImportError, ValueError):
         pass
 
@@ -197,36 +229,41 @@ def _capabilities_for(
         from pydantic_ai_harness.conversation_search import ConversationSearch, SnapshotHistorySource
         from pydantic_ai_harness.step_persistence import InMemoryStepStore
 
-        capabilities.append(ConversationSearch(source=SnapshotHistorySource(InMemoryStepStore())))
+        if "ConversationSearch" not in excluded:
+            capabilities.append(ConversationSearch(source=SnapshotHistorySource(InMemoryStepStore())))
     except (ImportError, TypeError):
         pass
 
     try:
         from pydantic_ai_harness.planning import InMemoryPlanStore, Planning
 
-        capabilities.append(Planning(store=InMemoryPlanStore()))
+        if "Planning" not in excluded:
+            capabilities.append(Planning(store=InMemoryPlanStore()))
     except ImportError:
         pass
 
     try:
         from pydantic_ai_harness.capability_creation import CapabilityCreation
 
-        capabilities.append(CapabilityCreation(directory=voice_dir / "capabilities"))
+        if "CapabilityCreation" not in excluded:
+            capabilities.append(CapabilityCreation(directory=voice_dir / "capabilities"))
     except ImportError:
         pass
 
     try:
         from pydantic_ai_harness.spend import InMemorySpendStore, SpendLimits
 
-        capabilities.append(SpendLimits(store=InMemorySpendStore()))
+        if "SpendLimits" not in excluded:
+            capabilities.append(SpendLimits(store=InMemorySpendStore()))
     except ImportError:
         pass
 
     try:
         from pydantic_ai_harness.skills import Skills
 
-        include = tuple(settings.skills) if settings.skills else None
-        capabilities.append(Skills(str(voice_skills_dir), include=include))
+        if "Skills" not in excluded:
+            include = tuple(settings.skills) if settings.skills else None
+            capabilities.append(Skills(str(voice_skills_dir), include=include))
     except ValueError:
         # Skills() validates every SKILL.md at construction; skill files
         # without YAML frontmatter (e.g. bundled defaults) would crash voice
@@ -240,12 +277,15 @@ def _capabilities_for(
 
         from kateto.voices.workflow_capability import WorkflowCapability
 
-        capabilities.append(CodeMode())
-        shell_kwargs: dict[str, Any] = {"cwd": str(voice_dir)}
-        if cli_allowlist:
-            shell_kwargs["allowed_commands"] = list(cli_allowlist)
-        capabilities.append(Shell(**shell_kwargs))
-        capabilities.append(WorkflowCapability(voice))
+        if "CodeMode" not in excluded:
+            capabilities.append(CodeMode())
+        if "Shell" not in excluded:
+            shell_kwargs: dict[str, Any] = {"cwd": str(voice_dir)}
+            if cli_allowlist:
+                shell_kwargs["allowed_commands"] = list(cli_allowlist)
+            capabilities.append(Shell(**shell_kwargs))
+        if "WorkflowCapability" not in excluded:
+            capabilities.append(WorkflowCapability(voice))
 
     return capabilities
 
@@ -391,7 +431,10 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
                     api_key=voice_settings.api_key or "sk-no-key-required",
                 ),
             )
-            kateto_toolset = KatetoToolset(executor, exclude_names=_TOOLSET_EXCLUDED)
+            kateto_toolset = KatetoToolset(
+                executor,
+                exclude_names=_TOOLSET_EXCLUDED | frozenset(settings.toolset_exclude),
+            )
             capabilities = _capabilities_for(
                 voice,
                 profile,
