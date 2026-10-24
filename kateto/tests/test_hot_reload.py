@@ -99,12 +99,16 @@ async def test_hot_reload_purges_module_for_changed_py(tmp_path: Path) -> None:
     module_path.write_text("VALUE = 1\n", encoding="utf-8")
     module = ModuleType("_hot_reload_fake_plugin")
     module.__file__ = str(module_path)
+    module.VALUE = 1
     sys.modules["_hot_reload_fake_plugin"] = module
     # When: the module's source file changes
-    purged = controller._purge_plugins(module_path)
-    # Then: the module is purged so re-import picks up the new code
-    assert purged is True
-    assert "_hot_reload_fake_plugin" not in sys.modules
+    module_path.write_text("VALUE = 2\n", encoding="utf-8")
+    reloaded = controller._reload_plugins(module_path)
+    # Then: the module remains in sys.modules as the same object and was reloaded
+    assert reloaded is True
+    assert "_hot_reload_fake_plugin" in sys.modules
+    assert sys.modules["_hot_reload_fake_plugin"] is module
+    assert getattr(module, "VALUE", None) == 2
     sys.modules.pop("_hot_reload_fake_plugin", None)
 
 
@@ -118,9 +122,9 @@ async def test_hot_reload_does_not_purge_unrelated_modules(tmp_path: Path) -> No
     other = tmp_path / "other.py"
     other.write_text("", encoding="utf-8")
     # When: a different file changes
-    purged = controller._purge_plugins(other)
+    reloaded = controller._reload_plugins(other)
     # Then: the unrelated module is untouched
-    assert purged is False
+    assert reloaded is False
     assert "_hot_reload_unrelated" in sys.modules
     sys.modules.pop("_hot_reload_unrelated", None)
 
@@ -164,3 +168,269 @@ async def test_hot_reload_emits_error_on_missing_config(tmp_path: Path) -> None:
     # Then: an error event is emitted and the bus stays up
     assert len(received) == 1
     assert "config.toml" in str(received[0])
+
+
+def _count_class_copies(module_name: str, qualname: str) -> set[int]:
+    copies: set[int] = set()
+    for mod in sys.modules.values():
+        if mod is None:
+            continue
+        for obj in getattr(mod, "__dict__", {}).values():
+            if (
+                getattr(obj, "__module__", None) == module_name
+                and getattr(obj, "__qualname__", None) == qualname
+            ):
+                copies.add(id(obj))
+    return copies
+
+
+@pytest.mark.asyncio
+async def test_reload_leaves_a_single_copy_of_the_class(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a hermetic package pkg with module-level import in __init__.py and function import in create_plugins
+    pkg_dir = tmp_path / "pkg_identity"
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    (pkg_dir / "__init__.py").write_text(
+        "from .plugin import DemoPlugin\n\n"
+        "def create_plugins(ctx=None):\n"
+        "    from .plugin import DemoPlugin\n"
+        "    return [DemoPlugin()]\n",
+        encoding="utf-8",
+    )
+    plugin_py = pkg_dir / "plugin.py"
+    plugin_py.write_text(
+        "from kateto.core.plugin import Plugin\n\n"
+        "REGISTRY = []\n\n"
+        "class DemoPlugin(Plugin):\n"
+        "    def __init__(self):\n"
+        "        super().__init__('demo_plugin')\n"
+        "        self.registry = REGISTRY\n",
+        encoding="utf-8",
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        import pkg_identity
+        from kateto.core.discovery import PluginRegistry
+
+        controller, _ = _make_controller(tmp_path)
+        monkeypatch.setattr(
+            "kateto.core.hot_reload.discover_plugins",
+            lambda ctx: PluginRegistry(plugins=frozenset(pkg_identity.create_plugins(ctx))),
+        )
+        await controller._refresh(controller._config)
+
+        # When: pkg_identity/plugin.py is edited and handle_change is called
+        plugin_py.write_text(
+            "from kateto.core.plugin import Plugin\n\n"
+            "REGISTRY = []\n\n"
+            "class DemoPlugin(Plugin):\n"
+            "    def __init__(self):\n"
+            "        super().__init__('demo_plugin')\n"
+            "        self.registry = REGISTRY\n"
+            "# edited\n",
+            encoding="utf-8",
+        )
+        await controller.handle_change(plugin_py)
+
+        # Then: exactly 1 copy of DemoPlugin exists across all sys.modules and isinstance is True
+        copies = _count_class_copies("pkg_identity.plugin", "DemoPlugin")
+        assert len(copies) == 1
+        instancia_nueva = controller.manager.get_plugins()[0]
+        assert isinstance(instancia_nueva, pkg_identity.DemoPlugin)
+    finally:
+        sys.path.remove(str(tmp_path))
+        sys.modules.pop("pkg_identity.plugin", None)
+        sys.modules.pop("pkg_identity", None)
+
+
+@pytest.mark.asyncio
+async def test_reload_keeps_a_single_singleton(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a hermetic package pkg defining REGISTRY: list at module level
+    pkg_dir = tmp_path / "pkg_singleton"
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    (pkg_dir / "__init__.py").write_text(
+        "from .plugin import DemoPlugin\n\n"
+        "def create_plugins(ctx=None):\n"
+        "    from .plugin import DemoPlugin\n"
+        "    return [DemoPlugin()]\n",
+        encoding="utf-8",
+    )
+    plugin_py = pkg_dir / "plugin.py"
+    plugin_py.write_text(
+        "from kateto.core.plugin import Plugin\n\n"
+        "REGISTRY = []\n\n"
+        "class DemoPlugin(Plugin):\n"
+        "    def __init__(self):\n"
+        "        super().__init__('demo_plugin')\n"
+        "        self.registry = REGISTRY\n",
+        encoding="utf-8",
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        import pkg_singleton
+        from kateto.core.discovery import PluginRegistry
+
+        controller, _ = _make_controller(tmp_path)
+        monkeypatch.setattr(
+            "kateto.core.hot_reload.discover_plugins",
+            lambda ctx: PluginRegistry(plugins=frozenset(pkg_singleton.create_plugins(ctx))),
+        )
+        await controller._refresh(controller._config)
+
+        # When: pkg_singleton/plugin.py is edited
+        plugin_py.write_text(
+            "from kateto.core.plugin import Plugin\n\n"
+            "REGISTRY = []\n\n"
+            "class DemoPlugin(Plugin):\n"
+            "    def __init__(self):\n"
+            "        super().__init__('demo_plugin')\n"
+            "        self.registry = REGISTRY\n"
+            "# edited\n",
+            encoding="utf-8",
+        )
+        await controller.handle_change(plugin_py)
+
+        # Then: pkg_singleton.plugin.REGISTRY and the live plugin's singleton are the same object
+        live_plugin = controller.manager.get_plugins()[0]
+        assert live_plugin.registry is sys.modules["pkg_singleton.plugin"].REGISTRY
+    finally:
+        sys.path.remove(str(tmp_path))
+        sys.modules.pop("pkg_singleton.plugin", None)
+        sys.modules.pop("pkg_singleton", None)
+
+
+@pytest.mark.asyncio
+async def test_reload_survives_a_broken_intermediate_save(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a hermetic package pkg and active controller
+    pkg_dir = tmp_path / "pkg_syntax"
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    (pkg_dir / "__init__.py").write_text(
+        "from .plugin import DemoPlugin\n\n"
+        "def create_plugins(ctx=None):\n"
+        "    from .plugin import DemoPlugin\n"
+        "    return [DemoPlugin()]\n",
+        encoding="utf-8",
+    )
+    plugin_py = pkg_dir / "plugin.py"
+    plugin_py.write_text(
+        "from kateto.core.plugin import Plugin\n\n"
+        "REGISTRY = []\n\n"
+        "class DemoPlugin(Plugin):\n"
+        "    def __init__(self):\n"
+        "        super().__init__('demo_plugin')\n"
+        "        self.registry = REGISTRY\n",
+        encoding="utf-8",
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        import pkg_syntax
+        from kateto.core.discovery import PluginRegistry
+
+        controller, _ = _make_controller(tmp_path)
+        monkeypatch.setattr(
+            "kateto.core.hot_reload.discover_plugins",
+            lambda ctx: PluginRegistry(plugins=frozenset(pkg_syntax.create_plugins(ctx))),
+        )
+        await controller._refresh(controller._config)
+
+        # When: writing broken syntax (simulating intermediate save)
+        plugin_py.write_text("class DemoPlugin(Plugin):\n    def ((invalid\n", encoding="utf-8")
+        # handle_change must NOT raise
+        await controller.handle_change(plugin_py)
+
+        # Then: module remains in sys.modules
+        assert "pkg_syntax.plugin" in sys.modules
+
+        # When: writing valid code afterwards
+        plugin_py.write_text(
+            "from kateto.core.plugin import Plugin\n\n"
+            "REGISTRY = []\n\n"
+            "class DemoPlugin(Plugin):\n"
+            "    def __init__(self):\n"
+            "        super().__init__('demo_plugin')\n"
+            "        self.registry = REGISTRY\n"
+            "# recovered\n",
+            encoding="utf-8",
+        )
+        await controller.handle_change(plugin_py)
+
+        # Then: plugin is loaded and class copy is unique again
+        copies = _count_class_copies("pkg_syntax.plugin", "DemoPlugin")
+        assert len(copies) == 1
+        live_plugin = controller.manager.get_plugins()[0]
+        assert isinstance(live_plugin, pkg_syntax.DemoPlugin)
+    finally:
+        sys.path.remove(str(tmp_path))
+        sys.modules.pop("pkg_syntax.plugin", None)
+        sys.modules.pop("pkg_syntax", None)
+
+
+@pytest.mark.asyncio
+async def test_fifty_consecutive_edits_do_not_crash_or_duplicate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a hermetic package pkg and active controller
+    pkg_dir = tmp_path / "pkg_fifty"
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+    (pkg_dir / "__init__.py").write_text(
+        "from .plugin import DemoPlugin\n\n"
+        "def create_plugins(ctx=None):\n"
+        "    from .plugin import DemoPlugin\n"
+        "    return [DemoPlugin()]\n",
+        encoding="utf-8",
+    )
+    plugin_py = pkg_dir / "plugin.py"
+    plugin_py.write_text(
+        "from kateto.core.plugin import Plugin\n\n"
+        "REGISTRY = []\n\n"
+        "class DemoPlugin(Plugin):\n"
+        "    def __init__(self):\n"
+        "        super().__init__('demo_plugin')\n"
+        "        self.registry = REGISTRY\n",
+        encoding="utf-8",
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        import pkg_fifty
+        from kateto.core.discovery import PluginRegistry
+
+        controller, _ = _make_controller(tmp_path)
+        monkeypatch.setattr(
+            "kateto.core.hot_reload.discover_plugins",
+            lambda ctx: PluginRegistry(plugins=frozenset(pkg_fifty.create_plugins(ctx))),
+        )
+        await controller._refresh(controller._config)
+
+        # When: performing 50 consecutive edits
+        for i in range(50):
+            plugin_py.write_text(
+                "from kateto.core.plugin import Plugin\n\n"
+                f"REGISTRY = [{i}]\n\n"
+                "class DemoPlugin(Plugin):\n"
+                "    def __init__(self):\n"
+                "        super().__init__('demo_plugin')\n"
+                "        self.registry = REGISTRY\n"
+                f"# edit {i}\n",
+                encoding="utf-8",
+            )
+            await controller.handle_change(plugin_py)
+            copies = _count_class_copies("pkg_fifty.plugin", "DemoPlugin")
+            assert len(copies) == 1
+
+        # Then: count remains 1 and live plugin has the latest registry
+        live_plugin = controller.manager.get_plugins()[0]
+        assert live_plugin.registry == [49]
+        assert live_plugin.registry is sys.modules["pkg_fifty.plugin"].REGISTRY
+    finally:
+        sys.path.remove(str(tmp_path))
+        sys.modules.pop("pkg_fifty.plugin", None)
+        sys.modules.pop("pkg_fifty", None)
