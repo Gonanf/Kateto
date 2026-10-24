@@ -118,22 +118,13 @@ class HotReloadController:
         importlib.invalidate_caches()
         file_path = getattr(mod, "__file__", None)
         if file_path:
+            # importlib.reload compara mtime+size del bytecode cacheado: dos guardados en el mismo
+            # segundo con el mismo tamano se saltean. Invalidar el .pyc fuerza recompilar.
             try:
-                pyc = Path(importlib.util.cache_from_source(file_path))
-                if pyc.is_file():
-                    pyc.unlink(missing_ok=True)
-            except Exception:
+                Path(importlib.util.cache_from_source(file_path)).unlink(missing_ok=True)
+            except OSError:
                 pass
-        try:
-            importlib.reload(mod)
-        except ModuleNotFoundError:
-            if file_path and Path(file_path).is_file():
-                code = compile(
-                    Path(file_path).read_text(encoding="utf-8"),
-                    file_path,
-                    "exec",
-                )
-                exec(code, mod.__dict__)
+        importlib.reload(mod)
 
     def _cascade_reload(self, target_mod: ModuleType) -> None:
         target_name = getattr(target_mod, "__name__", None)
