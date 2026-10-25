@@ -1,4 +1,4 @@
-"""Tests para script/voice-llm-watchdog.py sin dependencias externas ni systemd."""
+"""Tests para scripts/voice-llm-watchdog.py sin dependencias externas ni systemd."""
 
 import importlib.util
 import json
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import urllib.error
 
 # Carga dinamica del script con path relativo a la raiz del repo:
-SCRIPT_PATH = Path(__file__).resolve().parents[2] / "script" / "voice-llm-watchdog.py"
+SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "voice-llm-watchdog.py"
 SPEC = importlib.util.spec_from_file_location("voice_llm_watchdog", SCRIPT_PATH)
 watchdog = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(watchdog)

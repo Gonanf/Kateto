@@ -14,7 +14,7 @@
 // protocolo, con el objetivo persistente (JawSwayMotion) contra el sorteado
 // por frame del código anterior.
 //
-// Uso: node script/qa/measure_jaw.mjs
+// Uso: node scripts/qa/measure_jaw.mjs
 // Uso browser (mismo protocolo en Chromium real): ver jaw_harness.html.
 //
 // Los stats de jawOffsetY son deterministas; el lateral se mide con rng sembrado

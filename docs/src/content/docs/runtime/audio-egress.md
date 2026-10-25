@@ -85,7 +85,7 @@ la sesión) no es comparable con uno caliente.
 ## Comando que lo reproduce
 
 ```bash
-./.venv/bin/python script/qa/mask1_egress_client.py --port 8099
+./.venv/bin/python scripts/qa/mask1_egress_client.py --port 8099
 ```
 
 Requiere un runtime levantado **con el parche aplicado**. Contra un `:8099` de master sin

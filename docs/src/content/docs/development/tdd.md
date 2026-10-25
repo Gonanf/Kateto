@@ -87,8 +87,8 @@ kateto/
 │   └── defaults/            # Bootstrap template (config.toml, voices, skills)
 ├── docs/
 │   └── ...
-└── script/
-    └── qa/                  # Fixture scripts, acceptance.py
+└── scripts/
+    └── qa/                  # QA scripts (jaw measurement, audio egress client)
 ```
 
 ## Default Servers

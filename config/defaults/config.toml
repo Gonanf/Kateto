@@ -121,6 +121,26 @@ enabled = true
 [voice.jane]
 enabled = true
 skills = ["orchestrator", "look-at"]
+# === t49: Hipotenusa 100% entretenimiento (tools de TRABAJO fuera del modelo) ===
+# Se saca del MODELO de esta voz; el codigo, los plugins, los eventos y los skills
+# siguen existiendo para el bus de eventos y los clientes HTTP/MCP. Reversible: borra
+# este bloque (y el de las otras tres voces) y el toolset vuelve al historico.
+toolset_exclude = [
+  "request_generation",   # delegacion
+  "schedule_event",       # agenda (cron)
+  "create_workflow", "update_workflow",   # programacion
+  "create_skill", "update_skill",         # programacion
+  "backlog_add", "backlog_list", "backlog_update",   # gestion (tablero/backlog)
+  "schedule_request", "schedule_cancel",              # agenda
+  "cli_execute",                                     # programacion (shell/CLI)
+  "workflow_run",                                     # release/harness
+]
+capabilities_exclude = [
+  "code_mode", "shell", "workflow",          # programacion
+  "planning", "capability_creation",         # planeacion
+  "filesystem",                              # escritura de archivos
+]
+# === fin t49 ===
 mcp_servers = ["system"]
 stream = true
 max_tokens = 4096
@@ -132,6 +152,26 @@ timeout = 600
 [voice.doktor]
 enabled = true
 skills = ["backlog", "risk-analysis", "planning-poker", "look-at"]
+# === t49: Hipotenusa 100% entretenimiento (tools de TRABAJO fuera del modelo) ===
+# Se saca del MODELO de esta voz; el codigo, los plugins, los eventos y los skills
+# siguen existiendo para el bus de eventos y los clientes HTTP/MCP. Reversible: borra
+# este bloque (y el de las otras tres voces) y el toolset vuelve al historico.
+toolset_exclude = [
+  "request_generation",   # delegacion
+  "schedule_event",       # agenda (cron)
+  "create_workflow", "update_workflow",   # programacion
+  "create_skill", "update_skill",         # programacion
+  "backlog_add", "backlog_list", "backlog_update",   # gestion (tablero/backlog)
+  "schedule_request", "schedule_cancel",              # agenda
+  "cli_execute",                                     # programacion (shell/CLI)
+  "workflow_run",                                     # release/harness
+]
+capabilities_exclude = [
+  "code_mode", "shell", "workflow",          # programacion
+  "planning", "capability_creation",         # planeacion
+  "filesystem",                              # escritura de archivos
+]
+# === fin t49 ===
 mcp_servers = ["system"]
 stream = true
 max_tokens = 4096
@@ -143,6 +183,26 @@ timeout = 600
 [voice.conquest]
 enabled = true
 skills = ["backlog", "look-at"]
+# === t49: Hipotenusa 100% entretenimiento (tools de TRABAJO fuera del modelo) ===
+# Se saca del MODELO de esta voz; el codigo, los plugins, los eventos y los skills
+# siguen existiendo para el bus de eventos y los clientes HTTP/MCP. Reversible: borra
+# este bloque (y el de las otras tres voces) y el toolset vuelve al historico.
+toolset_exclude = [
+  "request_generation",   # delegacion
+  "schedule_event",       # agenda (cron)
+  "create_workflow", "update_workflow",   # programacion
+  "create_skill", "update_skill",         # programacion
+  "backlog_add", "backlog_list", "backlog_update",   # gestion (tablero/backlog)
+  "schedule_request", "schedule_cancel",              # agenda
+  "cli_execute",                                     # programacion (shell/CLI)
+  "workflow_run",                                     # release/harness
+]
+capabilities_exclude = [
+  "code_mode", "shell", "workflow",          # programacion
+  "planning", "capability_creation",         # planeacion
+  "filesystem",                              # escritura de archivos
+]
+# === fin t49 ===
 mcp_servers = ["system"]
 stream = true
 max_tokens = 4096
@@ -154,6 +214,26 @@ timeout = 600
 [voice.whisperer]
 enabled = true
 skills = ["orchestrator", "look-at"]
+# === t49: Hipotenusa 100% entretenimiento (tools de TRABAJO fuera del modelo) ===
+# Se saca del MODELO de esta voz; el codigo, los plugins, los eventos y los skills
+# siguen existiendo para el bus de eventos y los clientes HTTP/MCP. Reversible: borra
+# este bloque (y el de las otras tres voces) y el toolset vuelve al historico.
+toolset_exclude = [
+  "request_generation",   # delegacion
+  "schedule_event",       # agenda (cron)
+  "create_workflow", "update_workflow",   # programacion
+  "create_skill", "update_skill",         # programacion
+  "backlog_add", "backlog_list", "backlog_update",   # gestion (tablero/backlog)
+  "schedule_request", "schedule_cancel",              # agenda
+  "cli_execute",                                     # programacion (shell/CLI)
+  "workflow_run",                                     # release/harness
+]
+capabilities_exclude = [
+  "code_mode", "shell", "workflow",          # programacion
+  "planning", "capability_creation",         # planeacion
+  "filesystem",                              # escritura de archivos
+]
+# === fin t49 ===
 mcp_servers = ["system"]
 stream = true
 max_tokens = 4096

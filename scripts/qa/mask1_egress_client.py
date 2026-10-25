@@ -5,7 +5,7 @@ Sólo stdlib + `websockets`. Corre contra cualquier runtime con el parche de
 /http_server (bug 100) aplicado; contra un master sin parche devuelve 0 frames
 de audio y sale 1.
 
-    ./.venv/bin/python script/qa/mask1_egress_client.py --port 8099
+    ./.venv/bin/python scripts/qa/mask1_egress_client.py --port 8099
 """
 from __future__ import annotations
 

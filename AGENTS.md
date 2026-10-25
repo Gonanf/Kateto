@@ -121,8 +121,10 @@ kateto/
 │   └── package.json       # Deps del sitio (bun)
 ├── config/
 │   └── defaults/         # Bootstrap template (config.toml, voices, skills)
-└── script/
-    └── qa/               # Fixture scripts, acceptance.py
+└── scripts/
+    ├── qa/               # QA scripts (jaw measurement, audio egress client)
+    ├── systemd/          # Voice LLM watchdog units
+    └── tests/            # Standalone script tests (unittest)
 ```
 
 ---
@@ -269,7 +271,7 @@ This project uses ponytail conventions for intentional simplification. Mark deli
 
 These root dirs were removed as duplicates — do NOT recreate them:
 - `skills/` (root) → use `config/defaults/skills/`
-- `scripts/` (empty) → use `script/`
+- `script/` (singular) → use `scripts/` (consolidated)
 - `voices/` (root) → dev workspace only, not code-referenced
 - `workflows/` (root) → empty
 - `TODO.md` (root) → stale
