@@ -26,7 +26,11 @@ PROMPTS = [
     "Contame algo del barrio que me haga reir.",
 ]
 
-ROMPE_ROL = re.compile(r"\b(soy (una )?(ia|inteligencia artificial|modelo|asistente)|como (un )?(asistente|modelo)|no puedo ayudar)\b", re.I)
+ROMPE_ROL = re.compile(
+    r"\b(soy (una |un )?(ia|inteligencia artificial|modelo|model|asistente|robot|liquid|foundation)"
+    r"|como (un )?(asistente|modelo)|no puedo (ayudar|responder|responder preguntas)|i am an ai)\b",
+    re.I,
+)
 INGLES = re.compile(r"\b(the|you|i am|i'm|what|would you like|let me know)\b", re.I)
 
 
