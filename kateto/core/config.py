@@ -424,7 +424,12 @@ def _load_voice_folder_configs(config_dir: Path, raw_config: dict[str, Any]) -> 
                     vdata[k] = def_val
 
 
-def load_config(*, config_dir: Path | None = None, defaults_dir: Path | None = None) -> LoadedConfig:
+def load_config(
+    *,
+    config_dir: Path | None = None,
+    defaults_dir: Path | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> LoadedConfig:
     paths = bootstrap_config(config_dir=config_dir, defaults_dir=defaults_dir)
     try:
         raw_config = tomllib.loads(paths.config_file.read_text(encoding="utf-8"))
@@ -434,6 +439,11 @@ def load_config(*, config_dir: Path | None = None, defaults_dir: Path | None = N
         raise ConfigError(f"unable to read config at {paths.config_file}: config must use UTF-8") from error
     except OSError as error:
         raise ConfigError(f"unable to read config at {paths.config_file}: {error}") from error
+
+    if overrides:
+        from kateto.hipotenusa.config import merge_overrides
+
+        raw_config = merge_overrides(raw_config, overrides)
 
     _load_voice_folder_configs(paths.config_dir, raw_config)
     _load_dotenv(paths)

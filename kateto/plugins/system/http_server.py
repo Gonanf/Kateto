@@ -112,11 +112,13 @@ class HttpServer:
         host: str = "127.0.0.1",
         port: int = 8080,
         config_dir: Path | None = None,
+        token: str | None = None,
     ) -> None:
         self._manager = manager
         self._host = host
         self._port = port
         self._config_dir = config_dir
+        self._token = token or ""
         self._app = self._build_app()
         self._server: Any = None
         self._observers: list[WebSocket] = []
@@ -161,6 +163,57 @@ class HttpServer:
                 await self.app(scope, receive, send_wrapper)
 
         app.add_middleware(NoCacheMiddleware)
+
+        self_outer = self
+
+        class TokenMiddleware:
+            # LAN sin auth: token por header o ?token= en WS; loopback pasa libre.
+            def __init__(self, app: Any) -> None:
+                self.inner = app
+
+            async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+                if scope["type"] not in ("http", "websocket"):
+                    await self.inner(scope, receive, send)
+                    return
+                client = scope.get("client")
+                host = client[0] if client else ""
+                from ipaddress import ip_address
+
+                try:
+                    address = ip_address(host.split("%", 1)[0])
+                except ValueError:
+                    address = None
+                if host.casefold() == "localhost" or (address is not None and address.is_loopback):
+                    await self.inner(scope, receive, send)
+                    return
+                if not self_outer._token:
+                    await self.inner(scope, receive, send)
+                    return
+                headers = dict(scope.get("headers", []))
+                supplied = headers.get(b"x-hannya-token", b"").decode("latin-1")
+                query = scope.get("query_string", b"").decode("latin-1")
+                from urllib.parse import parse_qs
+
+                valid = supplied == self_outer._token or (
+                    scope["type"] == "websocket"
+                    and parse_qs(query).get("token", [""])[0] == self_outer._token
+                )
+                if valid:
+                    await self.inner(scope, receive, send)
+                elif scope["type"] == "websocket":
+                    await send({"type": "websocket.close", "code": 1008})
+                else:
+                    body = b"Forbidden"
+                    await send(
+                        {
+                            "type": "http.response.start",
+                            "status": 403,
+                            "headers": [(b"content-length", str(len(body)).encode())],
+                        }
+                    )
+                    await send({"type": "http.response.body", "body": body})
+
+        app.add_middleware(TokenMiddleware)
 
         @app.get("/events")
         async def list_events() -> list[EventListItem]:
@@ -416,26 +469,33 @@ class HttpServer:
             if vo is not None:
                 return {"game": game, "current": getattr(vo, "_last_debate_state", None)}
             return {"game": game, "current": None}
-
         @app.websocket("/ws/overlay")
         async def overlay_stream(ws: WebSocket) -> None:
+            print("[overlay_stream] accepted connection", flush=True)
             await ws.accept()
+            print("[overlay_stream] after accept", flush=True)
             plugin = self._manager.get_plugin("visual_overlay")
-            register = getattr(plugin, "register_websocket", None)
-            unregister = getattr(plugin, "unregister_websocket", None)
-            if register is None or unregister is None:
-                await ws.close()
-                return
-            await register(ws)
-            # Relay any message received on this socket (e.g. a debate turn pushed
-            # by `kateto debate --overlay`) to every other connected overlay client
-            # (e.g. courtroom.html), so the courtroom renders the debate live.
-            connected = getattr(plugin, "_connected_websockets", None)
+            register = getattr(plugin, "register_websocket", None) if plugin is not None else None
+            unregister = getattr(plugin, "unregister_websocket", None) if plugin is not None else None
+            connected: set | None = None
+            if register is not None and unregister is not None:
+                await register(ws)
+                connected = getattr(plugin, "_connected_websockets", None)
+                print(f"[overlay_stream] registered, connected set: {connected}", flush=True)
+            # Relay any message received on this socket (e.g. a debate turn pushed)
             try:
                 while True:
                     data = await ws.receive_text()
+                    print("[overlay_stream] received", flush=True)
                     try:
                         parsed = json.loads(data)
+                        # Benchmark ping/pong (mirrors mask_stream behavior)
+                        if isinstance(parsed, dict) and parsed.get("type") == "ping":
+                            seq = parsed.get("seq")
+                            pong = {"type": "pong", "seq": seq, "ts": time.time()}
+                            print("[overlay_stream] sending pong", flush=True)
+                            await ws.send_json(pong)
+                            continue
                         if isinstance(parsed, dict) and parsed.get("event") == "debate":
                             plugin._last_debate_state = parsed
                             hist = getattr(plugin, "_debate_history", None)
@@ -443,11 +503,8 @@ class HttpServer:
                                 hist.append(parsed)
                                 if len(hist) > 50:
                                     hist.pop(0)
-
-
                     except Exception:
                         pass
-
                     if connected is None:
                         continue
                     for other in list(connected):
@@ -463,7 +520,11 @@ class HttpServer:
             except WebSocketDisconnect:
                 pass
             finally:
-                await unregister(ws)
+                if unregister is not None:
+                    try:
+                        await unregister(ws)
+                    except Exception:  # noqa: BLE001
+                        pass
 
         @app.websocket("/ws/mask")
         async def mask_stream(ws: WebSocket) -> None:

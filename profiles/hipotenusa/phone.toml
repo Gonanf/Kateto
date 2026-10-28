@@ -1,0 +1,33 @@
+[runtime]
+host = "0.0.0.0"
+port = 8099
+token = "hannya-lan-dev"
+
+[runtime.overrides]
+"plugin.audio_input_mic.enabled" = false
+"plugin.audio_output_player.enabled" = false
+"plugin.audio_processor_parakeet.port" = 8094
+# El LLM NO es sidecar: lo sirve el router llama.cpp de :11434.
+"plugin.voice_llm.endpoint" = "http://127.0.0.1:11434/v1"
+"plugin.voice_llm.model" = "LFM2.5-2.6B-A1B"  # KatetoGemma: el gguf ya no esta en disco
+
+# ASR: crispasr lo levanta este runtime como subproceso. Si ya esta sano, lo adopta.
+[[sidecar]]
+name = "asr"
+adopt_if_healthy = true
+required = true
+health_url = "http://127.0.0.1:8094/health"
+health_expect = "parakeet"
+argv = ["/run/media/chaos/secundario/proyectos/crispasr/crispasr-linux-x86_64-vulkan/crispasr",
+        "--server", "--host", "0.0.0.0", "--port", "8094",
+        "-m", "/run/media/chaos/secundario/proyectos/redux-gguf/models/parakeet-ultra-q8_0.gguf",
+        "--backend", "parakeet", "--gpu-backend", "cpu"]
+ready_timeout_s = 120
+
+[[expose]]
+name = "asr-lan"
+listen = "0.0.0.0:8096"
+target = "127.0.0.1:8094"
+health_url = "http://127.0.0.1:8094/health"
+health_expect = "parakeet"
+required = true

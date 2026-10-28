@@ -68,6 +68,7 @@ def create_plugins(ctx: DiscoveryContext) -> tuple[Plugin, ...]:
                     host=host,
                     port=port,
                     config_dir=ctx.config.paths.config_dir,
+                    token=http_settings.token,
                 ),
             )
         else:
