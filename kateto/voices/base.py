@@ -751,7 +751,10 @@ class VoiceAgent(Plugin):
         manager = self.manager
         if manager is not None and self._tool_executor is not None:
             from kateto.voices.tools import VoiceToolExecutor, BUILTIN_TOOLS, build_event_tools, filter_tool_names
-            if isinstance(self._tool_executor, VoiceToolExecutor):
+            if isinstance(self._tool_executor, VoiceToolExecutor) and (getattr(self._settings, "persona", None) or "").strip():
+                # personaje puro: sin tools en el request (menos prompt, menos TTFT)
+                self._tools = ()
+            elif isinstance(self._tool_executor, VoiceToolExecutor):
                 self._tool_executor.set_manager(manager)
                 event_tools = build_event_tools(manager)
                 client_tools = manager.get_plugin("client_tools")
@@ -1562,6 +1565,12 @@ class VoiceAgent(Plugin):
         """
         if self._stable_prompt_text is not None:
             return self._stable_prompt_text
+        persona = (getattr(self._settings, "persona", None) or "").strip()
+        if persona:
+            # Modo personaje: quien es y como habla, nada mas. La personalidad
+            # la desarrolla el modelo; no hay soul, skills, tools ni memoria.
+            self._stable_prompt_text = persona
+            return persona
         soul = await self._memory.read_soul()
         if not soul.strip():
             restored = await self._memory.rollback_soul()
@@ -1702,6 +1711,11 @@ class VoiceAgent(Plugin):
         phase_id: str | None,
     ) -> tuple[ChatMessage, ...]:
         stable = await self._stable_prompt()
+        if (getattr(self._settings, "persona", None) or "").strip():
+            # Modo personaje: sin bloque volatil (memorias semanticas, journal,
+            # workflows). Si no, el personaje contesta con la jerga de trabajo
+            # guardada en memoria.
+            return (ChatMessage(role="system", content=stable), ChatMessage(role="user", content=prompt))
         workflows = WorkflowCatalog(config_dir=self._config_dir).discover(voice=self.name)
         volatile = volatile_block(
             workflow_system=await self._workflow_system_message(workflow, phase_id),

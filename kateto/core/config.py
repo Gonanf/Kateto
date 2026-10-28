@@ -191,6 +191,9 @@ class VoiceSettings(_ExtensibleConfigModel):
     # none|minimal|low|medium|high; gateway aliases off|disabled|disable → none).
     # Unset + thinking=False → "none"; thinking=True → not sent (model decides).
     reasoning_effort: str | None = None
+    # Modo personaje: si esta seteado, el system prompt ES este texto y nada mas
+    # (sin soul, skills, tools, memoria ni bloques de trabajo). Reversible.
+    persona: str | None = None
     # KV-cache prefill of the system prompt at startup. Disable for harnesses
     # that manage conversation state themselves.
     prefill: bool = True
