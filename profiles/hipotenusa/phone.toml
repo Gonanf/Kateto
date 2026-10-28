@@ -6,10 +6,12 @@ token = "hannya-lan-dev"
 [runtime.overrides]
 "plugin.audio_input_mic.enabled" = false
 "plugin.audio_output_player.enabled" = false
+# edgetts (Microsoft, 403) manda un final vacio que cierra el turno antes que piper
+"plugin.audio_output_edgetts.enabled" = false
 "plugin.audio_processor_parakeet.port" = 8094
 # El LLM NO es sidecar: lo sirve el router llama.cpp de :11434.
 "plugin.voice_llm.endpoint" = "http://127.0.0.1:11434/v1"
-"plugin.voice_llm.model" = "MiniCPM5-1B"  # KatetoGemma no esta en disco; este banca system mid-conversation y 32k ctx
+"plugin.voice_llm.model" = "LFM3-1.7B"
 
 # ASR: crispasr lo levanta este runtime como subproceso. Si ya esta sano, lo adopta.
 [[sidecar]]

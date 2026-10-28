@@ -243,13 +243,13 @@ class ConversationLogPlugin(Plugin):
     async def on_text_chunk(self, data: Any, envelope: Any = None) -> None:
         if self._is_client_blocked(envelope, data):
             return
-        if not getattr(data, "final", False):
-            return
         text = getattr(data, "text", "")
         voice = getattr(data, "voice_id", None) or "assistant"
         seq = getattr(data, "sequence", 0)
+        if not text and not getattr(data, "final", False):
+            return
 
-        extra: dict[str, Any] = {"sequence": seq}
+        extra: dict[str, Any] = {"sequence": seq, "final": bool(getattr(data, "final", False))}
         if self._current_turn_id is None:
             extra["unsolicited"] = True
             turn_id = None
@@ -281,6 +281,25 @@ class ConversationLogPlugin(Plugin):
             extra=extra,
             turn_id=turn_id,
         )
+
+    async def on_audio_output(self, data: Any, envelope: Any = None) -> None:
+        if self._is_client_blocked(envelope, data):
+            return
+        if self._current_turn_id is None:
+            return
+        voice = getattr(data, "voice_id", None) or getattr(envelope, "source", None) or "assistant"
+        entry = None
+        for out in self._turn_outputs:
+            if out["voice"] == voice:
+                entry = out
+                break
+        if entry is None:
+            entry = {"voice": voice, "text": "", "sequence_first": 0, "sequence_last": 0}
+            self._turn_outputs.append(entry)
+        samples = getattr(data, "samples", b"") or b""
+        entry["audio_bytes"] = entry.get("audio_bytes", 0) + len(samples)
+        entry["audio_sample_rate"] = getattr(data, "sample_rate", None)
+        entry["audio_final"] = bool(getattr(data, "final", False))
 
     async def on_voice_idle(self, data: Any, envelope: Any = None) -> None:
         if self._is_client_blocked(envelope, data):
