@@ -628,6 +628,32 @@ class HttpServer:
                             await ws.send_json(resume(after))
                     elif kind == "mask_camera_frame":
                         raw = payload.get("frame") or payload.get("data")
+                        self_camera_frames = getattr(self, "_camera_frames", 0) + 1
+                        self._camera_frames = self_camera_frames
+                        if self_camera_frames % 10 == 1:
+                            log.info("ws/mask: {} frames de camara recibidos", self_camera_frames)
+                            self._log_seq += 1
+                            entrada = {
+                                "seq": self._log_seq,
+                                "ts": time.time(),
+                                "level": "info",
+                                "kind": "camera",
+                                "voice": None,
+                                "event": "vision_frame",
+                                "summary": f"{self_camera_frames} frames de camara recibidos",
+                            }
+                            self._log_ring.append(entrada)
+                            for observador in list(self._observers):
+                                try:
+                                    asyncio.get_running_loop().create_task(
+                                        observador.send_json({
+                                            "name": "log_entry", "source": "runtime",
+                                            "target": None, "timestamp": entrada["ts"],
+                                            "data": entrada,
+                                        })
+                                    )
+                                except Exception:
+                                    pass
                         try:
                             frame = base64.b64decode(raw, validate=True)
                             await _emit(

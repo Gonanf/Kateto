@@ -111,8 +111,24 @@ class PiperTTSAudioOutput(Plugin):
 
         raw_text = (data.text or "").strip()
         if not raw_text:
-            # Contentless turn-final chunks carry no audio: synthesizing them
-            # would only inject a bogus final sentinel into the player lane.
+            # Chunk final sin texto = fin de turno: se manda el centinela final
+            # para que el cliente cierre el turno. Antes se descartaba y el
+            # cliente cortaba en el primer final por-chunk (hablaba solo el 1ro).
+            if data.final and self.required_manager is not None:
+                _ = await self.required_manager.emit(
+                    "audio_output",
+                    AudioOutput(
+                        samples=b"",
+                        sample_rate=22_050,
+                        channels=1,
+                        format="pcm_s16le",
+                        voice_id=data.voice_id,
+                        sequence=0,
+                        final=True,
+                        text="",
+                    ),
+                    source=self.name,
+                )
             return
 
         task = asyncio.create_task(self._emit_pcm(data), name=f"kateto-piper-{data.voice_id}")
@@ -243,7 +259,7 @@ class PiperTTSAudioOutput(Plugin):
                         format=out_format,
                         voice_id=data.voice_id,
                         sequence=seq,
-                        final=False,
+                        final=bool(data.final),
                         text=data.text,
                     ),
                     source=self.name,
@@ -251,7 +267,7 @@ class PiperTTSAudioOutput(Plugin):
                 seq += 1
                 pcm_chunk.clear()
 
-            if not (self._interrupted and data.voice_id == self._interrupted_voice) and self.required_manager is not None:
+            if data.final and not (self._interrupted and data.voice_id == self._interrupted_voice) and self.required_manager is not None:
                 log.info("[piper] emit final voice={} seq={}", data.voice_id, seq)
                 _ = await self.required_manager.emit(
                     "audio_output",

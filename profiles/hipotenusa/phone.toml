@@ -13,6 +13,19 @@ token = "hannya-lan-dev"
 "plugin.voice_llm.endpoint" = "http://127.0.0.1:11434/v1"
 "plugin.voice_llm.model" = "LFM3-1.7B"
 
+# Hipotenusa es entretenimiento/roleplay: nada de trabajo ni planificacion.
+"plugin.executor_workflow_router.enabled" = false
+"plugin.executor_todo_list.enabled" = false
+"plugin.backlog.enabled" = false
+"plugin.executor_scheduler.enabled" = false
+"plugin.workflow_engine.enabled" = false
+
+# Thinking por request (extra_body.reasoning_effort): none, no reasoning-budget en el router.
+"voice.jane.thinking" = false
+"voice.doktor.thinking" = false
+"voice.conquest.thinking" = false
+"voice.whisperer.thinking" = false
+
 # ASR: crispasr lo levanta este runtime como subproceso. Si ya esta sano, lo adopta.
 [[sidecar]]
 name = "asr"

@@ -1857,7 +1857,11 @@ class VoiceAgent(Plugin):
         return text[: self._event_message_limit]
 
     async def _emit_chunk(self, text: str, sequence: int, *, final: bool) -> None:
-        text = sanitize_voice_output(text)
+        # El template de algunos modelos cierra el bloque de thinking con
+        # </think> aunque el request pida reasoning_effort=none; si viaja al TTS
+        # se escucha como basura.
+        text = sanitize_voice_output(text).replace("</think>", "").strip()
+        text = text.replace("</think >", "").strip()
         if not text and not final:
             return
         log.info(
