@@ -148,6 +148,13 @@ class VoiceToolExecutor:
             case "refine_memory":
                 return await self._refine_memory(arguments)
             case _:
+                if name.startswith("client_"):
+                    manager = self._manager
+                    plugin = manager.get_plugin("client_tools") if manager is not None else None
+                    call = getattr(plugin, "call", None)
+                    if call is not None:
+                        return await call(name, arguments)
+                    return json.dumps({"error": f"no hay cliente para {name}"})
                 if self._external_manager is not None and self._mcp_server_names:
                     result = await self._external_manager.try_call_tool(
                         list(self._mcp_server_names), name, arguments,
@@ -552,10 +559,17 @@ class VoiceToolExecutor:
             return json.dumps({"error": str(e)})
 
 
+_CLIENT_PLUMBING = frozenset({"client_register", "client_tool_request", "tool_result"})
+
+
 def build_event_tools(manager: PluginManager) -> tuple[ChatCompletionToolParam, ...]:
     tools: list[ChatCompletionToolParam] = []
     for reg in manager.get_event_registrations():
         if not reg.receivers:
+            continue
+        # client_register / tool_result / client_tool_request son plomeria del
+        # telefono: las tools reales (client_*) las aporta el plugin client_tools.
+        if reg.name in _CLIENT_PLUMBING:
             continue
         properties: dict[str, Any] = {}
         required: list[str] = []
@@ -610,6 +624,114 @@ def filter_tool_names(
         if fn_name not in excluded:
             filtered.append(tool)
     return tuple(filtered)
+
+
+# Tool loading on demand (pattern `tool_search` de pydantic_ai / Hermes):
+# solo ALWAYS_TOOLS viaja al wire con schema completo; el resto llega como
+# catalogo `name — description de 1 linea` dentro de search_tools, y el schema
+# completo de parametros se revela cuando el modelo lo pide. En logs reales, 4 de
+# cada 5 tokens del wire eran esquemas de tools que el turno no llamaba.
+ALWAYS_TOOLS: frozenset[str] = frozenset({"get_current_time", "list_events", "send_event"})
+SEARCH_TOOLS_NAME = "search_tools"
+
+
+def one_line(desc: str, limit: int = 110) -> str:
+    """Primera oracion de la descripcion, colapsada, limit chars."""
+    d = " ".join((desc or "").split())
+    parts = re.split(r"(?<=[.!?])\s+", d)
+    line = parts[0] if parts else d
+    if len(line) > limit:
+        line = line[: limit - 1].rstrip() + "…"
+    return line
+
+
+def stub_tool(tool: ChatCompletionToolParam) -> ChatCompletionToolParam:
+    """Wire reducido: name + 1 linea, parameters vacio."""
+    fn = tool["function"]
+    return ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": fn["name"],
+            "description": one_line(fn.get("description", "")),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    )
+
+
+def _tokens(text: str) -> set[str]:
+    return set(re.split(r"[^A-Za-z0-9_À-ÿ]+", (text or "").lower())) - {""}
+
+
+def search_tool_defs(
+    queries: list[str],
+    tools: tuple[ChatCompletionToolParam, ...],
+) -> list[ChatCompletionToolParam]:
+    """Busqueda por solapamiento de keywords (algoritmo keywords de pydantic_ai):
+    name+description matching los terms de las queries, por score desc."""
+    terms = _tokens(" ".join(queries))
+    scored: list[tuple[int, str, ChatCompletionToolParam]] = []
+    for tool in tools:
+        fn = tool["function"]
+        name = fn.get("name", "")
+        if name == SEARCH_TOOLS_NAME:
+            continue
+        hits = len(terms & _tokens(f"{name} {fn.get('description', '')}"))
+        if hits:
+            scored.append((hits, name, tool))
+    scored.sort(key=lambda s: (-s[0], s[1]))
+    return [t for _, _, t in scored]
+
+
+def build_search_tools_tool(deferred: tuple[ChatCompletionToolParam, ...]) -> ChatCompletionToolParam:
+    """Declaracion de `search_tools`: catalogo `name — 1 linea` en la description."""
+    lines = []
+    for t in deferred:
+        fn = stub_tool(t)["function"]
+        lines.append(f"- {fn['name']} — {fn['description']}")
+    return ChatCompletionToolParam(
+        type="function",
+        function={
+            "name": SEARCH_TOOLS_NAME,
+            "description": (
+                "Tools diferidas (pedí el esquema con search_tools antes de llamarlas). "
+                f"Catálogo nombre — descripción:\n{chr(10).join(lines)}"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "queries": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Search phrases matching tool names or descriptions. "
+                            "Each query is tokenized independently; matches are unioned."
+                        ),
+                    }
+                },
+                "required": ["queries"],
+            },
+        },
+    )
+
+
+def build_on_demand_wire(
+    tools_full: tuple[ChatCompletionToolParam, ...],
+    *,
+    revealed: frozenset[str] = frozenset(),
+) -> tuple[ChatCompletionToolParam, ...]:
+    """Wire on-demand para el path de provider OpenAI manual.
+
+    ALWAYS_TOOLS completas + diferidas reveladas (completas) + `search_tools` con
+    catalogo `name — description` de las ocultas. Orden estable: always + revealed
+    en orden de tools_full + search_tools al final → prefix cache preservado.
+    """
+    by_name = {t["function"]["name"]: t for t in tools_full}
+    always = [t for n, t in by_name.items() if n in ALWAYS_TOOLS]
+    revealed_defs = [t for t in tools_full if t["function"]["name"] in revealed]
+    deferred = tuple(
+        t for n, t in by_name.items() if n not in ALWAYS_TOOLS and n not in revealed
+    )
+    return (*always, *revealed_defs, build_search_tools_tool(deferred))
 
 
 BUILTIN_TOOLS: tuple[ChatCompletionToolParam, ...] = (
@@ -978,10 +1100,13 @@ class KatetoToolset:
                 continue
             description = function.get("description", "")
             parameters = function.get("parameters") or {"type": "object", "properties": {}}
+            # El Agent auto-inyecta ToolSearch: las no-ALWAYS quedan ocultas del
+            # wire hasta que search_tools las descubra con su catalogo.
             ts.add_function(
                 self._make_tool_func(name),
                 name=name,
                 description=description,
+                defer_loading=name not in ALWAYS_TOOLS,
                 prepare=self._make_prepare(name, parameters),
             )
         return ts

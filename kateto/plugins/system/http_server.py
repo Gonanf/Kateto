@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import time
+from collections import deque
 from datetime import datetime, timezone
 import socket
 from loguru import logger
@@ -55,6 +56,28 @@ SOUNDS_DIR = (Path(__file__).resolve().parent.parent / "bate_debate" / "sounds")
 TURN_STALE_S = 2.0
 TRIGGER_MAX_AGE_S = 5.0
 _B64_KEYS = {"samples": "samples_b64", "frame": "frame_b64"}
+
+# Log en vivo para el visor del telefono: eventos que NO se loguean (por chunk,
+# inundarian el ring de 500 y no aportan nada legible).
+_LOG_SKIP = {
+    "audio_chunk",
+    "audio_output",
+    "audio_output_status",
+    "voice_status",
+    "speaking_state",
+    "vision_frame",
+    "generate",
+    "generate_request",
+}
+_LOG_SUMMARY_KEYS = ("text", "status", "reason", "message", "name")
+
+
+def _log_summary(name: str, raw: dict[str, Any]) -> str:
+    for key in _LOG_SUMMARY_KEYS:
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:160]
+    return ""
 
 
 def _json_safe(data: dict[str, Any]) -> dict[str, Any]:
@@ -124,6 +147,9 @@ class HttpServer:
         self._observers: list[WebSocket] = []
         self._open_turns: dict[str, dict[str, Any]] = {}
         self._last_trigger: dict[str, dict[str, Any]] = {}
+        # ponytail: ring de 500 en memoria; si el telefono pide mas historial, va a disco
+        self._log_ring: deque[dict[str, Any]] = deque(maxlen=500)
+        self._log_seq = 0
         log.info("Initialized HttpServer instance for {}:{}", self._host, self._port)
 
     def _build_app(self) -> FastAPI:
@@ -295,6 +321,7 @@ class HttpServer:
         async def event_stream(ws: WebSocket) -> None:
             await ws.accept()
             self._observers.append(ws)
+            await self._replay_log(ws)
             try:
                 while True:
                     await ws.receive_text()
@@ -639,6 +666,14 @@ class HttpServer:
 
     def _on_event(self, envelope: EventEnvelope[Any]) -> None:
         self._game_bridge_hooks(envelope)
+        log_frame = self._log_frame(envelope)
+        if log_frame is not None:
+            payloads = [log_frame]
+            for ws in list(self._observers):
+                try:
+                    asyncio.get_running_loop().create_task(self._send_frames(ws, payloads))
+                except Exception:
+                    pass
         payloads = self._frames_for(envelope)
         if not payloads:
             return
@@ -766,6 +801,60 @@ class HttpServer:
             if end is not None:
                 frames.append(end)
         return frames
+
+    def _log_frame(self, envelope: EventEnvelope[Any]) -> dict[str, Any] | None:
+        if envelope.name in _LOG_SKIP:
+            return None
+        raw = envelope.data.model_dump() if hasattr(envelope.data, "model_dump") else {}
+        self._log_seq += 1
+        entry = {
+            "seq": self._log_seq,
+            "ts": envelope.timestamp.timestamp(),
+            "level": "error" if envelope.name == "error" else "info",
+            "kind": envelope.name,
+            "voice": raw.get("voice_id") or envelope.target,
+            "event": envelope.name,
+            "summary": _log_summary(envelope.name, raw),
+        }
+        self._log_ring.append(entry)
+        return {
+            "name": "log_entry",
+            "source": "runtime",
+            "target": None,
+            "timestamp": envelope.timestamp.isoformat(),
+            "data": entry,
+        }
+
+    def _log_state(self) -> dict[str, Any]:
+        entries = list(self._log_ring)
+        first = entries[0]["seq"] if entries else None
+        last = entries[-1]["seq"] if entries else None
+        return {
+            "name": "log_state",
+            "source": "runtime",
+            "target": None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": {
+                "emitted": self._log_seq,
+                "first_seq": first,
+                "last_seq": last,
+                "gap": bool(entries) and first is not None and first > 1,
+            },
+        }
+
+    async def _replay_log(self, ws: WebSocket) -> None:
+        try:
+            for entry in list(self._log_ring):
+                await ws.send_json({
+                    "name": "log_entry",
+                    "source": "runtime",
+                    "target": None,
+                    "timestamp": entry["ts"],
+                    "data": entry,
+                })
+            await ws.send_json(self._log_state())
+        except Exception as exc:  # noqa: BLE001
+            log.debug("log replay failed: {}", exc)
 
     def _frames_for(self, envelope: EventEnvelope[Any]) -> list[dict[str, Any]]:
         data = envelope.data

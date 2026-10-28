@@ -607,6 +607,7 @@ class VoiceAgent(Plugin):
         self._pydantic_agent: Any | None = None
         self._tools: tuple[ChatCompletionToolParam, ...] = ()
         self._extra_tools: tuple[ChatCompletionToolParam, ...] = ()
+        self._revealed_tools: set[str] = set()
         self._event_messages: deque[ChatMessage] = deque(maxlen=8)
         self._event_message_limit = 2_048
         self._generation_depth = 0
@@ -654,6 +655,15 @@ class VoiceAgent(Plugin):
     @property
     def tools(self) -> tuple[ChatCompletionToolParam, ...]:
         return self._tools
+
+    @property
+    def wire_tools(self) -> tuple[ChatCompletionToolParam, ...]:
+        # Herramientas a demanda en el wire: esquemas completos solo para
+        # ALWAYS_TOOLS y las ya reveladas via search_tools (kateto/voices/tools.py).
+        if not self._tools:
+            return self._tools
+        from kateto.voices.tools import build_on_demand_wire
+        return build_on_demand_wire(self._tools, revealed=frozenset(self._revealed_tools))
 
     @property
     def message_history(self) -> tuple[ChatMessage, ...]:
@@ -744,9 +754,12 @@ class VoiceAgent(Plugin):
             if isinstance(self._tool_executor, VoiceToolExecutor):
                 self._tool_executor.set_manager(manager)
                 event_tools = build_event_tools(manager)
+                client_tools = manager.get_plugin("client_tools")
+                client_defs = tuple(getattr(client_tools, "tool_definitions", lambda: ())())
                 self._tools = (
                     *filter_tool_names(BUILTIN_TOOLS, self._excluded_tools()),
                     *filter_tool_names(event_tools, self._excluded_tools()),
+                    *client_defs,
                     *self._extra_tools,
                 )
         await self._set_status(VoiceStatus.IDLE)
@@ -1229,7 +1242,7 @@ class VoiceAgent(Plugin):
                     turn_terminated = False
                     async for item in provider.chat_with_tools_stream(
                         messages=messages,
-                        tools=self._tools,
+                        tools=self.wire_tools,
                     ):
                         if self._interrupted:
                             break
@@ -1291,7 +1304,7 @@ class VoiceAgent(Plugin):
                 else:
                     response = await provider.chat_with_tools(
                         messages=messages,
-                        tools=self._tools,
+                        tools=self.wire_tools,
                     )
                     if not response.tool_calls:
                         if response.text and response.text.strip():
@@ -1445,6 +1458,30 @@ class VoiceAgent(Plugin):
         for tc in response.tool_calls:
             correlation_id = uuid4().hex
             manager = self.manager
+            if tc.name == "search_tools" and not truncated:
+                # Tool de protocolo on-demand (no ejecuta el executor): devuelve
+                # las defs completas de las tools descubiertas y las revela al
+                # wire del proximo request. Corrupta (truncada) → error estandar.
+                from kateto.voices.tools import search_tool_defs
+                queries = [q for q in ((tc.arguments or {}).get("queries") or []) if isinstance(q, str)]
+                matches = search_tool_defs(queries, self._tools)
+                self._revealed_tools.update(m["function"]["name"] for m in matches)
+                result_json = json.dumps({
+                    "matches": [
+                        {
+                            "name": m["function"]["name"],
+                            "description": m["function"]["description"],
+                            "parameters": m["function"].get("parameters") or {},
+                        }
+                        for m in matches
+                    ]
+                })
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result_json,
+                })
+                continue
             if truncated:
                 args: dict[str, Any] | None = None
                 error = (
@@ -1544,10 +1581,14 @@ class VoiceAgent(Plugin):
         if self._memory_block:
             memories = f"{memories}\n\n{self._memory_block}" if memories else self._memory_block
         from kateto.voices.prompt_blocks import (
+            _boson_prompt_block,
+            _edgetts_prompt_block,
+            _piper_prompt_block,
             get_agent_prompt_block,
             get_delegation_prompt_block,
             get_mcp_prompt_block,
-            get_workflow_prompt_block,
+            get_workflow_prompt_block_generic,
+            get_workflow_prompt_block_per_voice,
         )
 
         workflows = WorkflowCatalog(config_dir=self._config_dir).discover(voice=self.name)
@@ -1569,9 +1610,10 @@ class VoiceAgent(Plugin):
             soul=soul,
             profile_system_prompt=self.profile.system_prompt,
             response_language=self._response_language,
-            workflow_block=get_workflow_prompt_block(workflows if workflows else None),
+            workflow_block=get_workflow_prompt_block_generic(),
             mcp_block=mcp_block,
             delegation_block=delegation_block,
+            piper_block=_piper_prompt_block(),
             boson_block=tts_block,
             skills=self._skills,
             memories=memories,
@@ -1660,11 +1702,13 @@ class VoiceAgent(Plugin):
         phase_id: str | None,
     ) -> tuple[ChatMessage, ...]:
         stable = await self._stable_prompt()
+        workflows = WorkflowCatalog(config_dir=self._config_dir).discover(voice=self.name)
         volatile = volatile_block(
             workflow_system=await self._workflow_system_message(workflow, phase_id),
             semantic_memories=await self._relevant_memories(prompt),
             journal=await self._memory.read_journal(),
             journal_max_lines=self._settings.journal_max_lines,
+            available_workflows=workflows,
         )
         # Bounded recent history prevents local LLM 8192-token context overflow
         recent_events = list(self._event_messages)[-8:]
