@@ -1761,7 +1761,11 @@ class VoiceAgent(Plugin):
     def _remember_event(self, envelope: EventEnvelope[BaseModel]) -> None:
         message: ChatMessage | None = None
         match envelope.data:
-            case TranscriptionData(text=text):
+            case TranscriptionData(text=text, speaker=speaker):
+                # Otra voz en la habitación: el personaje lo sabe sin que nadie se
+                # lo diga en el prompt. "owner" y None se recuerdan crudos.
+                if speaker not in (None, "owner"):
+                    text = f"[habla otra persona: {speaker}] {text}"
                 message = ChatMessage(role="user", content=self._bounded_event_text(text))
             case VisionDescribeResultData() as seen:
                 if seen.ambient:

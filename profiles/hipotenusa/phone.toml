@@ -9,6 +9,9 @@ token = "hannya-lan-dev"
 # edgetts (Microsoft, 403) manda un final vacio que cierra el turno antes que piper
 "plugin.audio_output_edgetts.enabled" = false
 "plugin.audio_processor_parakeet.port" = 8094
+# Diarización: etiqueta cada turno como owner/other con un embedding de voz local
+# (ERes2Net ONNX, CPU). El primer hablante que aparece queda como dueño.
+"plugin.audio_processor_parakeet.speaker_id" = true
 # El LLM NO es sidecar: lo sirve el router llama.cpp de :11434.
 "plugin.voice_llm.endpoint" = "http://127.0.0.1:11434/v1"
 "plugin.voice_llm.model" = "Pollux-E2B"  # roleplay tune de gemma-4-E2B (coleccion Gonanf/roleplay)
@@ -35,6 +38,10 @@ token = "hannya-lan-dev"
 
 # Thinking por request (extra_body.reasoning_effort): none, no reasoning-budget en el router.
 "voice.jane.thinking" = false
+# Modelo por agente (probado: apuntando jane a LFM3 el router cargo LFM3-1.7B).
+# Descomentar una linea = esa voz usa otro preset; sin lineas, todas van al global.
+# Cada modelo distinto cuesta un swap del router (~10 s) la primera vez que habla.
+# "voice.doktor.model" = "LFM3-1.7B"
 "voice.doktor.thinking" = false
 "voice.conquest.thinking" = false
 "voice.whisperer.thinking" = false

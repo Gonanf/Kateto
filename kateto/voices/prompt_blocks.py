@@ -63,22 +63,38 @@ def get_agent_prompt_block(provider: str) -> str | None:
     return None
 
 
+# Generic workflow instruction (voice-independent, ~120 tok) — goes in shared prefix
+WORKFLOW_GENERIC_BLOCK = (
+    "WORKFLOW SYSTEM INSTRUCTION:\n"
+    "Workflows provide structured multi-phase guidance for project goals.\n"
+    "HOW TO USE WORKFLOWS:\n"
+    "- Workflows execute structured phases with tasks, deliverables, and checkpoints.\n"
+    "- To start a workflow, emit the `workflow_run` event with `workflow` (the exact workflow name) and `voice` (your voice ID).\n"
+    "- To create or edit a workflow definition, use the `create_workflow` or `update_workflow` tools.\n"
+    "- If currently in a phase, finish deliverables and emit `workflow_phase_complete`."
+)
+
+
+def get_workflow_prompt_block_generic() -> str:
+    """Return the voice-independent workflow instruction for the shared prefix."""
+    return WORKFLOW_GENERIC_BLOCK
+
+
+def get_workflow_prompt_block_per_voice(available_workflows: tuple[Any, ...] | None = None) -> str:
+    """Return the per-voice available-workflows list (goes in volatile block)."""
+    if not available_workflows:
+        return ""
+    formatted = "\n".join(f"- {w.name}: {w.description}" for w in available_workflows)
+    return f"Available Workflows for this voice:\n{formatted}"
+
+
+# Backward-compat wrapper (used by tests / legacy callers)
 def get_workflow_prompt_block(available_workflows: tuple[Any, ...] | None = None) -> str:
-    lines = [
-        "WORKFLOW SYSTEM INSTRUCTION:",
-        "Workflows provide structured multi-phase guidance for project goals.",
-    ]
-    if available_workflows:
-        formatted = "\n".join(f"- {w.name}: {w.description}" for w in available_workflows)
-        lines.append(f"Available Workflows for this voice:\n{formatted}")
-    lines.append(
-        "HOW TO USE WORKFLOWS:\n"
-        "- Workflows execute structured phases with tasks, deliverables, and checkpoints.\n"
-        "- To start a workflow, emit the `workflow_run` event with `workflow` (the exact workflow name) and `voice` (your voice ID).\n"
-        "- To create or edit a workflow definition, use the `create_workflow` or `update_workflow` tools.\n"
-        "- If currently in a phase, finish deliverables and emit `workflow_phase_complete`."
-    )
-    return "\n".join(lines)
+    parts = [WORKFLOW_GENERIC_BLOCK]
+    per_voice = get_workflow_prompt_block_per_voice(available_workflows)
+    if per_voice:
+        parts.append(per_voice)
+    return "\n".join(parts)
 
 
 def get_mcp_prompt_block(mcp_server_names: tuple[str, ...] | None = None) -> str:

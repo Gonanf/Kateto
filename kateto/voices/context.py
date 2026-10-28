@@ -84,6 +84,7 @@ def stable_prompt(
     boson_block: str | None,
     skills: tuple[object, ...],
     memories: str | None,
+    piper_block: str | None = None,
 ) -> str:
     """Build the frozen system prompt for a voice spawn.
 
@@ -91,19 +92,21 @@ def stable_prompt(
     1. response_language
     2. mcp_block
     3. delegation_block
-    4. profile_system_prompt
-    5. soul (skipped if duplicate of profile)
-    6. workflow_block
-    7. boson_block
-    8. skills instructions
-    9. memories
-    10. voice turn constraint (always last)
+    4. piper_block (voice-independent TTS instruction)
+    5. brevity constraint (voice turn constraint)
+    6. common policies (TOOL_USE, AUDIO_OUTPUT, MEMORY, TURN_TAKING, ERROR_RECOVERY)
+    7. profile_system_prompt
+    10. soul (skipped if duplicate of profile)
+    8. workflow_block (generic part only)
+    9. boson_block (voice-specific TTS)
+    11. skills instructions
+    12. memories
 
-    Voice-independent sections (1-3: language, mcp_servers, delegation) are
-    placed first so their tokens form a shared prefix in LLM KV-cache across
+    Voice-independent sections (1-6: language, mcp, delegation, piper, brevity, policies)
+    are placed first so their tokens form a shared prefix in LLM KV-cache across
     different voices, avoiding prefill overhead on voice switches. Voice-specific
-    personality (4-5) and specific workflows/tools (6-8) follow. The brevity
-    constraint (10) remains strictly at the end for behavioral weight.
+    personality (7-8) and specific workflows/tools (9-10) follow. Memories (12)
+    remain at the end for minimal per-turn delta.
     """
     sections: list[str] = []
 
@@ -122,41 +125,60 @@ def stable_prompt(
     if delegation_block:
         sections.append(delegation_block)
 
-    # 4. [profile_system_prompt]
+    # 4. [piper_block] — voice-independent TTS instruction (piper used by all 4 voices)
+    if piper_block:
+        sections.append(piper_block)
+
+    # 5. [brevity constraint] — moved to shared prefix per prefix-cache spec
+    sections.append(
+        "Voice turn constraint: Always speak to the user in 1-2 short natural sentences (under 40 words). Never use lists, bullet points, headers, or markdown formatting."
+    )
+
+    # 6. [common policies] — 5 global policy blocks (263 tokens total)
+    sections.append(
+        "TOOL USE: Call tools only when the answer needs live data or an action. One call at a time, wait for the result. Never narrate the call or read JSON aloud: speak the conclusion in plain language. If a tool fails, say so in one sentence and offer what you can do instead."
+    )
+    sections.append(
+        "AUDIO OUTPUT: Your text is spoken, not read. Spell out numbers, abbreviations and URLs. Never emit markdown, emoji, code or tables. One idea per sentence; if you need to list, say it as a sentence with commas. Silence is valid: a short grunt beats a paragraph."
+    )
+    sections.append(
+        "MEMORY: The block after the internal-context marker is your own memory, not a user request. Treat journal lines as facts you already know. Do not quote the marker or the file names. If memory contradicts the user, ask once before overriding."
+    )
+    sections.append(
+        "TURN TAKING: If you are interrupted, stop and answer the new input. Never resume the cut-off sentence. If the input is unintelligible, say you didn't catch it and ask them to repeat; do not guess."
+    )
+    sections.append(
+        "ERROR RECOVERY: When a tool returns an error, say in one sentence what failed and what you will try next. Never expose stack traces, internal paths or raw error codes to the user."
+    )
+
+    # 7. [profile_system_prompt]
     if profile_system_prompt.strip():
         sections.append(profile_system_prompt)
 
-    # 5. [soul]
+    # 8. [soul]
     # ensure_soul() seeds SOUL.md with the profile prompt on a fresh voice;
     # skip the duplicate instead of stacking the same personality twice.
     if soul.strip() and soul.strip() != profile_system_prompt.strip():
         sections.append(soul)
 
-    # 6. [workflow_block]
+    # 9. [workflow_block] — generic part only (per-voice list goes to volatile_block)
     if workflow_block:
         sections.append(workflow_block)
 
-    # 7. [boson_block]
+    # 10. [boson_block] — voice-specific TTS (boson/edgetts)
     if boson_block:
         sections.append(boson_block)
 
-    # 8. [skills instructions]
+    # 11. [skills instructions]
     for skill in skills:
         instructions = getattr(skill, "instructions", None)
         if instructions:
             sections.append(instructions)
 
-    # 9. [Memoria durable]: snapshot taken at spawn; writes apply at the next
+    # 12. [Memoria durable]: snapshot taken at spawn; writes apply at the next
     # spawn, never mid-session (keeps the prefix cacheable).
     if memories and memories.strip():
         sections.append(memories)
-
-    # 10. [Restricción de brevedad de voz]: acota el turno conversacional a 1-2
-    # oraciones naturales (< 40 palabras) para evitar desbordes y finish_reason=length.
-    # Queda última por decisión de diseño (instrucción de comportamiento más fuerte).
-    sections.append(
-        "Voice turn constraint: Always speak to the user in 1-2 short natural sentences (under 40 words). Never use lists, bullet points, headers, or markdown formatting."
-    )
 
     return "\n\n".join(sections)
 
@@ -168,12 +190,13 @@ def volatile_block(
     semantic_memories: tuple[str, ...] = (),
     journal: str | None = None,
     journal_max_lines: int | None = None,
+    available_workflows: tuple[Any, ...] | None = None,
 ) -> str | None:
     """Build the per-turn volatile context block (``None`` when empty).
 
-    ``journal_max_lines`` caps the journal to its last N non-blank lines at
-    assembly time — the JOURNAL.md file is never touched, so the knob only
-    bounds the per-turn context and re-prefill, never the user's memory.
+    ``available_workflows``, when provided, is a tuple of workflow objects for the
+    current voice; their names and descriptions are included in the volatile block
+    so the per-voice workflow list is separated from the stable shared prefix.
     """
     parts: list[str] = []
     if workflow_system:
@@ -184,6 +207,9 @@ def volatile_block(
         journal = _cap_journal(journal, journal_max_lines)
         if journal:
             parts.append(journal)
+    if available_workflows:
+        formatted = "\n".join(f"- {w.name}: {w.description}" for w in available_workflows)
+        parts.append(f"Available Workflows for this voice:\n{formatted}")
     return "\n\n".join(parts) if parts else None
 
 

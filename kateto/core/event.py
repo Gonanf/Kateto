@@ -58,6 +58,10 @@ class TranscriptionData(EventModel):
     # cerrado. Mismo evento `transcription` en ambos casos; quien hoy escucha sin
     # filtrar sigue recibiendo solo finales si ignora el campo (compat total).
     partial: bool = False
+    # Etiqueta de hablante ("owner" = el dueño del teléfono, "other" = otra voz en
+    # la habitación). Lo llena el audio_processor con SpeakerTracker; si no hay
+    # diarización queda None y el flujo se comporta como siempre.
+    speaker: str | None = None
 
 
 class VisionFrameData(EventModel):

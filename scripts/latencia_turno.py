@@ -380,6 +380,8 @@ async def run_benchmark(
     turn_silence_timeout: float | None = None,
     silence_timeout: float | None = None,
     seed: int = 1,
+    plugins_omitidos: str = "turn_gate",
+    mock_eot_gate: bool = False,
 ) -> tuple[GuardasResult, float, float, float, float, float]:
     del seed
     if turn_silence_timeout is None or silence_timeout is None:
@@ -421,15 +423,28 @@ async def run_benchmark(
         global eot_gate
         from kateto.plugins.system.eot_gate import EotGate
 
-        eot_gate = EotGate(
-            PluginSettings(
-                enabled=True,
-                etapa2="ft",
-                timeout=1.0,
-                python="python3",
-                script="/run/media/chaos/secundario/proyectos/kateto-eot2/clasificador_hibrido.py",
+        if mock_eot_gate:
+            class MockEotGate:
+                name = "eot_gate"
+                enabled = True
+                available = True
+                async def initialize(self): pass
+                async def aclassify(self, prompt: str):
+                    from kateto.plugins.system.eot_gate import EotAction
+                    class MockResult:
+                        action = EotAction.RESPOND
+                    return MockResult()
+            eot_gate = MockEotGate()
+        else:
+            eot_gate = EotGate(
+                PluginSettings(
+                    enabled=True,
+                    etapa2="ft",
+                    timeout=120.0,
+                    python="python3",
+                    script="/run/media/chaos/secundario/proyectos/kateto-eot2/clasificador_hibrido.py",
+                )
             )
-        )
 
         class BenchmarkPartialTranscriber:
             """Parcial de frase completa: el gate tiene que contestar RESPOND.
@@ -460,6 +475,16 @@ async def run_benchmark(
         await manager.enable_plugin(classifier)
         await manager.enable_plugin(tts)
         await manager.enable_plugin(eot_gate)
+
+        # Conditionally enable turn_gate
+        omit_list = [p.strip() for p in plugins_omitidos.split(",") if p.strip()]
+        if "turn_gate" not in omit_list:
+            from kateto.plugins.system.turn_gate import TurnGate
+            turn_gate = TurnGate()
+            await manager.enable_plugin(turn_gate)
+        else:
+            turn_gate = None
+
         await manager.enable_plugin(mic)
         mic._partial_transcriber = BenchmarkPartialTranscriber()
         capture = factory.captures[0]
@@ -533,9 +558,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Silence timeout en segundos (override probe; default: config del producto)",
     )
     parser.add_argument(
+        "--plugins-omitidos",
+        type=str,
+        default="turn_gate",
+        help="Plugins a omitir separados por coma (default: turn_gate). Use '' para activar todos.",
+    )
+    parser.add_argument(
+        "--mock-eot-gate",
+        action="store_true",
+        help="Usa un EotGate mock que responde RESPOND inmediato (para medir overhead de turn_gate sin clasificador)",
+    )
+    parser.add_argument(
         "--probe",
         action="store_true",
         help="Fuerza modo probe (inválido, rc=2)",
+    )
+    parser.add_argument(
+        "--benchmark",
+        type=str,
+        default=None,
+        help="Nombre del benchmark (p.ej. harness-latencia-corta). Si se pasa, los overrides de timeout esperados no marcan probe.",
     )
     parser.add_argument(
         "--json-only",
@@ -558,14 +600,24 @@ def main() -> None:
     if getattr(args, "probe", False):
         dial_flags["--probe"] = True
 
+    # Benchmarks que esperan overrides de timeout legítimos
+    expected_timeout_overrides = False
+    if args.benchmark == "harness-latencia-corta":
+        expected_timeout_overrides = True
+
     raw_argv = sys.argv[1:]
     for token in raw_argv:
         flag_name = token.split("=")[0]
         if flag_name in dial_flags and dial_flags[flag_name] and flag_name not in probe_motivos:
+            # No marcar como probe si es un override esperado para este benchmark
+            if expected_timeout_overrides and flag_name in ("--silence-timeout", "--turn-silence-timeout"):
+                continue
             probe_motivos.append(flag_name)
 
     for flag_name, is_set in dial_flags.items():
         if is_set and flag_name not in probe_motivos:
+            if expected_timeout_overrides and flag_name in ("--silence-timeout", "--turn-silence-timeout"):
+                continue
             probe_motivos.append(flag_name)
 
     modo = "probe" if probe_motivos else "medicion"
@@ -619,6 +671,8 @@ def main() -> None:
                 turn_silence_timeout=effective_turn_silence_timeout,
                 silence_timeout=effective_silence_timeout,
                 seed=args.seed,
+                plugins_omitidos=args.plugins_omitidos,
+                mock_eot_gate=args.mock_eot_gate,
             )
         )
     except Exception as exc:
@@ -635,6 +689,9 @@ def main() -> None:
         sys.stderr.write(f"Benchmark error: {exc}\n")
 
     valido = guardas.valido if modo == "medicion" else False
+
+    # Parse plugins_omitidos for output
+    omit_list = [p.strip() for p in args.plugins_omitidos.split(",") if p.strip()]
 
     output_dict = {
         "benchmark": "harness-latencia",
@@ -657,9 +714,10 @@ def main() -> None:
             "silence_timeout_s": effective_silence_timeout,
             "intra_gap_ms": effective_intra_gap_ms,
             "stubs": ["asr", "llm", "tts"],
-            "plugins_omitidos": ["turn_gate"],
+            "plugins_omitidos": omit_list,
             "eot_gate_available": eot_gate.available,
             "eot_partial_hold": True,
+            "turn_gate_enabled": "turn_gate" not in omit_list,
         },
         "entorno": {
             "python": platform.python_version(),

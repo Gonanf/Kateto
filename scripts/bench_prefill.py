@@ -13,12 +13,13 @@ import urllib.request
 
 ROUTER = "http://127.0.0.1:11434/v1/chat/completions"
 
-# ~1.6k tokens de relleno: un turno de voz real (persona + historial + prompt).
+# ~1.2k tokens: turno de voz real con historial corto. Entra en ctx 4096
+# (el stress de 4-5k solo sirve para modelos con ctx grande).
 RELLENO = (
     "Che, mirá, te cuento que en el barrio pasan cosas todo el tiempo y una se entera de todo. "
     "La vecina del primero se peleo con el del tercero por una maceta, el kiosquero cambio de horario, "
     "y el pibe del fondo se compro una moto que hace un ruido terrible a las tres de la mañana. "
-) * 60
+) * 15
 
 PREGUNTA = "Contame algo del barrio que me haga reir."
 

@@ -322,12 +322,18 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
 
         raise _Err(field="plugin.voice_llm", reason="must be configured for voice creation")
 
+    # Modelo por agente: `voice.<id>.model` gana sobre `plugin.voice_llm.model`, así
+    # cada personaje puede vivir en su propio preset del router. Sin override, todo
+    # sigue como antes.
+    model_name = getattr(settings, "model", None) or voice_settings.model
+    endpoint = getattr(settings, "endpoint", None) or voice_settings.endpoint
+
     # One session id per spawn: shared by the voice and every provider so all
     # requests carry stable x-session-id/x-session-affinity headers.
     session_id = uuid4().hex
     headers = session_headers(voice_name, session_id)
 
-    m = getattr(voice_settings, "model", None)
+    m = model_name
     backend = (getattr(voice_settings, "backend", None) or os.environ.get("KATETO_PROVIDER", "")).casefold()
     if not backend and m and str(m).endswith(".pth"):
         backend = "rwkv"
@@ -348,8 +354,10 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
         )
     else:
         provider = OpenAICompatibleProvider(
-            model=voice_settings.model or "unknown",
-            endpoint=voice_settings.endpoint,
+            # Modelo por agente: `voice.<id>.model` en el perfil gana sobre el
+            # global `plugin.voice_llm.model` (el router swapea el preset).
+            model=model_name or "unknown",
+            endpoint=endpoint,
             api_key=voice_settings.api_key or "sk-no-key-required",
             max_tokens=settings.max_tokens,
             retries=settings.retries,
@@ -375,8 +383,8 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
         if is_hermes:
             agent_provider = HermesProvider(
                 conversation_id=voice_settings.conversation_id,
-                model=voice_settings.model,
-                endpoint=voice_settings.endpoint,
+                model=model_name,
+                endpoint=endpoint,
                 api_key=voice_settings.api_key,
                 max_tokens=settings.max_tokens or 4096,
                 retries=settings.retries,
@@ -389,8 +397,8 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             mcp_servers = tuple(s for s in settings.mcp_servers if "cron" not in s.lower() and "schedule" not in s.lower())
         else:
             agent_provider = OpenAIAgentProvider(
-                model=voice_settings.model,
-                endpoint=voice_settings.endpoint,
+                model=model_name,
+                endpoint=endpoint,
                 api_key=voice_settings.api_key,
                 max_tokens=settings.max_tokens or 4096,
                 retries=settings.retries,
@@ -425,9 +433,9 @@ def create_voice(ctx, settings: VoiceSettings, *, voice_name: str) -> VoiceAgent
             from kateto.voices.tools import KatetoToolset
 
             model = OpenAIChatModel(
-                model_name=voice_settings.model,
+                model_name=model_name,
                 provider=OpenAIProvider(
-                    base_url=voice_settings.endpoint,
+                    base_url=endpoint,
                     api_key=voice_settings.api_key or "sk-no-key-required",
                 ),
             )

@@ -12,6 +12,11 @@ from kateto.core.plugin import Plugin
 
 log = logger
 
+# Buffer de audio para diarización: 10 s a 16 kHz s16le alcanza para el tramo que
+# el VAD cierra (los turnos del celu duran 2-6 s).
+_BUFFER_SR = 16_000
+_BUFFER_S = 10
+
 if TYPE_CHECKING:
     from kateto.providers import ParakeetProvider, ParakeetServerProvider, ParakeetStreamProvider
 
@@ -45,6 +50,14 @@ class ParakeetAudioProcessor(Plugin):
         super().__init__("audio_processor_parakeet", capabilities=("transcribe",))
         self._settings: PluginSettings = settings
         self._provider: ParakeetProvider | ParakeetServerProvider | ParakeetStreamProvider | None = None
+        # Diarización opt-in (`speaker_id = true`): el primer hablante que aparece
+        # queda como dueño del teléfono.
+        self._tracker = None
+        if bool(getattr(settings, "speaker_id", False)):
+            from .speakers import SpeakerTracker
+
+            self._tracker = SpeakerTracker()
+        self._pcm = bytearray()
 
     @property
     def provider(self) -> object | None:
@@ -110,7 +123,37 @@ class ParakeetAudioProcessor(Plugin):
             return
         kind = "partial" if transcription.partial else "final"
         log.info("[parakeet] Streamed {}: {!r}", kind, transcription.text)
+        if not transcription.partial:
+            transcription = self._label_speaker(transcription)
         _ = await self.required_manager.emit("transcription", transcription, source=self.name)
+
+    # -- diarización --------------------------------------------------------
+    def _label_speaker(self, transcription: TranscriptionData) -> TranscriptionData:
+        """Etiqueta el turno con el hablante detectado (opt-in: `speaker_id`)."""
+        tracker = self._tracker
+        if tracker is None:
+            return transcription
+        pcm = bytes(self._pcm)
+        self._pcm.clear()
+        try:
+            label = tracker.assign(tracker.embed(pcm, _BUFFER_SR))
+        except Exception as error:  # noqa: BROAD_EXCEPT_OK - nunca tumbar el ASR por esto
+            log.warning("[parakeet] diarización falló: {}", error)
+            return transcription
+        if label is None:
+            return transcription
+        log.info("[parakeet] hablante={} ({} hablantes conocidos)", label, len(tracker._centroids))
+        return transcription.model_copy(update={"speaker": label})
+
+    def _buffer(self, data: AudioData) -> None:
+        """Guarda el PCM reciente: el tramo que el ASR acaba de transcribir."""
+        if self._tracker is None:
+            return
+        pcm = _raw_pcm(data)
+        self._pcm.extend(pcm)
+        limit = _BUFFER_SR * 2 * _BUFFER_S  # s16le mono
+        if len(self._pcm) > limit:
+            del self._pcm[: len(self._pcm) - limit]
 
     async def on_audio_chunk(self, data: AudioData) -> None:
         from kateto.providers import ParakeetStreamProvider
@@ -119,6 +162,7 @@ class ParakeetAudioProcessor(Plugin):
         if provider is None:
             log.warning("[parakeet] processor must be enabled before transcribing; dropping chunk")
             return
+        self._buffer(data)
         if isinstance(provider, ParakeetStreamProvider):
             try:
                 await provider.feed(_raw_pcm(data))
@@ -135,4 +179,5 @@ class ParakeetAudioProcessor(Plugin):
             log.debug("[parakeet] No speech detected in audio chunk")
             return
         log.info("[parakeet] Transcribed: {!r}", transcription.text)
+        transcription = self._label_speaker(transcription)
         _ = await self.required_manager.emit("transcription", transcription, source=self.name)
