@@ -713,8 +713,13 @@ class HttpServer:
             self._observers.remove(ws)
 
     async def _send_frames(self, ws: WebSocket, payloads: list[dict[str, Any]]) -> None:
-        for payload in payloads:
-            await ws.send_json(payload)
+        try:
+            for payload in payloads:
+                await ws.send_json(payload)
+        except WebSocketDisconnect:
+            # el cliente se fue a mitad de envio: no es un error del runtime
+            if ws in self._observers:
+                self._observers.remove(ws)
 
     def _game_bridge_hooks(self, envelope: EventEnvelope[Any]) -> None:
         try:
