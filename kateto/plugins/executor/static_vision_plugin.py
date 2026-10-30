@@ -828,6 +828,17 @@ class StaticVisionPlugin(Plugin):
                 )
             await asyncio.sleep(interval)
 
+    async def on_vision_frame(self, data: Any = None) -> None:
+        """Frames de una fuente externa (camara del telefono via /ws/mask) entran a
+        la misma ventana que usa el describe. Sin esto el evento se emite y nadie lo
+        guarda: la camara queda invisible para el modelo.
+        """
+        if isinstance(data, dict):
+            data = VisionFrameData.model_validate(data)
+        if data is None or not getattr(data, "frame", None):
+            return
+        self._append_frame(data.source or self.source_default, data.frame, data.ts)
+
     async def on_vision_describe_request(self, data: Any = None) -> None:
         if isinstance(data, dict):
             data = VisionDescribeRequestData.model_validate(data)
@@ -910,12 +921,14 @@ class StaticVisionPlugin(Plugin):
                 source=self.name,
             )
 
-        if source not in ("auto", "screen", "webcam"):
-            await emit_result(f'unknown source "{source}" (valid: auto, screen, webcam)')
+        # "mask" = camara del telefono (frames por /ws/mask). Es una fuente mas del
+        # mismo buffer, no un caso aparte: auto tambien la mira.
+        if source not in ("auto", "screen", "webcam", "mask"):
+            await emit_result(f'unknown source "{source}" (valid: auto, screen, webcam, mask)')
             return
 
         wanted = (
-            [s for s in ("screen", "webcam") if self._windows.get(s)]
+            [s for s in ("screen", "webcam", "mask") if self._windows.get(s)]
             if source == "auto"
             else [source]
         )
