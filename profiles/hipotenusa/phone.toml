@@ -90,3 +90,11 @@ required = true
 
 # Personajes del TSV: las voces viven en ~/.config/kateto/voices/<nombre>/ con su
 # SOUL (descripcion + 3 ejemplos reales). Los nombres legacy quedaron apagados.
+
+[plugin.voice_manager]
+# El VM decide sola si habla: momento al azar, sólo si nadie habla y hubo estímulo
+# fresco (transcripción o descripción de cámara) en los últimos 15 min.
+"plugin.voice_manager.impulse_enabled" = true
+"plugin.voice_manager.impulse_min" = "2m"
+"plugin.voice_manager.impulse_max" = "7m"
+"plugin.voice_manager.impulse_fresh" = "15m"
