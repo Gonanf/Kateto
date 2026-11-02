@@ -26,6 +26,7 @@ const {
   combineIdleWithVoice,
   IDLE_TURN_PERIOD_MS,
   IDLE_TILT_DEG,
+  IDLE_BOB_PX,
   IDLE_SWAY_PX,
   IDLE_EASE_TAU_MS,
   IDLE_SPEAKING_SCALE,
@@ -151,9 +152,9 @@ describe("idle motion (issue 128: rotación nueva cada segundo, se mueve hacia a
     }
     let changed = 0;
     for (let i = 1; i < poses.length; i++) {
-      const dr = Math.abs(poses[i].jawRotation - poses[i - 1].jawRotation);
+      const dr = Math.abs(poses[i].headOffsetY - poses[i - 1].headOffsetY);
       const dx = Math.abs(poses[i].jawOffsetX - poses[i - 1].jawOffsetX);
-      if (dr > 0.5 || dx > 0.5) changed++;
+      if (dr > 0.05 || dx > 0.05) changed++;
     }
     assert.ok(changed >= 5, `el objetivo debería cambiar cada segundo; cambió ${changed}/6`);
   });
@@ -161,7 +162,8 @@ describe("idle motion (issue 128: rotación nueva cada segundo, se mueve hacia a
   it("rotación dentro de ±IDLE_TILT_DEG y jawOffsetX === 0 exacto (el idle nunca aporta lateral)", () => {
     const { idle, frames } = runIdle(7);
     for (const { pose } of frames) {
-      assert.ok(Math.abs(pose.jawRotation) <= IDLE_TILT_DEG, `rot ${pose.jawRotation} fuera de rango`);
+      assert.equal(pose.jawRotation, 0, "el idle no rota el jaw (bug 132)");
+      assert.ok(Math.abs(pose.headOffsetY) <= 1.51, `bob ${pose.headOffsetY} fuera de rango`);
       assert.equal(pose.jawOffsetX, 0, "el idle nunca debe correr la mandíbula de lado");
     }
     // El objetivo de rotación sigue sorteándose en ±IDLE_TILT_DEG.
@@ -171,7 +173,7 @@ describe("idle motion (issue 128: rotación nueva cada segundo, se mueve hacia a
   it("el acercamiento es suave (sin saltos entre frames de ~50 ms)", () => {
     const { frames } = runIdle(99);
     for (let i = 1; i < frames.length; i++) {
-      const dr = Math.abs(frames[i].pose.jawRotation - frames[i - 1].pose.jawRotation);
+      const dr = Math.abs(frames[i].pose.headOffsetY - frames[i - 1].pose.headOffsetY);
       const dx = Math.abs(frames[i].pose.jawOffsetX - frames[i - 1].pose.jawOffsetX);
       assert.ok(dr < 2.0, `salto de rotación ${dr}° en un frame`);
       assert.ok(dx < 3.5, `salto de sway ${dx}px en un frame`);
@@ -186,11 +188,12 @@ describe("idle motion (issue 128: rotación nueva cada segundo, se mueve hacia a
     let prevDist = Infinity;
     for (let t = 50; t <= IDLE_TURN_PERIOD_MS - 50; t += 50) {
       const pose = idle.update(t);
-      const dist = Math.abs(pose.jawRotation - idle.target.rotation);
+      const esperado = (-idle.target.rotation / IDLE_TILT_DEG) * IDLE_BOB_PX;
+      const dist = Math.abs(pose.headOffsetY - esperado);
       assert.ok(dist <= prevDist + 1e-9, `distancia al objetivo creció: ${prevDist} → ${dist}`);
       prevDist = dist;
     }
-    assert.ok(prevDist < IDLE_TILT_DEG, "debería estar acercándose al objetivo");
+    assert.ok(prevDist < IDLE_BOB_PX, "debería estar acercándose al objetivo");
   });
 
   it("en silencio jawOffsetY === 0 exacto con el idle andando", () => {
@@ -211,7 +214,8 @@ describe("idle motion (issue 128: rotación nueva cada segundo, se mueve hacia a
     const voice = computeJawKinematics(0.5, 3500);
     const combined = combineIdleWithVoice(idlePose, voice, true);
     assert.ok(Math.abs(combined.jawOffsetX - (voice.jawOffsetX + idlePose.jawOffsetX * IDLE_SPEAKING_SCALE)) < 1e-9);
-    assert.ok(Math.abs(combined.jawRotation - (voice.jawRotation + idlePose.jawRotation * IDLE_SPEAKING_SCALE)) < 1e-9);
+    assert.equal(combined.jawRotation, voice.jawRotation, "con voz el jaw es solo de la voz");
+    assert.ok(Math.abs(combined.headOffsetY - ((voice.headOffsetY ?? 0) + idlePose.headOffsetY * IDLE_SPEAKING_SCALE)) < 1e-9);
     // La boca sigue siendo la protagonista: el aporte idle de Y es cero y el
     // jawOffsetY de la voz no se toca.
     assert.equal(combined.jawOffsetY, voice.jawOffsetY);
@@ -223,7 +227,7 @@ describe("idle motion (issue 128: rotación nueva cada segundo, se mueve hacia a
     const idlePose = idle.update(4500);
     const combined = combineIdleWithVoice(idlePose, computeJawKinematics(0, 4500), false);
     assert.ok(Math.abs(combined.jawOffsetX - idlePose.jawOffsetX) < 1e-9);
-    assert.ok(Math.abs(combined.jawRotation - idlePose.jawRotation) < 1e-9);
+    assert.equal(combined.jawRotation, 0, "en silencio el jaw no rota (bug 132)");
     assert.equal(combined.jawOffsetY, 0);
   });
 });

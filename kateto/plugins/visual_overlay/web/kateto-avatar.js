@@ -54,6 +54,7 @@ export const JAW_ATTACK_MS = 30;
 // con voz (escalado por IDLE_SPEAKING_SCALE) y sin voz (plena amplitud, boca
 // cerrada).
 export const IDLE_TURN_PERIOD_MS = 1000;
+export const IDLE_BOB_PX = 1.5;
 export const IDLE_TILT_DEG = 3.0;
 export const IDLE_SWAY_PX = 14.0;
 export const IDLE_EASE_TAU_MS = 300;
@@ -172,9 +173,11 @@ export class IdleMotion {
     const alpha = dt > 0 ? 1 - Math.exp(-dt / IDLE_EASE_TAU_MS) : 0;
     this._pose.rotation += alpha * (this._target.rotation - this._pose.rotation);
     this._pose.sway += alpha * (this._target.sway - this._pose.sway);
-    // jawOffsetX y jawOffsetY SIEMPRE 0 exacto: el idle no abre la boca
-    // (bug 112) ni la corre de lado — el lateral lo pone solo la voz.
-    return { jawRotation: this._pose.rotation, jawOffsetX: 0, jawOffsetY: 0 };
+    // El idle no ROTA ninguna capa (bug 132): el jaw rotate ±2.5° se lee como
+    // "la boca se mueve de lado a lado", y rotar la pieza de abajo gira el
+    // cuerpo entero. Queda solo un bob vertical lento: respiración, no habla.
+    const bob = Number(((-this._pose.rotation / IDLE_TILT_DEG) * IDLE_BOB_PX).toFixed(2));
+    return { jawRotation: 0, jawOffsetX: 0, jawOffsetY: 0, headOffsetY: bob };
   }
 }
 
@@ -223,9 +226,10 @@ export function combineIdleWithVoice(idlePose, voiceKinematics, speaking) {
   const s = speaking ? IDLE_SPEAKING_SCALE : 1.0;
   const voice = voiceKinematics || { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 };
   return {
-    jawOffsetX: voice.jawOffsetX, // idle lateral = 0 exacto, no se suma
-    jawOffsetY: voice.jawOffsetY + idlePose.jawOffsetY, // idle Y = 0 exacto
-    jawRotation: voice.jawRotation + idlePose.jawRotation * s,
+    jawOffsetX: voice.jawOffsetX,        // idle lateral = 0 exacto, no se suma
+    jawOffsetY: voice.jawOffsetY + (idlePose.jawOffsetY ?? 0), // idle Y = 0 exacto
+    jawRotation: voice.jawRotation,      // el jaw solo se mueve con voz (bug 132)
+    headOffsetY: (voice.headOffsetY ?? 0) + (idlePose.headOffsetY ?? 0) * s,
   };
 }
 
@@ -439,6 +443,8 @@ export class KatetoAvatar extends HTMLElement {
     const voice = computeJawKinematics(this._rms, nowMs, sway);
     const k = combineIdleWithVoice(idle, voice, speaking);
     this._jaw.style.transform = `translate(${k.jawOffsetX}px, ${k.jawOffsetY}px) rotate(${k.jawRotation}deg)`;
+    const headT = `translateY(${k.headOffsetY ?? 0}px)`;
+    if (this._head.style.transform !== headT) this._head.style.transform = headT;
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
