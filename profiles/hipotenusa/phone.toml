@@ -5,7 +5,7 @@ token = "hannya-lan-dev"
 
 [runtime.overrides]
 "plugin.audio_input_mic.enabled" = false
-"plugin.audio_output_player.enabled" = false
+"plugin.audio_output_player.enabled" = true  # el escritorio habla directo por PipeWire (OBS lo captura); el navegador ya no reproduce audio
 # edgetts (Microsoft, 403) manda un final vacio que cierra el turno antes que piper
 "plugin.audio_output_edgetts.enabled" = false
 "plugin.audio_processor_parakeet.port" = 8094
@@ -17,6 +17,15 @@ token = "hannya-lan-dev"
 "plugin.executor_vision.enabled" = true
 "plugin.executor_vision.vision_endpoint" = "http://127.0.0.1:11434/v1"
 "plugin.executor_vision.vision_model" = "LFM3-Omni-2B"
+# Los frames del celu llegan por /ws/mask con source="mask"; el default es "screen",
+# asi el describe periodico miraba una fuente vacia.
+"plugin.executor_vision.source_default" = "mask"
+
+# Vision periodica: la voz mira la camara cada 2-5 min (intervalo aleatorio) y
+# comenta lo que ve. Sin vision_periodic=true el plugin queda idle.
+"voice.dionisio.vision_periodic" = true
+"voice.dionisio.vision_interval_min" = "120s"
+"voice.dionisio.vision_interval_max" = "300s"
 "voice.dionisio.thinking" = false
 "voice.truman.thinking" = false
 "voice.elgarca.thinking" = false
@@ -26,11 +35,19 @@ token = "hannya-lan-dev"
 "plugin.voice_llm.endpoint" = "http://127.0.0.1:11434/v1"
 "plugin.voice_llm.model" = "Pollux-E2B"  # roleplay tune de gemma-4-E2B (coleccion Gonanf/roleplay)
 
+# Clasificador de fin de turno: etapa2=base no es servible (falta el ONNX del
+# encoder preentrenado) y el gate queda fail-open, que es como funcionaba bien.
+# NO usar etapa2=ft: esa cabeza suprime todos los turnos del usuario.
+"plugin.eot_gate.etapa2" = "base"
+# 1.0s (default) no alcanza para el primer forward del distilbert en CPU: el gate
+# moria por timeout y reiniciaba el clasificador en cada turno.
+"plugin.eot_gate.timeout" = 3.0
+
 # Hipotenusa es entretenimiento/roleplay: nada de trabajo ni planificacion.
 "plugin.executor_workflow_router.enabled" = false
 "plugin.executor_todo_list.enabled" = false
 "plugin.backlog.enabled" = false
-"plugin.executor_scheduler.enabled" = false
+"plugin.executor_scheduler.enabled" = true
 "plugin.workflow_engine.enabled" = false
 
 # Modo personaje: el system prompt es SOLO esto (sin soul, skills, tools ni memoria).
@@ -58,7 +75,9 @@ health_expect = "parakeet"
 argv = ["/run/media/chaos/secundario/proyectos/crispasr/crispasr-linux-x86_64-vulkan/crispasr",
         "--server", "--host", "0.0.0.0", "--port", "8094",
         "-m", "/run/media/chaos/secundario/proyectos/redux-gguf/models/parakeet-ultra-q8_0.gguf",
-        "--backend", "parakeet", "--gpu-backend", "cpu"]
+        "--backend", "parakeet", "-l", "es",
+        "-di", "--diarize-method", "sortformer",
+        "--gpu-backend", "vulkan", "-dev", "1"]
 ready_timeout_s = 120
 
 [[expose]]

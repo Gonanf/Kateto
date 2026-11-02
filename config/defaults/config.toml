@@ -14,7 +14,7 @@ backend = "vulkan"
 [plugin.audio_input_mic]
 enabled = true
 sample_rate = 16000
-silence_timeout = 1.5
+silence_timeout = 0.2
 # Cierre de turno semántico (EOT): cuando un silencio cerraría el turno, se
 # transcribe el buffer parcial y el gate decide si el enunciado terminó. Sólo
 # tiene efecto si el ASR activo expone transcribe_parcial (parakeet server).
@@ -29,7 +29,7 @@ vad_model = "silero"
 # barge_in_grace_ms = 800.0
 # barge_in_level_factor = 1.3
 # barge_in_min_speech_ms = 300.0
-# turn_silence_timeout = 2.0
+turn_silence_timeout = 0.2
 # max_turn_secs = 30.0
 # turn_hold_ms = 0.0
 
@@ -272,7 +272,9 @@ enabled = true
 
 [plugin.voice_manager]
 enabled = true
-voice_probabilities = { jane = 0.7, doktor = 0.15, conquest = 0.1, whisperer = 0.05 }
+# Las voces reales son las cinco de Hipotenusa; jane/doktor/conquest/whisperer
+# ya no existen como plugin y el router elegia nombres muertos.
+voice_probabilities = { dionisio = 0.2, truman = 0.2, elgarca = 0.2, elchacal = 0.2, pagliacci = 0.2 }
 
 [plugin.http_server]
 enabled = true
