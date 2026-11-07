@@ -12,13 +12,11 @@ token = "hannya-lan-dev"
 # Diarización: etiqueta cada turno como owner/other con un embedding de voz local
 # (ERes2Net ONNX, CPU). El primer hablante que aparece queda como dueño.
 "plugin.audio_processor_parakeet.speaker_id" = true
-# Vision: consumidor de los frames que manda el celular por /ws/mask. Sin esta
-# seccion el evento vision_frame no tiene quien lo lea y la camara es decorativa.
+# Vision: Mirage VLM (22MB, CPU, local). Reemplaza al router llama.cpp
+# para visión offline sin depender de :11434.
 "plugin.executor_vision.enabled" = true
-"plugin.executor_vision.vision_endpoint" = "http://127.0.0.1:11434/v1"
-"plugin.executor_vision.vision_model" = "LFM3-Omni-2B"
-# Los frames del celu llegan por /ws/mask con source="mask"; el default es "screen",
-# asi el describe periodico miraba una fuente vacia.
+"plugin.executor_vision.vision_endpoint" = "http://127.0.0.1:8092/v1"
+"plugin.executor_vision.vision_model" = "mirage"
 "plugin.executor_vision.source_default" = "mask"
 
 # Vision periodica: la voz mira la camara cada 2-5 min (intervalo aleatorio) y
@@ -87,6 +85,22 @@ target = "127.0.0.1:8094"
 health_url = "http://127.0.0.1:8094/health"
 health_expect = "parakeet"
 required = true
+
+# Mirage VLM sidecar (22MB, CPU-only, OpenAI-compatible endpoint for vision)
+[[sidecar]]
+name = "mirage"
+adopt_if_healthy = true
+health_url = "http://127.0.0.1:8092/health"
+health_expect = "ok"
+argv = [".venv/bin/python", "scripts/mirage_server.py", "--port", "8092", "--host", "127.0.0.1"]
+ready_timeout_s = 60
+
+[[expose]]
+name = "mirage"
+listen = "127.0.0.1:8092"
+target = "127.0.0.1:8092"
+health_url = "http://127.0.0.1:8092/health"
+health_expect = "ok"
 
 # Personajes del TSV: las voces viven en ~/.config/kateto/voices/<nombre>/ con su
 # SOUL (descripcion + 3 ejemplos reales). Los nombres legacy quedaron apagados.
