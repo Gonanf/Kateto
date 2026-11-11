@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link rel="icon" href="data:," />
+  <title>Hipotenusa — Bate Debate (Ace Attorney style)</title>
+  <script type="module" src="/components/hipotenusa-avatar.js?v=flap6"></script>
+  <script type="module" src="/components/hipotenusa-transcript.js?v=flap6"></script>
+  <style>
+    :root {
+      --gold: #d9b36b;
+      --paper: #f3e7c9;
+      --objection: #c0392b;
+      --spot: rgba(255, 214, 140, 0.55);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%; overflow: hidden;
+      background: #1a0f08;
+      font-family: "Georgia", "Times New Roman", serif;
+      color: var(--paper);
+    }
+
+    /* Flex layout: court stage on top, acta dock at bottom (no overlay) */
+    #court-layout {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+    }
+    #court-stage {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+    #acta-dock {
+      flex: 0 0 30vh;
+      min-height: 180px;
+      max-height: 36vh;
+      background: #1a0f08;
+      border-top: 2px solid var(--gold);
+      box-shadow: 0 -8px 24px rgba(0,0,0,0.5);
+      display: flex;
+      z-index: 35;
+    }
+    #acta-dock hipotenusa-paper-transcript {
+      position: relative !important;
+      inset: auto !important;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: none !important;
+      right: auto !important;
+      bottom: auto !important;
+      top: auto !important;
+      filter: none !important;
+      display: flex !important;
+    }
+
+    /* ============ PHOTO-REAL SCENE ============ */
+    #scene {
+      position: absolute; inset: 0; z-index: 0;
+      background: url('/assets/courtroom_bg.jpg') center 62% / cover no-repeat, #2a1810;
+    }
+    /* Vignette + light dim so puppets pop */
+    #scene::after {
+      content: ""; position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse at 50% 100%, rgba(0,0,0,0) 30%, rgba(0,0,0,0.55) 100%),
+        linear-gradient(180deg, rgba(10,5,2,0.55) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.35) 100%);
+    }
+
+    /* Court shake on objection / gavel */
+    body.shake #scene, body.shake .zone { animation: court-shake 0.45s ease; }
+    @keyframes court-shake {
+      0%,100% { transform: translate(0,0); }
+      15% { transform: translate(-14px, 8px); }
+      30% { transform: translate(12px, -6px); }
+      45% { transform: translate(-9px, 4px); }
+      60% { transform: translate(7px, -3px); }
+      80% { transform: translate(-3px, 1px); }
+    }
+    #flash {
+      position: fixed; inset: 0; z-index: 60; pointer-events: none;
+      background: #fff; opacity: 0;
+    }
+    #flash.go { animation: flashout 0.5s ease-out; }
+    @keyframes flashout { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+
+    /* ============ STAND ZONES ============ */
+    .zone {
+      position: absolute; z-index: 10;
+      filter: brightness(0.72) saturate(0.75);
+      transition: filter 0.35s ease, transform 0.35s ease;
+    }
+    .zone.active {
+      filter: brightness(1.08) saturate(1.05);
+      z-index: 12;
+    }
+    .zone.active .char-wrap { animation: rise 0.4s ease; }
+    @keyframes rise { 0% { transform: translateX(-50%) translateY(12px) scale(0.97); } 100% { transform: translateX(-50%) translateY(0) scale(1); } }
+
+    /* Spotlight behind active character */
+    .char-wrap::before {
+      content: ""; position: absolute; left: 50%; bottom: 0;
+      width: 130%; height: 70%; transform: translateX(-50%);
+      background: radial-gradient(ellipse at 50% 100%, var(--spot) 0%, rgba(255,214,140,0) 65%);
+      opacity: 0; transition: opacity 0.4s ease; z-index: 0;
+      pointer-events: none;
+    }
+    .zone.active .char-wrap::before { opacity: 0.85; }
+
+    /* Furniture photos (bench / witness stands) */
+    .furniture {
+      position: absolute; inset: auto 0 0 0;
+      z-index: 1; pointer-events: none;
+    }
+    .furniture img {
+      width: 100%; height: 100%; object-fit: cover;
+      border-radius: 12px;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.75), inset 0 0 0 2px rgba(217,179,107,0.25);
+    }
+
+    /* Character puppet wrap */
+    .char-wrap {
+      position: absolute; left: 50%; bottom: 0;
+      transform: translateX(-50%);
+      z-index: 3;
+    }
+    hipotenusa-avatar { display: none; }
+    hipotenusa-avatar.show { display: block; }
+
+    /* Idle sway per voice (funny, alive) — duration varied via inline style */
+    .zone.occupied hipotenusa-avatar.show {
+      animation: sway var(--sway-dur, 4.2s) ease-in-out infinite alternate;
+      transform-origin: 50% 95%;
+      filter: drop-shadow(0 14px 22px rgba(0,0,0,0.7));
+    }
+    @keyframes sway {
+      0% { transform: rotate(-1.4deg) translateY(0); }
+      100% { transform: rotate(1.4deg) translateY(-4px); }
+    }
+    /* Speaking bob overrides sway via extra class on the zone */
+    .zone.talking hipotenusa-avatar.show { animation: talkbob 0.34s ease-in-out infinite alternate; }
+    @keyframes talkbob {
+      0% { transform: rotate(-0.3deg) translateY(0) scale(1.005); }
+      100% { transform: rotate(0.3deg) translateY(-3px) scale(1.01); }
+    }
+
+    /* Startled / caught off guard */
+    .zone.startled .char-wrap { animation: startled 0.7s cubic-bezier(.2,2.6,.4,.8); }
+    @keyframes startled {
+      0% { transform: translateX(-50%) translateY(0) scale(1); }
+      20% { transform: translateX(-52%) translateY(-26px) scale(1.06) rotate(-3deg); }
+      40% { transform: translateX(-48%) translateY(0) scale(0.97) rotate(3deg); }
+      60% { transform: translateX(-51%) translateY(-12px) rotate(-2deg); }
+      100% { transform: translateX(-50%) translateY(0) rotate(0); }
+    }
+
+    /* ============ NAMEPLATES ============ */
+    .nameplate {
+      position: absolute; left: 50%; transform: translateX(-50%);
+      z-index: 6; text-align: center; white-space: nowrap;
+      background: linear-gradient(180deg, #3a2a18, #241608);
+      border: 2px solid var(--gold);
+      border-radius: 8px;
+      padding: 5px 16px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.7);
+    }
+    .nameplate .np-name {
+      display: block; font-size: clamp(0.9rem, 1.6vw, 1.3rem);
+      font-weight: bold; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--gold); text-shadow: 0 1px 2px #000;
+    }
+    .nameplate .np-role {
+      display: block; font-size: 0.62rem; letter-spacing: 0.22em;
+      text-transform: uppercase; color: #c9a86a; opacity: 0.85;
+    }
+
+    /* Judge bench — top center */
+    #zone-judge {
+      top: 0; left: 50%; transform: translateX(-50%);
+      width: min(44vw, 640px); height: 40vh;
+    }
+    #zone-judge .furniture { height: 62%; }
+    #zone-judge .char-wrap { bottom: 20%; }
+    #zone-judge hipotenusa-avatar.show { width: min(20vh, 190px); height: min(20vh, 190px); }
+    #zone-judge .nameplate { bottom: 2%; }
+
+    /* Witness stands — left & right */
+    #zone-left, #zone-right {
+      bottom: 2vh; width: min(20vw, 300px); height: 48vh;
+    }
+    #zone-left { left: 2vw; }
+    #zone-right { right: 2vw; }
+    #zone-left .furniture, #zone-right .furniture { height: 52%; }
+    #zone-left .char-wrap, #zone-right .char-wrap { bottom: 20%; }
+    #zone-left hipotenusa-avatar.show, #zone-right hipotenusa-avatar.show {
+      width: min(32vh, 18vw, 280px);
+      height: min(38vh, 22vw, 340px);
+    }
+    #zone-left .nameplate, #zone-right .nameplate { bottom: -3.5vh; }
+
+    /* Center podium for a 3rd debater */
+    #zone-center {
+      bottom: 10vh; left: 50%; transform: translateX(-50%);
+      width: min(20vw, 320px); height: 58vh; display: none;
+    }
+    #zone-center.occupied { display: block; }
+    #zone-center .char-wrap { bottom: 20%; }
+    #zone-center hipotenusa-avatar.show { width: min(40vh, 20vw); height: min(46vh, 24vw); }
+    #zone-center .nameplate { bottom: -4.5vh; }
+
+    /* ============ EFFECT OVERLAYS ============ */
+    .thinking-bubble {
+      position: absolute; top: -3.2rem; left: 50%; transform: translateX(-50%);
+      z-index: 8; display: none;
+      background: #fff; color: #222; font-weight: bold;
+      border-radius: 18px; padding: 4px 14px; font-size: 1.2rem;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    }
+    .thinking-bubble::after {
+      content: ""; position: absolute; left: 50%; bottom: -8px;
+      width: 12px; height: 12px; background: #fff;
+      transform: translateX(-50%) rotate(45deg);
+    }
+    .thinking-bubble.on { display: block; animation: thinkpulse 1s ease-in-out infinite; }
+    @keyframes thinkpulse {
+      0%,100% { transform: translateX(-50%) scale(1); opacity: 0.85; }
+      50% { transform: translateX(-50%) scale(1.12); opacity: 1; }
+    }
+
+    .emote {
+      position: absolute; z-index: 20; font-size: 2.4rem;
+      pointer-events: none; animation: emote-float 1.2s ease-out forwards;
+      filter: drop-shadow(0 3px 4px rgba(0,0,0,0.6));
+    }
+    @keyframes emote-float {
+      0% { opacity: 0; transform: translateY(0) scale(0.5) rotate(-10deg); }
+      20% { opacity: 1; transform: translateY(-20px) scale(1.25) rotate(8deg); }
+      100% { opacity: 0; transform: translateY(-90px) scale(1) rotate(-6deg); }
+    }
+
+    /* Objection! slam banner */
+    #objection {
+      position: fixed; top: 34vh; left: 50%; z-index: 55;
+      transform: translate(-50%, -50%) scale(0.2) rotate(-8deg);
+      font-size: clamp(3rem, 9vw, 8rem);
+      font-weight: 900; font-style: italic; letter-spacing: 0.04em;
+      color: #fff;
+      text-shadow: 0 0 18px rgba(0,0,0,0.9), 4px 4px 0 var(--objection), -4px -4px 0 var(--objection), 4px -4px 0 var(--objection), -4px 4px 0 var(--objection);
+      display: none; pointer-events: none;
+      white-space: nowrap;
+    }
+    #objection.go {
+      display: block;
+      animation: obj-slam 0.55s cubic-bezier(.2,1.9,.3,1) forwards;
+    }
+    @keyframes obj-slam {
+      0% { transform: translate(-50%, -50%) scale(3.2) rotate(-14deg); opacity: 0; }
+      55% { transform: translate(-50%, -50%) scale(0.92) rotate(2deg); opacity: 1; }
+      75% { transform: translate(-50%, -50%) scale(1.06) rotate(-1deg); }
+      100% { transform: translate(-50%, -50%) scale(1) rotate(0); opacity: 1; }
+    }
+    #objection-lines {
+      position: fixed; inset: 0; z-index: 54; display: none; pointer-events: none;
+      background:
+        repeating-conic-gradient(from 0deg at 50% 50%, rgba(192,57,43,0.22) 0deg 4deg, transparent 4deg 14deg);
+      mask-image: radial-gradient(circle at 50% 45%, #000 0%, transparent 68%);
+      -webkit-mask-image: radial-gradient(circle at 50% 45%, #000 0%, transparent 68%);
+    }
+    #objection-lines.go { display: block; animation: lines-fade 0.9s ease-out forwards; }
+    @keyframes lines-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+    /* Session start gavel banner */
+    #session-banner {
+      position: fixed; top: 30vh; left: 50%; z-index: 55;
+      transform: translate(-50%, -50%) scale(0.3);
+      display: none; pointer-events: none; text-align: center;
+    }
+    #session-banner .gavel { font-size: clamp(3rem, 8vw, 7rem); }
+    #session-banner .txt {
+      font-size: clamp(1.6rem, 4vw, 3.4rem); font-weight: 900; font-style: italic;
+      color: var(--gold); text-shadow: 3px 3px 0 #000, 0 0 24px rgba(217,179,107,0.6);
+      letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+    }
+    #session-banner.go {
+      display: block;
+      animation: gavel-slam 1.6s cubic-bezier(.2,1.8,.3,1) forwards;
+    }
+    @keyframes gavel-slam {
+      0% { transform: translate(-50%, -50%) scale(2.6) rotate(-6deg); opacity: 0; }
+      12% { transform: translate(-50%, -50%) scale(1) rotate(0); opacity: 1; }
+      30% { transform: translate(-52%, -50%) scale(1.04) rotate(-2deg); }
+      45% { transform: translate(-48%, -50%) scale(1) rotate(2deg); }
+      80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+    }
+
+    /* Transcript panel — when inside #acta-dock it fills dock (see #acta-dock styles).
+       Legacy absolute placement kept as fallback if dock not present. */
+    hipotenusa-paper-transcript:not(#acta-dock hipotenusa-paper-transcript) {
+      position: absolute; right: 1.2vw; bottom: 11vh;
+      width: min(21vw, 360px); height: 66vh;
+      z-index: 30;
+      filter: drop-shadow(0 16px 30px rgba(0,0,0,0.8));
+    }
+
+    /* Court title ribbon */
+    #court-title {
+      position: absolute; top: 1.2vh; left: 50%; transform: translateX(-50%);
+      z-index: 40; font-size: 0.85rem; letter-spacing: 0.34em; text-transform: uppercase;
+      color: var(--gold); text-shadow: 0 2px 4px #000; opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div id="court-layout">
+    <div id="court-stage">
+      <div id="scene"></div>
+      <div id="flash"></div>
+      <div id="objection-lines"></div>
+      <div id="objection">¡OBJECIÓN!</div>
+      <div id="session-banner">
+        <div class="gavel">🔨</div>
+        <div class="txt">¡Se abre la sesión!</div>
+      </div>
+      <div id="court-title">Hipotenusa · Tribunal de Bate de Chocolate</div>
+
+      <!-- JUDGE BENCH -->
+  <div class="zone" id="zone-judge">
+    <div class="furniture"><img src="/assets/judge_bench.jpg" alt="" onerror="this.style.display='none'" /></div>
+    <div class="char-wrap">
+      <hipotenusa-avatar id="avatar-judge"></hipotenusa-avatar>
+      <div class="thinking-bubble">…</div>
+      <div class="emote-layer"></div>
+    </div>
+    <div class="nameplate"><span class="np-name">Juez</span><span class="np-role">orchestrator</span></div>
+  </div>
+
+  <!-- WITNESS STAND LEFT -->
+  <div class="zone" id="zone-left">
+    <div class="furniture"><img src="/assets/stand_left.jpg" alt="" onerror="this.style.display='none'" /></div>
+    <div class="char-wrap">
+      <hipotenusa-avatar id="avatar-left"></hipotenusa-avatar>
+      <div class="thinking-bubble">…</div>
+      <div class="emote-layer"></div>
+    </div>
+    <div class="nameplate"><span class="np-name">—</span><span class="np-role">debater</span></div>
+  </div>
+
+  <!-- WITNESS STAND RIGHT -->
+  <div class="zone" id="zone-right">
+    <div class="furniture"><img src="/assets/stand_right.jpg" alt="" onerror="this.style.display='none'" /></div>
+    <div class="char-wrap">
+      <hipotenusa-avatar id="avatar-right"></hipotenusa-avatar>
+      <div class="thinking-bubble">…</div>
+      <div class="emote-layer"></div>
+    </div>
+    <div class="nameplate"><span class="np-name">—</span><span class="np-role">debater</span></div>
+  </div>
+
+  <!-- CENTER PODIUM (3rd debater) -->
+  <div class="zone" id="zone-center">
+    <div class="char-wrap">
+      <hipotenusa-avatar id="avatar-center"></hipotenusa-avatar>
+      <div class="thinking-bubble">…</div>
+      <div class="emote-layer"></div>
+    </div>
+    <div class="nameplate"><span class="np-name">—</span><span class="np-role">debater</span></div>
+  </div>
+
+    </div><!-- /#court-stage -->
+    <div id="acta-dock">
+      <hipotenusa-paper-transcript id="paper"></hipotenusa-paper-transcript>
+    </div>
+  </div><!-- /#court-layout -->
+
+  <script>
+    // ============ Voice display metadata ============
+    const VOICE_NAMES = {
+      jane: "Jane", doktor: "Doktor", conquest: "Conquest", whisperer: "Whisperer",
+    };
+    const ROLE_LABELS = {
+      judge: "Juez", debater: "Debater",
+      absurd_situational: "Absurdo Situacional", chaotic_slapstick: "Slapstick Caótico",
+      deadpan_pedant: "Pedante Deadpan", deadpan_drill: "Sargento Deadpan",
+      improviser: "Improvisador",
+    };
+    function formatSpeakerName(voice_id, role) {
+      if (!voice_id) return "Hipotenusa";
+      const key = voice_id.toLowerCase();
+      const vName = VOICE_NAMES[key] || (voice_id.charAt(0).toUpperCase() + voice_id.slice(1));
+      return vName;
+    }
+    function roleLabel(role) {
+      return ROLE_LABELS[role] || role || "debater";
+    }
+
+    const paperTranscript = document.getElementById("paper");
+    const ZONES = {
+      judge: document.getElementById("zone-judge"),
+      left: document.getElementById("zone-left"),
+      right: document.getElementById("zone-right"),
+      center: document.getElementById("zone-center"),
+    };
+    const avatars = {
+      judge: document.getElementById("avatar-judge"),
+      left: document.getElementById("avatar-left"),
+      right: document.getElementById("avatar-right"),
+      center: document.getElementById("avatar-center"),
+    };
+    let standByVoice = {};     // voiceId -> 'judge'|'left'|'right'|'center'
+    let currentSpeaker = null; // voiceId currently holding the mic
+    let lastDebater = null;    // last non-judge speaker (objection target fallback)
+    let sessionOpened = false;
+    let activeRms = 0;
+
+    // Randomized idle sway personality per stand
+    Object.values(ZONES).forEach((z, i) => {
+      z.style.setProperty("--sway-dur", (3.4 + i * 0.7 + Math.random() * 0.9).toFixed(2) + "s");
+    });
+
+    function assignStand(voiceId, role, forcedStand) {
+      if (standByVoice[voiceId]) return standByVoice[voiceId];
+      let stand = forcedStand;
+      if (!stand) {
+        if (role === "orchestrator" || role === "judge") {
+          stand = "judge";
+        } else {
+          const taken = Object.values(standByVoice);
+          stand = !taken.includes("left") ? "left" : !taken.includes("right") ? "right" : "center";
+        }
+      }
+      const zone = ZONES[stand];
+      zone.classList.add("occupied");
+      avatars[stand].setVoice(voiceId);
+      avatars[stand].classList.add("show");
+      const np = zone.querySelector(".nameplate");
+      np.querySelector(".np-name").textContent = formatSpeakerName(voiceId, role);
+      np.querySelector(".np-role").textContent = roleLabel(role);
+      standByVoice[voiceId] = stand;
+      try {
+        localStorage.setItem("hipotenusa_courtroom_stands", JSON.stringify(standByVoice));
+      } catch (e) {}
+      return stand;
+    }
+
+    function activateStand(voiceId) {
+      for (const [vid, stand] of Object.entries(standByVoice)) {
+        ZONES[stand].classList.toggle("active", vid === voiceId);
+      }
+    }
+
+    function floatEmote(zone, emoji) {
+      const layer = zone.querySelector(".emote-layer");
+      if (!layer) return;
+      const el = document.createElement("div");
+      el.className = "emote";
+      el.textContent = emoji;
+      el.style.left = 20 + Math.random() * 60 + "%";
+      layer.appendChild(el);
+      setTimeout(() => el.remove(), 1300);
+    }
+
+    function setThinking(voiceId, on) {
+      const stand = standByVoice[voiceId];
+      if (!stand) return;
+      const bubble = ZONES[stand].querySelector(".thinking-bubble");
+      if (bubble) bubble.classList.toggle("on", !!on);
+    }
+
+    function startle(voiceId, emoji) {
+      const stand = standByVoice[voiceId];
+      if (!stand) return;
+      const zone = ZONES[stand];
+      zone.classList.remove("startled");
+      void zone.offsetWidth; // restart animation
+      zone.classList.add("startled");
+      floatEmote(zone, emoji || "❗");
+      setTimeout(() => zone.classList.remove("startled"), 750);
+    }
+
+    function screenShake() {
+      document.body.classList.remove("shake");
+      void document.body.offsetWidth;
+      document.body.classList.add("shake");
+    }
+
+    function flashScreen() {
+      const f = document.getElementById("flash");
+      f.classList.remove("go");
+      void f.offsetWidth;
+      f.classList.add("go");
+    }
+
+    function popObjection() {
+      const ob = document.getElementById("objection");
+      const lines = document.getElementById("objection-lines");
+      ob.classList.remove("go"); lines.classList.remove("go");
+      void ob.offsetWidth;
+      ob.classList.add("go"); lines.classList.add("go");
+      flashScreen(); screenShake();
+      setTimeout(() => { ob.classList.remove("go"); lines.classList.remove("go"); }, 1100);
+    }
+
+    function gavelStart() {
+      const b = document.getElementById("session-banner");
+      b.classList.remove("go");
+      void b.offsetWidth;
+      b.classList.add("go");
+      flashScreen(); screenShake();
+      setTimeout(() => b.classList.remove("go"), 1700);
+    }
+
+    // Apply erratic jaw animation to a stand's avatar — jaw moves randomly,
+    // body stays still (no head bob). Uses computeJawKinematics via setRms.
+    function applyPuppetToStand(stand, msg) {
+      const av = avatars[stand];
+      if (!av) return;
+      const rawRms = (typeof msg.rms === 'number') ? msg.rms : (msg.data && typeof msg.data.rms === 'number' ? msg.data.rms : 0);
+      av.setRms(rawRms);
+    }
+
+    const FLUSTER_RE = /(\*[^*]{2,40}\*|¡\?|\?\!|se atraganta|golpea la mesa|se le escap)/i;
+
+    const seenTurns = new Set();
+
+    function turnKeyFor(voiceId, phase, text) {
+      // Use full text hash-ish: length + prefix to avoid 60-char collision (P1-5)
+      const t = (text || '').trim();
+      return `${voiceId}:${phase}:${t.length}:${t.slice(0, 120)}`;
+    }
+
+    function handleDebate(msg) {
+      const voiceId = msg.voice_id;
+      const role = msg.role;
+      const phase = msg.phase;
+      const text = (msg.text || (msg.data && msg.data.text) || "").trim();
+      if (!voiceId) return;
+
+      // New phase announced by the orchestrator: agent is thinking -> bubble, no transcript
+      if (phase === "thinking") {
+        assignStand(voiceId, role, msg.stand);
+        setThinking(voiceId, true);
+        return;
+      }
+      setThinking(voiceId, false);
+
+      const turnKey = turnKeyFor(voiceId, phase, text);
+      if (seenTurns.has(turnKey)) return;
+      if (text) {
+        seenTurns.add(turnKey);
+        if (seenTurns.size > 60) {
+          const oldest = seenTurns.values().next().value;
+          seenTurns.delete(oldest);
+        }
+      }
+
+      assignStand(voiceId, role, msg.stand);
+      activateStand(voiceId);
+      currentSpeaker = voiceId;
+      if (role !== "orchestrator" && role !== "judge") lastDebater = voiceId;
+
+      // Court session opening: gavel bang, once per session
+      if (phase === "opening" && !sessionOpened) {
+        sessionOpened = true;
+        gavelStart();
+      }
+
+      if (phase === "objection") {
+        popObjection();
+        // The voice being objected to is caught off guard
+        let target = msg.target;
+        if (!target || target === voiceId) {
+          target = (lastDebater && lastDebater !== voiceId) ? lastDebater
+            : Object.keys(standByVoice).find((v) => v !== voiceId);
+        }
+        if (target && standByVoice[target]) startle(target, "❗");
+        floatEmote(ZONES[standByVoice[voiceId]], "😤");
+      } else if (phase === "ruling" || phase === "verdict") {
+        // Judge bangs the gavel for rulings
+        screenShake();
+        floatEmote(ZONES[standByVoice[voiceId]] || ZONES.judge, "⚖️");
+      } else if (text && FLUSTER_RE.test(text)) {
+        // Funny flustered moment written into the speech
+        startle(voiceId, "😅");
+      }
+
+      // Typewriter transcript (click / carriage return sounds only — no TTS)
+      if (text && paperTranscript) {
+        paperTranscript.addTurn({ voice_id: voiceId, role, phase, text });
+      }
+    }
+
+    function saveCourtroomState(msg) {
+      try {
+        localStorage.setItem("hipotenusa_courtroom_state", JSON.stringify(msg));
+        localStorage.setItem("hipotenusa_courtroom_stands", JSON.stringify(standByVoice));
+      } catch (e) {}
+    }
+
+    async function restoreState() {
+      // Validate stale localStorage: if server has current, server wins. Else prune ghost stands.
+      let serverVoices = null;
+      try {
+        const resp = await fetch("/api/courtroom/state");
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.current) {
+            // Build valid voice set from history + current to detect stale localStorage
+            const allVoices = new Set();
+            if (data.current.voice_id) allVoices.add(String(data.current.voice_id).toLowerCase());
+            if (Array.isArray(data.history)) {
+              for (const h of data.history) if (h.voice_id) allVoices.add(String(h.voice_id).toLowerCase());
+            }
+            if (allVoices.size > 0) serverVoices = allVoices;
+            handleDebate(data.current);
+            // If localStorage has voices not in serverVoices, clear it after handling
+            try {
+              const saved = localStorage.getItem("hipotenusa_courtroom_stands");
+              if (saved) {
+                const map = JSON.parse(saved);
+                const stale = Object.keys(map).some(k => !allVoices.has(k.toLowerCase()));
+                if (stale) localStorage.removeItem("hipotenusa_courtroom_stands");
+              }
+            } catch {}
+            return;
+          }
+        }
+      } catch (e) {}
+      // No server state: restore local stands but validate not ghost
+      try {
+        const savedStands = localStorage.getItem("hipotenusa_courtroom_stands");
+        if (savedStands) {
+          const map = JSON.parse(savedStands);
+          for (const [vid, stand] of Object.entries(map)) {
+            assignStand(vid, stand === "judge" ? "orchestrator" : "adversary", stand);
+          }
+        }
+      } catch (e) {}
+      // localStorage fallback debate
+      try {
+        const saved = localStorage.getItem("hipotenusa_courtroom_state");
+        if (saved) handleDebate(JSON.parse(saved));
+      } catch (e) {}
+    }
+
+    // Overlay layout handler (P0-4): reposition stands via customPositions semantics (like index.html)
+    let customPositions = {};
+    function handleOverlayLayout(msg) {
+      const layout = (msg.layout || msg.positions && 'custom' || '').toString().toLowerCase();
+      const positions = msg.positions && typeof msg.positions === 'object' ? msg.positions : {};
+      Object.assign(customPositions, positions);
+      // Reassign stands according to positions map: {voice: stand}
+      for (const [vidRaw, posRaw] of Object.entries(positions)) {
+        const vid = String(vidRaw).toLowerCase();
+        const pos = String(posRaw).toLowerCase();
+        const validStands = ['judge','left','right','center'];
+        if (!validStands.includes(pos)) continue;
+        // If voice already has a stand, move it
+        const cur = standByVoice[vid];
+        if (cur && cur !== pos) {
+          // clear old zone
+          if (ZONES[cur]) ZONES[cur].classList.remove('occupied','active');
+          delete standByVoice[vid];
+        }
+        // assign to new stand (will create if missing)
+        // Need role: infer from pos judge=>orchestrator else adversary
+        const role = pos === 'judge' ? 'orchestrator' : 'adversary';
+        assignStand(vid, role, pos);
+      }
+      // Layout preset visual tweaks could be added here if needed
+    }
+
+    function connectWs() {
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(proto + "//" + location.host + "/ws/overlay");
+
+      ws.onmessage = (ev) => {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        if (!msg) return;
+
+        // P0-4: overlay_layout consumed (game bridge / versus)
+        if (msg.event === "overlay_layout" || msg.type === "layout") {
+          handleOverlayLayout(msg);
+          return;
+        }
+
+        // Live RMS visemes from the backend TTS drive the puppet jaw (backend authoritative).
+        // Audio itself is NOT reproduced here: the courtroom is display-only,
+        // the only sounds are the paper-transcript typewriter clicks.
+        if (msg.event === "audio_output" || msg.type === "viseme") {
+          const rawRms = (typeof msg.rms === "number")
+            ? msg.rms
+            : (msg.data && typeof msg.data.rms === "number") ? msg.data.rms : 0.0;
+          // Route by the viseme's OWN voice_id, not the last debate speaker:
+          // the orchestrator emits a "thinking" event (which assigns the stand)
+          // before the next voice's TTS starts, so its stand already exists.
+          // Falling back to currentSpeaker keeps legacy behavior for payloads
+          // without voice_id.
+          const vid = String(msg.voice_id || (msg.data && msg.data.voice_id) || "").toLowerCase();
+          const stand = (vid && standByVoice[vid]) ? standByVoice[vid]
+            : (currentSpeaker ? standByVoice[currentSpeaker] : null);
+          const zone = stand ? ZONES[stand] : null;
+          if (zone) {
+            zone.classList.toggle("talking", rawRms > 0.05);
+            applyPuppetToStand(stand, msg);
+          }
+          return;
+        }
+
+        if (msg.event === "interrupt" || msg.type === "interrupt") {
+          for (const stand of Object.values(standByVoice)) {
+            ZONES[stand].classList.remove("talking");
+            const av = avatars[stand];
+            if (av) {
+              if (typeof av.setJawTransform === 'function') av.setJawTransform({ jawOffsetX:0, jawOffsetY:0, jawRotation:0, headOffsetY:0 });
+              else av.setRms(0);
+              if (typeof av.stopSpeaking === 'function') av.stopSpeaking();
+            }
+            setThinkingByStand(stand, false);
+          }
+          if (paperTranscript && typeof paperTranscript.interrupt === 'function') {
+            try { paperTranscript.interrupt(); } catch {}
+          }
+          return;
+        }
+
+        // Only accept debate events; ignore raw bus subtitle echoes (dedupe guard)
+        if (msg.event === "debate") {
+          saveCourtroomState(msg);
+          handleDebate(msg);
+        }
+      };
+
+      ws.onclose = () => {
+        setTimeout(connectWs, 1500);
+      };
+    }
+
+    function setThinkingByStand(stand, on) {
+      const bubble = ZONES[stand].querySelector(".thinking-bubble");
+      if (bubble) bubble.classList.toggle("on", !!on);
+    }
+
+    connectWs();
+    restoreState();
+  </script>
+</body>
+</html>

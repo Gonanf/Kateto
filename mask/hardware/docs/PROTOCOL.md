@@ -107,9 +107,9 @@ ESP32 -> Host:  {"err":"missing_value"}
 
 ---
 
-## 7. Mapeo desde el Sistema Kateto
+## 7. Mapeo desde el Sistema Hipotenusa
 
-Kateto procesa audio y genera eventos sincronizados. El mapeo sugerido hacia MASK-7 es:
+Hipotenusa procesa audio y genera eventos sincronizados. El mapeo sugerido hacia MASK-7 es:
 
 1. **Mandibula (`jaw`):**
    - Fuente: `audio_output/viseme`

@@ -1,11 +1,11 @@
 ---
 title: Plugins futuros
-description: Features futuras de Kateto — boson.ai TTS, PNGTuber, TTS→Mic, YouTube chat, VoiceClassifier fine-tuned.
+description: Features futuras de Hipotenusa — boson.ai TTS, PNGTuber, TTS→Mic, YouTube chat, VoiceClassifier fine-tuned.
 ---
 
 # Plugins futuros
 
-Lista de features planeadas para Kateto (fuente: decisiones del usuario en blogs de discusión y la investigación de harnesses):
+Lista de features planeadas para Hipotenusa (fuente: decisiones del usuario en blogs de discusión y la investigación de harnesses):
 
 | Feature | Detalle |
 |---|---|
@@ -17,4 +17,4 @@ Lista de features planeadas para Kateto (fuente: decisiones del usuario en blogs
 
 Para la lista completa de voces futuras: [voice-list-future](/voices/voice-list-future/).
 
-Fuente original: `~/proyectos/Blogs/kateto-features-para-opencode.md`.
+Fuente original: `~/proyectos/Blogs/hipotenusa-features-para-opencode.md`.

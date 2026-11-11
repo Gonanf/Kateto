@@ -5,7 +5,7 @@ description: "Spec de implementación — 2026 08 13 Streaming Latency."
 
 # Spec: Latencia de streaming (EventStream dual + TTS buffered + client reuse)
 
-Fecha: 2026-08-13 | Worktree: wt/streaming-latency | Fuente: harness research (brainstorm-kateto.md §B1/B2/B3/G1/D1, bugs 58/59/60)
+Fecha: 2026-08-13 | Worktree: wt/streaming-latency | Fuente: harness research (brainstorm-hipotenusa.md §B1/B2/B3/G1/D1, bugs 58/59/60)
 
 ## Problem Statement
 
@@ -49,5 +49,5 @@ Constraint del usuario: el TTS hoy es EdgeTTS o Boson TTS; Zonos2 viene después
 
 ## Further Notes
 
-- Ver brainstorming-kateto.md §B1/B2/B3/G1/D1 y docs/bugs/58-60.
+- Ver brainstorming-hipotenusa.md §B1/B2/B3/G1/D1 y docs/bugs/58-60.
 - La métrica RMS para el overlay (spec visual-overlay) sale del PCM reproducido; esta spec no la calcula.

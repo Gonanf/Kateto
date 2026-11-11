@@ -1,0 +1,12 @@
+from __future__ import annotations
+
+from hipotenusa.core.discovery import DiscoveryContext
+from hipotenusa.core.plugin import Plugin
+from hipotenusa.plugins.visual_overlay.visual_overlay_plugin import VisualOverlayPlugin
+
+
+def create_plugins(ctx: DiscoveryContext) -> tuple[Plugin, ...]:
+    settings = ctx.config.settings.plugin.get("visual_overlay")
+    if settings is not None and not settings.enabled:
+        return ()
+    return (VisualOverlayPlugin(settings=settings),)

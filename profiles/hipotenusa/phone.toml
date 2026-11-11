@@ -102,7 +102,7 @@ target = "127.0.0.1:8092"
 health_url = "http://127.0.0.1:8092/health"
 health_expect = "ok"
 
-# Personajes del TSV: las voces viven en ~/.config/kateto/voices/<nombre>/ con su
+# Personajes del TSV: las voces viven en ~/.config/hipotenusa/voices/<nombre>/ con su
 # SOUL (descripcion + 3 ejemplos reales). Los nombres legacy quedaron apagados.
 
 [plugin.voice_manager]

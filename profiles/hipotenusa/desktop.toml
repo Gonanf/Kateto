@@ -1,0 +1,35 @@
+# Perfil de escritorio: instancia propia del runtime (no pisa la de :8099).
+# Sin [[sidecar]]/[[expose]]: el ASR ya corre en :8094 (instancia del usuario) y
+# este perfil solo lo consume; el expose asr-lan :8096 ya esta tomado.
+[runtime]
+host = "127.0.0.1"
+port = 8199
+token = "hannya-desktop-qa"
+
+[runtime.overrides]
+# Escritorio sin microfono: la unica entrada de este test es HTTP/WS.
+"plugin.audio_input_mic.enabled" = false
+# No peleamos PipeWire con la instancia del usuario: la voz sale por el WS.
+"plugin.audio_output_player.enabled" = false
+"plugin.audio_output_edgetts.enabled" = false
+"plugin.audio_processor_parakeet.port" = 8094
+"plugin.executor_vision.enabled" = false
+"voice.dionisio.thinking" = false
+"voice.truman.thinking" = false
+"voice.elgarca.thinking" = false
+"voice.elchacal.thinking" = false
+"voice.pagliacci.thinking" = false
+"plugin.voice_llm.endpoint" = "http://127.0.0.1:11434/v1"
+"plugin.voice_llm.model" = "Pollux-E2B"
+"plugin.eot_gate.etapa2" = "base"
+"plugin.eot_gate.timeout" = 3.0
+"plugin.executor_workflow_router.enabled" = false
+"plugin.executor_todo_list.enabled" = false
+"plugin.backlog.enabled" = false
+"plugin.workflow_engine.enabled" = false
+# Charla espontanea: cada 20-30 s, solo con estimulo fresco (15 min).
+"plugin.voice_manager.enabled" = true
+"plugin.voice_manager.impulse_enabled" = true
+"plugin.voice_manager.impulse_min" = "20s"
+"plugin.voice_manager.impulse_max" = "30s"
+"plugin.voice_manager.impulse_fresh" = "15m"

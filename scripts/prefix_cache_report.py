@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prefix Cache Report — Instrumento de medición de prefijo de prompt en Kateto.
+"""Prefix Cache Report — Instrumento de medición de prefijo de prompt en Hipotenusa.
 
 Mide el reuso de prefijo KV-cache entre voces reales en dos layouts:
 - legacy: secciones en orden previo (persona primero)
@@ -20,22 +20,22 @@ from typing import Any
 import urllib.error
 import urllib.request
 
-# Asegurar sys.path con la raíz del repo antes de imports de kateto
+# Asegurar sys.path con la raíz del repo antes de imports de hipotenusa
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from kateto.core.config import VoiceSettings
-from kateto.core.workflow import WorkflowCatalog
-from kateto.voices.base import VoiceAgent
-from kateto.voices.factory import _PROFILES
-from kateto.voices.ledger import VoiceMemoryLedger
-from kateto.voices.prompt_blocks import (
+from hipotenusa.core.config import VoiceSettings
+from hipotenusa.core.workflow import WorkflowCatalog
+from hipotenusa.voices.base import VoiceAgent
+from hipotenusa.voices.factory import _PROFILES
+from hipotenusa.voices.ledger import VoiceMemoryLedger
+from hipotenusa.voices.prompt_blocks import (
     get_agent_prompt_block,
     get_mcp_prompt_block,
     get_workflow_prompt_block,
 )
-from kateto.voices.skills import LoadedSkill, load_skills
+from hipotenusa.voices.skills import LoadedSkill, load_skills
 
 
 class StubProvider:
@@ -104,7 +104,7 @@ async def build_voice_prompts(
     if config_file.is_file():
         try:
             cfg = tomllib.loads(config_file.read_text(encoding="utf-8"))
-            language = cfg.get("kateto", {}).get("language", "es_ar")
+            language = cfg.get("hipotenusa", {}).get("language", "es_ar")
         except Exception as exc:
             falta_insumo.append(f"Error reading {config_file}: {exc}")
     else:
@@ -301,7 +301,7 @@ def parse_seeds(raw_seeds: list[Any]) -> list[int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Prefix cache measurement report")
-    parser.add_argument("--config-dir", type=Path, default=Path("/home/chaos/.config/kateto"))
+    parser.add_argument("--config-dir", type=Path, default=Path("/home/chaos/.config/hipotenusa"))
     parser.add_argument("--endpoint", default="http://127.0.0.1:8092")
     parser.add_argument("--seed", nargs="+", default=[1, 2, 3])
     parser.add_argument("--out", type=Path, default=None)

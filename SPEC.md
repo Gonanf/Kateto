@@ -1,14 +1,14 @@
-# 🐱 Kateto — SPEC (arquitectura)
+# 🐱 Hipotenusa — SPEC (arquitectura)
 
-SPEC de arquitectura del sistema Kateto. Las features futuras (plugins de TTS
+SPEC de arquitectura del sistema Hipotenusa. Las features futuras (plugins de TTS
 boson.ai, PNGTuber, etc.) viven en `docs/features/future-plugins.md`. Los bugs
 en `docs/bugs/`.
 
 ---
 
-## 0. Visión: Kateto como empresa
+## 0. Visión: Hipotenusa como empresa
 
-Kateto se modela como una **empresa**. La empresa tiene **departamentos**
+Hipotenusa se modela como una **empresa**. La empresa tiene **departamentos**
 (Gestión de Proyectos, Desarrollo de Software, Diseño Gráfico, Marketing, Legal,
 Contable, …). Cada departamento tiene **voces**; cada voz tiene un rol/tarea
 dentro del departamento. Ejemplo del Departamento de Gestión de Proyectos:
@@ -51,12 +51,12 @@ a qué responder. Doktor puede anotar "hay reuniones los martes"; el martes, un
   superficie de ataque + dependencias. El "YouTube Live Chat listener" futuro
   (docs/features) se replantea sin acoplar OAuth de Google al core.
 - El `CalendarFailure` y el factory en `RuntimeDependencies` se eliminan.
-- **Realizado:** borrado `kateto/plugins/connector/calendar.py` y
-  `kateto/tests/test_calendar.py`; removido el wiring de `run_mode.py`
+- **Realizado:** borrado `hipotenusa/plugins/connector/calendar.py` y
+  `hipotenusa/tests/test_calendar.py`; removido el wiring de `run_mode.py`
   (imports, `calendar_factory` en `RuntimeDependencies`, helper
   `_configured_calendar`, `LiveAssemblyConfigurationError`); removida la
   dependencia `google-auth-oauthlib` de `pyproject.toml` + `uv.lock`;
-  ajustados `kateto/tests/test_run_orchestration.py` (sin calendar factory) y
+  ajustados `hipotenusa/tests/test_run_orchestration.py` (sin calendar factory) y
   los docs (`docs/plugins/connectors.md`, `docs/architecture/design-decisions.md`,
   `docs/development/tooling.md`). Suite completa: 153 passed.
 
@@ -69,38 +69,38 @@ a qué responder. Doktor puede anotar "hay reuniones los martes"; el martes, un
   `Command` con `get_parser()` + `take_action()`.
 - Hoy `__main__.py` usa un `match` hardcodeado de `sys.argv` (`config check`,
   `run`, `tui`, `smoke`). Se reemplaza por una app Cliff:
-  `commandmanager = app.CommandManager('kateto.cli')` que descubre comandos.
+  `commandmanager = app.CommandManager('hipotenusa.cli')` que descubre comandos.
 - **Plugins añaden comandos:** cada plugin registra su comando vía stevedore
-  (entry point `kateto.cli` o un registry interno). Un plugin declara su
+  (entry point `hipotenusa.cli` o un registry interno). Un plugin declara su
   comando como subclase de `cliff.command.Command` y Cliff lo expone como
-  subcomando (`kateto <plugin-cmd> ...`) sin tocar el core (filosofía P4).
+  subcomando (`hipotenusa <plugin-cmd> ...`) sin tocar el core (filosofía P4).
 - **Comandos core migrados a Cliff:** `config check`, `run`, `tui`, `smoke`
   pasan a ser clases `Command` propias del command manager.
 - Dependencias: agregar `cliff` (+ `stevedore`, `prettytable` si se usa tabla)
   al `pyproject.toml`. Mantener `uv`.
 - `__main__.py` queda como thin entrypoint que instancia la app Cliff y corre
   `run(argv)`.
-- **Realizado:** nuevo paquete `kateto/cli/` — `registry.py` (registro interno
+- **Realizado:** nuevo paquete `hipotenusa/cli/` — `registry.py` (registro interno
   `register_command()`/`all_commands()`, la opción "registry interno" del SPEC,
   sin entry points stevedore), `commands.py` (`ConfigCheck`, `Run`, `Smoke`,
   `Tui` como subclases de `cliff.command.Command`, con `--fixture` en
   `Smoke`/`Tui` y manejo de errores de config → exit 2), `app.py`
-  (`KatetoCommandManager` que carga del registry + `KatetoApp(App)` con
-  `deferred_help=True`). `kateto/__main__.py` es ahora un thin entrypoint
-  (`main()` → `KatetoApp().run(argv)`, sin argv → help, exit 0). Se añadió
-  `cliff==4.15.0` a `pyproject.toml` + `uv.lock`. `kateto/tests/test_cli_live.py`
+  (`HipotenusaCommandManager` que carga del registry + `HipotenusaApp(App)` con
+  `deferred_help=True`). `hipotenusa/__main__.py` es ahora un thin entrypoint
+  (`main()` → `HipotenusaApp().run(argv)`, sin argv → help, exit 0). Se añadió
+  `cliff==4.15.0` a `pyproject.toml` + `uv.lock`. `hipotenusa/tests/test_cli_live.py`
   actualizado (help expone `run`/`config check`; dispatch de `run`
-  monkeypatchea `kateto.cli.commands`). Suite completa: 153 passed.
+  monkeypatchea `hipotenusa.cli.commands`). Suite completa: 153 passed.
 
 ---
 
-## 3. Logging con loguru, visible en `kateto run`
+## 3. Logging con loguru, visible en `hipotenusa run`
 - **Estado:** ✅ HECHO (2026-08-04).
 - Migrar de `logging` estándar a **loguru** en todo el codebase.
 - Configurar logger de loguru al arrancar el runtime (`run_event_runtime` /
   `RuntimeOwner.start`) con salida a consola (y opcionalmente archivo en el
   config dir).
-- `kateto run` debe mostrar los logs en vivo (nivel configurable por
+- `hipotenusa run` debe mostrar los logs en vivo (nivel configurable por
   `config.toml`, default INFO).
 - Los errores por plugin (ej. bug 38 de Doktor) deben verse claros en el log,
   con plugin/evento/origen.
@@ -113,8 +113,8 @@ a qué responder. Doktor puede anotar "hay reuniones los martes"; el martes, un
   `plugins/system/external_mcp.py`) migrados a `from loguru import logger`
   (alias `log = logger`) con formatos `%s`/`%r`/`%d` → `{}`. Nuevo
   `_configure_logging()` en `run_mode.py` (sink stderr, nivel configurable) y
-  campo `kateto.log_level` (default `INFO`) en `KatetoSettings` +
-  `config/defaults/config.toml`. Verificado: `kateto run` muestra
+  campo `hipotenusa.log_level` (default `INFO`) en `HipotenusaSettings` +
+  `config/defaults/config.toml`. Verificado: `hipotenusa run` muestra
   `HTTP server started on 127.0.0.1:8080` vía loguru (INFO). Suite completa:
   153 passed.
 
@@ -127,15 +127,15 @@ ningún plugin por nombre. Hoy el ensamblado es hardcodeado; se vuelve
 declarativo por descubrimiento.
 
 ### Estado actual (lo que hay que cambiar)
-`kateto/run_mode.py` hoy importa por nombre y ensambla a mano:
+`hipotenusa/run_mode.py` hoy importa por nombre y ensambla a mano:
 ```python
-from kateto.core.workflow_engine import WorkflowEngine
-from kateto.plugins.system.external_mcp import ExternalMcpManager
-from kateto.plugins.system.mcp_server import McpEventServer, McpServerOptions
-from kateto.plugins.system.voice_manager import VoiceManager
-from kateto.plugins.system.http_server import HttpServer
-from kateto.plugins.connector.calendar import ... build_google_calendar_connector
-from kateto.voices.factory import create_voice
+from hipotenusa.core.workflow_engine import WorkflowEngine
+from hipotenusa.plugins.system.external_mcp import ExternalMcpManager
+from hipotenusa.plugins.system.mcp_server import McpEventServer, McpServerOptions
+from hipotenusa.plugins.system.voice_manager import VoiceManager
+from hipotenusa.plugins.system.http_server import HttpServer
+from hipotenusa.plugins.connector.calendar import ... build_google_calendar_connector
+from hipotenusa.voices.factory import create_voice
 ```
 El `RuntimeOwner` instancia `VoiceManager`, `WorkflowEngine`, el calendar y
 `HttpServer` explícitamente. Cualquier cambio en el set de plugins exige tocar
@@ -155,7 +155,7 @@ acopla el bootstrap al core.
    `build_event_runtime` en `live.py`).
 3. Los plugins "core" (VoiceManager, WorkflowEngine, HttpServer, MCP servers,
    calendar) se auto-registran vía el mismo mecanismo que los plugins de
-   `kateto/plugins/`, no por import explícito en `run_mode.py`.
+   `hipotenusa/plugins/`, no por import explícito en `run_mode.py`.
 
 ### Diseño propuesto
 - **Mecanismo de registro:** los plugins se registran a sí mismos en un registro
@@ -168,7 +168,7 @@ acopla el bootstrap al core.
       await manager.enable_plugin(plugin)
   ```
   Los plugins core (VoiceManager, WorkflowEngine, HttpServer) viven bajo
-  `kateto/plugins/system/` o `kateto/plugins/core/` descubrible, en vez de
+  `hipotenusa/plugins/system/` o `hipotenusa/plugins/core/` descubrible, en vez de
   instanciarse a mano en `run_mode.py`.
 - **Qué queda en `run_mode.py` (mínimo):** `RuntimeOwner` orquesta start/stop
   del `PluginManager` (no de plugins). `build_runtime_owner` ensambla manager +
@@ -190,18 +190,18 @@ acopla el bootstrap al core.
 
 ### Criterio de done (run_mode)
 - ✅ `run_mode.py` no importa ni instancia ningún plugin concreto en runtime:
-  los únicos imports a `kateto.plugins.*` quedan bajo `if TYPE_CHECKING:` y solo
+  los únicos imports a `hipotenusa.plugins.*` quedan bajo `if TYPE_CHECKING:` y solo
   anotan los campos de `RuntimeComponents`/propiedades (no se ejecutan ni
-  acoplan el ensamblado). Sin `from kateto.core.workflow_engine import WorkflowEngine`:
+  acoplan el ensamblado). Sin `from hipotenusa.core.workflow_engine import WorkflowEngine`:
   la propiedad `workflow_engine` resuelve por nombre
   (`plugin.name == "workflow_engine"`).
-- ✅ Agregar un plugin = crear archivo en `kateto/plugins/...` (o su
+- ✅ Agregar un plugin = crear archivo en `hipotenusa/plugins/...` (o su
   `create_plugins(ctx)`), sin tocar `run_mode.py`.
-- **Realizado (2026-08-04):** nuevo `kateto/plugins/system/__init__.py` con
+- **Realizado (2026-08-04):** nuevo `hipotenusa/plugins/system/__init__.py` con
   `create_plugins(ctx)` — el factory que `_scan_plugins` ya invocaba — construye
   los servicios no-plugin (ExternalMcpManager, McpEventServers internos,
   HttpServer config-gated) en `ctx.shared` y devuelve los plugins core siempre
-  activos (`VoiceManager`, `WorkflowEngine`) para discovery. `kateto/live.py`
+  activos (`VoiceManager`, `WorkflowEngine`) para discovery. `hipotenusa/live.py`
   crea el `PluginManager` ANTES de discovery y lo registra en
   `shared["manager"]`. `VoiceManager` es autónomo: eliminado el callback
   `on_voice_enable` de run_mode; el handler resuelve su `DiscoveryContext` vía
@@ -231,11 +231,11 @@ acopla el bootstrap al core.
 ---
 
 ## Criterio de done global
-- `uv run kateto run` no menciona Google; conectores Google eliminados y tests
+- `uv run hipotenusa run` no menciona Google; conectores Google eliminados y tests
   ajustados.
 - CLI migrado a Cliff (openstack/cliff); los plugins registran comandos vía
-  stevedore sin tocar el core. `kateto run|tui|config check|smoke` funcionan
+  stevedore sin tocar el core. `hipotenusa run|tui|config check|smoke` funcionan
   como comandos Cliff.
-- `uv run kateto run` muestra logs vía loguru en consola; bug 38 resuelto y
+- `uv run hipotenusa run` muestra logs vía loguru en consola; bug 38 resuelto y
   visible en log si recurre.
 - `run_mode.py` no importa plugins por nombre; nuevos plugins no lo tocan.

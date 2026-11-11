@@ -14,6 +14,9 @@ description: "Known Issues — índice de bugs"
 
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|
+| 142 | EOT gate descalibrado en datos reales: `wait` F1 0.21 (declara 0.645) y `no_response` en 88/99 turnos completos | Alta | `kateto/plugins/system/eot_gate.py`, `scripts/qa/build_eot_eval.py` | [142-eot-gate-descalibrado-en-datos-reales.md](./bugs/142-eot-gate-descalibrado-en-datos-reales.md) |
+| 141 | El EOT gate clasificaba los turnos IA→IA como si fueran del usuario y los descartaba (`SUPPRESS`) | Alta | `kateto/plugins/system/turn_gate.py` | [141-turnos-ia-ia-descartados-por-eot.md](./bugs/141-turnos-ia-ia-descartados-por-eot.md) |
+| 140 | `/mask` renderiza un avatar invisible (voz legacy `doktor`) y `/courtroom` sin viewport meta | Media | `visual_overlay/web/mask.html`, `courtroom.html` | [140-mask-avatar-invisible-y-courtroom-viewport.md](./bugs/140-mask-avatar-invisible-y-courtroom-viewport.md) |
 | 2 | Sin tests end-to-end | Media | `kateto/tests/` | [02-no-e2e-tests.md](./bugs/02-no-e2e-tests.md) — **parcialmente resuelto 2026-08-25**: e2e de workflows+tool-calling en `test_workflow_e2e.py`, autonomía en `test_autonomy_e2e.py`; el pipeline completo de audio real sigue sin cobertura |
 | 7 | Proyecto no runneable sin configuración externa | Alta | `README.md`, `config/defaults/` | [07-not-runnable.md](./bugs/07-not-runnable.md) |
 | 12 | TODO.md se escribe en voices/shared/ | Informativa | `plugins/executor/todo_list.py` | [12-todo-md-location.md](./bugs/12-todo-md-location.md) |
@@ -28,6 +31,12 @@ description: "Known Issues — índice de bugs"
 
 | # | Bug | Severidad | Componente | Archivo |
 |---|-----|-----------|------------|---------|
+| 139 | Dos plugins TTS prendidos sintetizan la misma frase en la misma lane (dos sample rates) | Media | `kateto/plugins/audio_output/player.py` | [139-dos-tts-activos-misma-lane.md](./bugs/139-dos-tts-activos-misma-lane.md) |
+| 138 | Las voces nunca hablaban solas: impulso apagado en config y descartado por el EOT gate | Alta | `kateto/plugins/system/voice_manager.py`, `turn_gate.py` | [138-impulso-autonomo-apagado-y-descartado-por-eot.md](./bugs/138-impulso-autonomo-apagado-y-descartado-por-eot.md) |
+| 137 | Overlay recortaba avatares con 5 voces (row se salía por los bordes, sides apilaba fuera de pantalla) | Media | `kateto/plugins/visual_overlay/web/index.html` | [137-overlay-clipping-con-5-voces.md](./bugs/137-overlay-clipping-con-5-voces.md) |
+| 136 | Visual overlay mostraba voces legacy (jane/doktor/conquest/whisperer) aunque estuvieran fuera de config | Media | `kateto/visual_overlay/web/index.html`, `kateto/plugins/system/http_server.py` | [136-overlay-voces-legacy-hardcodeadas.md](./bugs/136-overlay-voces-legacy-hardcodeadas.md) |
+| 135 | `eot_gate` con `etapa2=ft` fallaba fail-open: hijo sin `transformers` y 1 s de timeout no cubría el cold start | Alta | `kateto/plugins/system/eot_gate.py` | [135-eot-gate-fail-open-sin-transformers.md](./bugs/135-eot-gate-fail-open-sin-transformers.md) |
+| 134 | `kateto run` muere con `'PluginSettings' object has no attribute 'token'` | Alta | `kateto/plugins/system/__init__.py` | [134-http-server-token-attr-error.md](./bugs/134-http-server-token-attr-error.md) |
 | 1 | whisper-server no usa GPU correctamente | Media | `kateto/providers/whisper.py` | [01-whisper-gpu.md](./bugs/01-whisper-gpu.md) |
 | 61 | SchedulerPlugin nunca se ensambla en el runtime y dispara payloads dict que el bus rechaza | Alta | `plugins/executor/__init__.py`, `plugins/executor/scheduler.py` | [61-scheduler-never-wired-and-dict-payload-crash.md](./bugs/61-scheduler-never-wired-and-dict-payload-crash.md) |
 | 28 | Workflow de proyecto nuevo no se inicia y TUI filtra eventos | Alta | `classifier.py`, `tui.py` | [28-workflow-discovery-and-tui-event-filter.md](./bugs/28-workflow-discovery-and-tui-event-filter.md) |

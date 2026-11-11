@@ -5,19 +5,19 @@ description: "Spec de implementación — 2026 08 13 Ops Ux."
 
 # Spec: Ops UX (setup wizard + doctor + trace del bus)
 
-Fecha: 2026-08-13 | Worktree: wt/ops-ux | Fuente: harness research (brainstorm-kateto.md §C1/C2/C3/H7)
+Fecha: 2026-08-13 | Worktree: wt/ops-ux | Fuente: harness research (brainstorm-hipotenusa.md §C1/C2/C3/H7)
 
 ## Problem Statement
 
-Configurar y debuggear Kateto es manual y frustrante: hay que saber qué modelos hay cargados en :11434, si los servers (whisper, TTS) están vivos, si la config TOML es válida, y cazar bugs de eventos leyendo logs planos. El setup inicial (modelos, endpoints, keys) no tiene asistencia y los errores aparecen recién en runtime.
+Configurar y debuggear Hipotenusa es manual y frustrante: hay que saber qué modelos hay cargados en :11434, si los servers (whisper, TTS) están vivos, si la config TOML es válida, y cazar bugs de eventos leyendo logs planos. El setup inicial (modelos, endpoints, keys) no tiene asistencia y los errores aparecen recién en runtime.
 
 ## Solution
 
-Tres comandos CLI que matan el setup manual y el debug a ciegas: `kateto setup` (wizard que genera la config desde defaults + respuestas), `kateto doctor` (chequea modelos/servers/config/keys y reporta qué falta), y `kateto run --trace` (log de eventos del bus con timestamp y delta, para ver el flujo en vivo). Todo leyendo la config de usuario existente con tomllib y sin imprimir secretos.
+Tres comandos CLI que matan el setup manual y el debug a ciegas: `hipotenusa setup` (wizard que genera la config desde defaults + respuestas), `hipotenusa doctor` (chequea modelos/servers/config/keys y reporta qué falta), y `hipotenusa run --trace` (log de eventos del bus con timestamp y delta, para ver el flujo en vivo). Todo leyendo la config de usuario existente con tomllib y sin imprimir secretos.
 
 ## User Stories
 
-1. Como usuario, quiero configurar Kateto respondiendo preguntas, para no editar TOML a mano.
+1. Como usuario, quiero configurar Hipotenusa respondiendo preguntas, para no editar TOML a mano.
 2. Como usuario, quiero un comando que me diga qué falta (modelos, servers, keys), para arreglarlo en un paso.
 3. Como desarrollador, quiero ver el flujo de eventos con tiempos, para encontrar dónde se traba la voz.
 4. Como usuario, quiero que los secretos nunca se impriman en pantalla, para no exponer mis keys.
@@ -26,16 +26,16 @@ Tres comandos CLI que matan el setup manual y el debug a ciegas: `kateto setup` 
 
 ## Implementation Decisions
 
-- **`kateto setup`**: wizard interactivo (CLI) que: lee defaults versionados, pregunta por modelo LLM/TTS/ASR, endpoints, y escribe la config de usuario (`config.toml`) con deep-merge (no pisa config existente; las keys van a un archivo de secrets que la config referencia). No reescribe config que el usuario ya tenga.
-- **`kateto doctor`**: chequea en un solo reporte: (a) config válida (tomllib, contra el schema), (b) modelos en :11434 (existen, cargados, tool-calling si aplica), (c) servers de whisper/TTS accesibles, (d) VAD presente, (e) keys presentes SIN imprimirlas. Exit code no-cero si algo falla, mensajes accionables.
-- **`kateto run --trace`**: cada evento del bus se loguea con timestamp + delta desde el evento anterior (y el dispatch source→targets). Se puede filtrar por evento/voz (`--trace-events`, `--trace-voice`). Los logs del runtime existentes no cambian su formato default.
+- **`hipotenusa setup`**: wizard interactivo (CLI) que: lee defaults versionados, pregunta por modelo LLM/TTS/ASR, endpoints, y escribe la config de usuario (`config.toml`) con deep-merge (no pisa config existente; las keys van a un archivo de secrets que la config referencia). No reescribe config que el usuario ya tenga.
+- **`hipotenusa doctor`**: chequea en un solo reporte: (a) config válida (tomllib, contra el schema), (b) modelos en :11434 (existen, cargados, tool-calling si aplica), (c) servers de whisper/TTS accesibles, (d) VAD presente, (e) keys presentes SIN imprimirlas. Exit code no-cero si algo falla, mensajes accionables.
+- **`hipotenusa run --trace`**: cada evento del bus se loguea con timestamp + delta desde el evento anterior (y el dispatch source→targets). Se puede filtrar por evento/voz (`--trace-events`, `--trace-voice`). Los logs del runtime existentes no cambian su formato default.
 - **Secrets**: la lectura de config siempre con tomllib (la api_key puede estar varias líneas abajo de su cabecera); display enmascarado (ej. `sk-ef2...6599`).
 
 ## Testing Decisions
 
 - Seam principal: las funciones de diagnóstico de doctor (puras, reciben un "estado del entorno" inyectable). Seam secundario: el formateo del trace.
 - Un buen test: config inválida → doctor falla con mensaje claro; modelo ausente en :11434 → reportado; keys presentes → enmascaradas; el trace emite un evento por línea con delta creciente.
-- Prior art: tests de CLI (kateto/cli), tests de config.
+- Prior art: tests de CLI (hipotenusa/cli), tests de config.
 
 ## Out of Scope
 
@@ -46,4 +46,4 @@ Tres comandos CLI que matan el setup manual y el debug a ciegas: `kateto setup` 
 ## Further Notes
 
 - Regla del usuario: la config es autoritativa; el setup NO la reescribe si existe, solo la completa.
-- Ver brainstorming-kateto.md §C1/C2/C3/H7.
+- Ver brainstorming-hipotenusa.md §C1/C2/C3/H7.

@@ -1,6 +1,6 @@
 ---
 title: Design Decisions
-description: Design Decisions — documentación de Kateto.
+description: Design Decisions — documentación de Hipotenusa.
 ---
 
 # Design Decisions
@@ -29,7 +29,7 @@ All runtime dependencies are deliberate choices, not convenience bloat:
 Voice agents are created from configuration + data files via a factory, not hand-written Python subclasses.
 
 **Current state (completed migration):**
-- `kateto/voices/factory.py` reads `VoiceProfile` dicts from `_PROFILES` to create voices
+- `hipotenusa/voices/factory.py` reads `VoiceProfile` dicts from `_PROFILES` to create voices
 - No Python subclass scanning — all 3 voices (Jane, Doktor, Conquest) are declarative
 - New voices are added by creating a config section + `SOUL.md` + `VoiceProfile` entry
 

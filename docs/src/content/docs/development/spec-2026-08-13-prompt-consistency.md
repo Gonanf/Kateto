@@ -5,11 +5,11 @@ description: "Spec de implementación — 2026 08 13 Prompt Consistency."
 
 # Spec: Prompt estable + SOUL caching por voz
 
-Fecha: 2026-08-13 | Worktree: wt/prompt-consistency | Fuente: harness research (brainstorm-kateto.md §A1/A2/G2/H1/D2)
+Fecha: 2026-08-13 | Worktree: wt/prompt-consistency | Fuente: harness research (brainstorm-hipotenusa.md §A1/A2/G2/H1/D2)
 
 ## Problem Statement
 
-Las voces de Kateto (Jane, Doktor, Conquest, Whisperer) responden de forma inconsistente: el system prompt (SOUL) se arma de nuevo en cada turno mezclando personalidad, herramientas y contexto volátil, lo que invalida cualquier caché de prefijo del LLM y encarece/lentece cada llamada. Además, la mutación del SOUL a mitad de conversación (voice_soul_manager escribe SOUL.md en caliente) produce deriva de comportamiento y respuestas impredecibles.
+Las voces de Hipotenusa (Jane, Doktor, Conquest, Whisperer) responden de forma inconsistente: el system prompt (SOUL) se arma de nuevo en cada turno mezclando personalidad, herramientas y contexto volátil, lo que invalida cualquier caché de prefijo del LLM y encarece/lentece cada llamada. Además, la mutación del SOUL a mitad de conversación (voice_soul_manager escribe SOUL.md en caliente) produce deriva de comportamiento y respuestas impredecibles.
 
 ## Solution
 
@@ -30,7 +30,7 @@ Cada voz construye su system prompt UNA vez al spawnearse, con un prefijo estric
 - **ContextBuilder por voz**: módulo único que arma el contexto LLM de cada voz en secciones ordenadas: `[SOUL estable] -> [Tool schemas] -> [Memoria durable] -> [Historial reciente] -> [Contexto volátil]`. Toda generación de prompt pasa por él.
 - **Prompt congelado por spawn**: el system prompt se construye una sola vez al crear la VoiceAgent (SOUL + capabilities + guidance). El rebuild solo ocurre ante compresión de contexto o entre sesiones, nunca por turno.
 - **SOUL de solo lectura durante la sesión**: voice_soul_manager y cualquier mutación escriben a un snapshot versionado (ZODB existente) que se aplica en el próximo spawn; la voz viva nunca ve su SOUL cambiar.
-- **Prompt caching**: `prompt_cache_key` fijo por voz (`kateto-voice-<voice_id>`) + headers de sesión (`x-session-id`, `x-session-affinity`) en los providers OpenAI-compatibles que lo soporten. Requests de fondo (clasificador EXECUTE/IGNORE, resúmenes) usan cache off o namespace distinto.
+- **Prompt caching**: `prompt_cache_key` fijo por voz (`hipotenusa-voice-<voice_id>`) + headers de sesión (`x-session-id`, `x-session-affinity`) en los providers OpenAI-compatibles que lo soporten. Requests de fondo (clasificador EXECUTE/IGNORE, resúmenes) usan cache off o namespace distinto.
 - **Config por voz**: `max_tokens`, retries y timeout configurables por voz en config (hoy hardcodeados en código), respetando la config de usuario existente (tomllib, sin reescribir).
 
 ## Testing Decisions
@@ -49,4 +49,4 @@ Cada voz construye su system prompt UNA vez al spawnearse, con un prefijo estric
 
 - Constraint del usuario: hoy las voces usan EdgeTTS o Boson TTS (Zonos2 vendrá después) — esto no afecta al prompt, pero el caching del TTS no es parte de esta spec.
 - El voice_manager y el clasificador NO cambian su contrato de eventos.
-- Ver brainstorming-kateto.md §A1/A2/G2/H1 para la fundamentación.
+- Ver brainstorming-hipotenusa.md §A1/A2/G2/H1 para la fundamentación.

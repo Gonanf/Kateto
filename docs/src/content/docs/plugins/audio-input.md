@@ -1,6 +1,6 @@
 ---
 title: Audio Input
-description: Audio Input — documentación de Kateto.
+description: Audio Input — documentación de Hipotenusa.
 ---
 
 # Audio Input Plugins

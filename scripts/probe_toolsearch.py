@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Probe del wire ToolSearch del REPO real (kateto/voices/tools.py, KatetoToolset).
+"""Probe del wire ToolSearch del REPO real (hipotenusa/voices/tools.py, HipotenusaToolset).
 
 Contra un echo server (sin inferencia) valida que, con `defer_loading=True` y la
 capability ToolSearch auto-inyectada por pydantic_ai:
@@ -61,7 +61,7 @@ def main() -> int:
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
 
-    from kateto.voices.tools import ALWAYS_TOOLS, KatetoToolset, VoiceToolExecutor
+    from hipotenusa.voices.tools import ALWAYS_TOOLS, HipotenusaToolset, VoiceToolExecutor
 
     srv = HTTPServer(("127.0.0.1", 0), ScriptedEcho)
     port = srv.server_address[1]
@@ -74,7 +74,7 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         executor = VoiceToolExecutor(config_dir=Path(tmp))
-        toolset = KatetoToolset(executor).toolset
+        toolset = HipotenusaToolset(executor).toolset
         model = OpenAIChatModel(
             model_name="echo",
             provider=OpenAIProvider(base_url=f"http://127.0.0.1:{port}/v1", api_key="sk-probe"),

@@ -14,9 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from kateto.core.config import PluginSettings
-from kateto.core.event import AudioData, TranscriptionData
-from kateto.plugins.audio_processor.parakeet import ParakeetAudioProcessor
+from hipotenusa.core.config import PluginSettings
+from hipotenusa.core.event import AudioData, TranscriptionData
+from hipotenusa.plugins.audio_processor.parakeet import ParakeetAudioProcessor
 
 V = Path.home() / ".local/share/piper/voices"
 A = V / "es_AR-daniela-high.onnx"

@@ -11,7 +11,7 @@ wheels/
 docs/compose/
 # Virtual environments
 .venv
-kateto-wts/
+hipotenusa-wts/
 
 # Logs & scratch
 *.log
@@ -24,7 +24,7 @@ log.txt
 .claude/
 .cursor/
 
-# Starlight docs site (Kateto/docs)
+# Starlight docs site (Hipotenusa/docs)
 docs/node_modules/
 docs/dist/
 docs/.astro/
@@ -34,3 +34,10 @@ docs/bun.lock
 mempalace.yaml
 entities.json
 
+assets/live2d/
+assets/entrevista/
+# artefactos de runs y datos locales
+out/
+.hermes/
+Documentos/
+.hermes-tmp.*

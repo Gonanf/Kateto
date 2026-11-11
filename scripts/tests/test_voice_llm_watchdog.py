@@ -110,7 +110,7 @@ class TestVoiceLLMWatchdog(unittest.TestCase):
     def test_estado_es_atomico(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             estado_path = Path(tmp_dir) / "estado.json"
-            data = {"ultimo_reinicio": 1729774000.5, "unit": "kateto-voice-llm.service"}
+            data = {"ultimo_reinicio": 1729774000.5, "unit": "hipotenusa-voice-llm.service"}
             watchdog.escribir_estado(estado_path, data)
             leido = watchdog.leer_estado(estado_path)
             self.assertEqual(leido, data)

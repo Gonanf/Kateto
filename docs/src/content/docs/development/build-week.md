@@ -1,11 +1,11 @@
 ---
 title: Build Week
-description: Build Week — documentación de Kateto.
+description: Build Week — documentación de Hipotenusa.
 ---
 
 # Build Week Requirements
 
-Kateto targets **Work and Productivity**. The public judge path is fixture-first, while live model/audio providers are optional deployment configuration. See [`free-publishing-plan.md`](./free-publishing-plan.md) and [`final-assessment.md`](./final-assessment.md) for the release plan, safety boundaries, and evidence of the work completed.
+Hipotenusa targets **Work and Productivity**. The public judge path is fixture-first, while live model/audio providers are optional deployment configuration. See [`free-publishing-plan.md`](./free-publishing-plan.md) and [`final-assessment.md`](./final-assessment.md) for the release plan, safety boundaries, and evidence of the work completed.
 
 ## Deliverables
 
@@ -37,8 +37,8 @@ Kateto targets **Work and Productivity**. The public judge path is fixture-first
 
 | Segment | Duration | Content |
 |---|---|---|
-| What is Kateto | 30s | Multi-agent voice assistant where AI agents collaborate for project management |
-| Conversation loop | 60s | Talk to Kateto → Jane/Doktor/Conquest respond → visible in TUI → TTS output |
+| What is Hipotenusa | 30s | Multi-agent voice assistant where AI agents collaborate for project management |
+| Conversation loop | 60s | Talk to Hipotenusa → Jane/Doktor/Conquest respond → visible in TUI → TTS output |
 | Live events | 30s | TUI showing plugins, events, bus state in real time |
 | Interruption | 20s | Interrupt the system while speaking → instant response |
 | Real work | 30s | Doktor creates a task, Conquest updates progress, reflected in the system |

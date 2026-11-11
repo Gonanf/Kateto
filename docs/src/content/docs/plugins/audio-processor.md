@@ -1,6 +1,6 @@
 ---
 title: Audio Processor
-description: Audio Processor — documentación de Kateto.
+description: Audio Processor — documentación de Hipotenusa.
 ---
 
 # Audio Processor Plugins

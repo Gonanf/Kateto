@@ -1,31 +1,31 @@
 ---
 title: Overview
-description: Overview — documentación de Kateto.
+description: Overview — documentación de Hipotenusa.
 ---
 
 # Voices Overview
 
-Voices are AI agents created from configuration + data. They are the "people" of Kateto — each with a distinct personality, role, and capabilities.
+Voices are AI agents created from configuration + data. They are the "people" of Hipotenusa — each with a distinct personality, role, and capabilities.
 
 ## Factory-Based Discovery
 
-Voices are created by `kateto/voices/factory.py` using `VoiceProfile` dicts from the `_PROFILES` registry. No Python subclass scanning.
+Voices are created by `hipotenusa/voices/factory.py` using `VoiceProfile` dicts from the `_PROFILES` registry. No Python subclass scanning.
 
 | Location | What It Contains |
 |---|---|
-| `kateto/voices/factory.py` | `VoiceProfile` definitions and `create_voice()` factory |
-| `~/.config/kateto/voices/{name}/` | Per-voice data files (SOUL, JOURNAL, MEMORIES — mutable) |
+| `hipotenusa/voices/factory.py` | `VoiceProfile` definitions and `create_voice()` factory |
+| `~/.config/hipotenusa/voices/{name}/` | Per-voice data files (SOUL, JOURNAL, MEMORIES — mutable) |
 
 **Discovery flow:**
 1. `create_voice(name)` looks up `VoiceProfile` in `_PROFILES` dict
 2. Profile provides: `voice_id`, `display_name`, `role`, `system_prompt`
 3. `VoiceAgent` is instantiated with profile + `VoiceMemory` for data storage
-4. Optional: `VoiceToolExecutor` + `KatetoToolset` for pydantic-ai tool-calling
+4. Optional: `VoiceToolExecutor` + `HipotenusaToolset` for pydantic-ai tool-calling
 
 **Adding a new voice:**
 1. Add `VoiceProfile` entry to `_PROFILES` in `factory.py`
 2. Create config section `[voice.<name>]` in `config.toml`
-3. Create `~/.config/kateto/voices/<name>/SOUL.md`
+3. Create `~/.config/hipotenusa/voices/<name>/SOUL.md`
 
 ## Processing Mode
 
@@ -33,7 +33,7 @@ Voices are **batch** plugins: they accumulate events in their queue and only gen
 
 ## Voice Data Files
 
-Each voice has three files in `config/kateto/voices/{name}/`:
+Each voice has three files in `config/hipotenusa/voices/{name}/`:
 
 | File | Purpose | Size Limit | Mutation |
 |---|---|---|---|

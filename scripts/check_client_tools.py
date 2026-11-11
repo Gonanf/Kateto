@@ -13,7 +13,7 @@ from typing import Any
 
 sys.path.insert(0, ".")
 
-from kateto.plugins.client_tools.client_tools_plugin import (  # noqa: E402
+from hipotenusa.plugins.client_tools.client_tools_plugin import (  # noqa: E402
     CLIENT_TOOL_DEFS,
     ClientRegisterData,
     ClientToolsPlugin,

@@ -2,7 +2,7 @@
 
 ## 1. Qué se implementó
 
-Se implementó el mecanismo de durabilidad y recuperación para la máscara (`/mask`, `kateto/plugins/visual_overlay/web/mask.html`) ante desconexiones de WebSocket. El sistema almacena en un buffer circular (`TurnJournal`) los frames de audio transmitidos en el broadcast del plugin `VisualOverlayPlugin`, estampando un identificador de secuencia (`seq`) global monótono y un identificador de turno (`turn_id`).
+Se implementó el mecanismo de durabilidad y recuperación para la máscara (`/mask`, `hipotenusa/plugins/visual_overlay/web/mask.html`) ante desconexiones de WebSocket. El sistema almacena en un buffer circular (`TurnJournal`) los frames de audio transmitidos en el broadcast del plugin `VisualOverlayPlugin`, estampando un identificador de secuencia (`seq`) global monótono y un identificador de turno (`turn_id`).
 
 Al desconectarse el socket cliente, el reproductor de audio no se detiene, permitiendo que el audio ya agendado continúe sonando sin interrupción. Al restablecerse la conexión, el cliente solicita mediante un mensaje de control los frames faltantes a partir del último `seq` recibido (`mask_resume`). El servidor responde con el lote retenido (`audio_resume`), el cliente deduplica y reproduce en orden los frames restantes del turno, alcanzando el frame con `final: true` sin intervención del usuario.
 
@@ -57,35 +57,35 @@ La guarda central de durabilidad radica en que al dispararse `ws.onclose`, el cl
 
 ### Gate 1 (Python / pytest)
 Comando:
-`PYTHONPATH=$PWD /home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/bin/python -m pytest kateto/tests/test_mask_turn_durability.py kateto/tests/test_mask_audio_bridge.py kateto/tests/test_mask_page.py kateto/tests/test_mask_state_snapshots.py -q`
+`PYTHONPATH=$PWD /home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/bin/python -m pytest hipotenusa/tests/test_mask_turn_durability.py hipotenusa/tests/test_mask_audio_bridge.py hipotenusa/tests/test_mask_page.py hipotenusa/tests/test_mask_state_snapshots.py -q`
 
 Salida:
 ```
 ...............................................                          [100%]
 =============================== warnings summary ===============================
-../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
-../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
-../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
-../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
-../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
-  /home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
+../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
+../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
+../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
+../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
+../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488
+  /home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/torch/jit/_script.py:1488: DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`.
     warnings.warn(
 
-../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365
-../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365
-  /home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365
+../../../../../../home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365
+  /home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
     warnings.warn(
 
-kateto/tests/test_mask_audio_bridge.py::test_end_to_end_websocket_roundtrip
-  /home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/websockets/legacy/__init__.py:6: DeprecationWarning: websockets.legacy is deprecated; see https://websockets.readthedocs.io/en/stable/howto/upgrade.html for upgrade instructions
+hipotenusa/tests/test_mask_audio_bridge.py::test_end_to_end_websocket_roundtrip
+  /home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/websockets/legacy/__init__.py:6: DeprecationWarning: websockets.legacy is deprecated; see https://websockets.readthedocs.io/en/stable/howto/upgrade.html for upgrade instructions
     warnings.warn(  # deprecated in 14.0 - 2024-11-09
 
-kateto/tests/test_mask_audio_bridge.py::test_end_to_end_websocket_roundtrip
-  /home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/uvicorn/protocols/websockets/websockets_impl.py:40: UvicornDeprecationWarning: The `websockets` implementation is deprecated, and `--ws websockets` will point at the `websockets-sansio` implementation in a future release. Use `--ws websockets-sansio` or `--ws auto` to switch now.
+hipotenusa/tests/test_mask_audio_bridge.py::test_end_to_end_websocket_roundtrip
+  /home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/uvicorn/protocols/websockets/websockets_impl.py:40: UvicornDeprecationWarning: The `websockets` implementation is deprecated, and `--ws websockets` will point at the `websockets-sansio` implementation in a future release. Use `--ws websockets-sansio` or `--ws auto` to switch now.
     warnings.warn(
 
-kateto/tests/test_mask_audio_bridge.py::test_end_to_end_websocket_roundtrip
-  /home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/lib/python3.12/site-packages/websockets/legacy/server.py:1178: DeprecationWarning: remove second argument of ws_handler
+hipotenusa/tests/test_mask_audio_bridge.py::test_end_to_end_websocket_roundtrip
+  /home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/lib/python3.12/site-packages/websockets/legacy/server.py:1178: DeprecationWarning: remove second argument of ws_handler
     warnings.warn("remove second argument of ws_handler", DeprecationWarning)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -95,7 +95,7 @@ kateto/tests/test_mask_audio_bridge.py::test_end_to_end_websocket_roundtrip
 
 ### Gate 2 (Node.js / node:test)
 Comando:
-`node --test kateto/plugins/visual_overlay/web/mask-durability.test.mjs kateto/plugins/visual_overlay/web/kateto-offline.test.mjs kateto/plugins/visual_overlay/web/mask-viseme-bridge.test.mjs`
+`node --test hipotenusa/plugins/visual_overlay/web/mask-durability.test.mjs hipotenusa/plugins/visual_overlay/web/hipotenusa-offline.test.mjs hipotenusa/plugins/visual_overlay/web/mask-viseme-bridge.test.mjs`
 
 Salida:
 ```

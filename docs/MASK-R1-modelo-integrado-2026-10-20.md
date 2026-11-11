@@ -33,7 +33,7 @@ Servicios vivos ahora (verificado con `ss -ltnp`):
 | Puerto | Qué | Proceso |
 |---|---|---|
 | 8098 | ASR OpenAI-compatible | `crispasr`, backend `parakeet`, modelo `parakeet-ultra-q8_0.gguf` (674 MB) |
-| 8091 | clasificador de intención | python (Kateto) |
+| 8091 | clasificador de intención | python (Hipotenusa) |
 | 8092 | LLM de voz | `llama-server` |
 | 11434 | router LLM local | `llama-server` |
 | 8095/8096/8097/8099 | otros sidecars (no relevados) | — |
@@ -97,7 +97,7 @@ corre en la PC — pero no escribas el plan como si fuera el packed de 1.58-bit.
 
 **2.3 `parakeet-tdt-0.6b-v3` no auto-detecta idioma en nuestro stack.** El model card de NVIDIA dice
 auto-detección sobre 25 idiomas; `transcribe.cpp` documenta **"no auto-detect — language hint
-required"**. Kateto ya lo tiene bien (`language = "es"` en `[plugin.audio_processor_parakeet]`). Si
+required"**. Hipotenusa ya lo tiene bien (`language = "es"` en `[plugin.audio_processor_parakeet]`). Si
 alguien "limpia" esa línea, el WER se va a las nubes y va a parecer un problema de acento.
 
 ---
@@ -123,7 +123,7 @@ alguien "limpia" esa línea, el WER se va a las nubes y va a parecer un problema
 | Silero VAD (ya en uso) | habla/no habla, 10–30 ms | agnóstico | necesario, insuficiente: no distingue pausa de fin de turno |
 | **Tyger** | estado de turno + hazard + barge-in + backchannel | **inglés** | la **arquitectura** es la respuesta, los pesos no |
 | SoulX-Duplug 0.6B | semantic VAD + ASR streaming, 240 ms | zh/en | misma conclusión |
-| gate semántico de Kateto (`audio_input/base.py`) | interrupt semántico propio, ya implementado | es | el caballo de batalla actual; es el lugar donde enchufar la cabeza entrenada |
+| gate semántico de Hipotenusa (`audio_input/base.py`) | interrupt semántico propio, ya implementado | es | el caballo de batalla actual; es el lugar donde enchufar la cabeza entrenada |
 
 ### 3.3 Clasificación (2 etapas, como hay que leerla)
 
@@ -142,7 +142,7 @@ No hay nada que comprar acá. Lo que hay que hacer es que la etapa 1 exista y se
 | **Piper `es_AR-daniela-high`** (instalado en `~/.local/share/piper/voices/`) | rioplatense real, s aspirada | por frase (chunking propio) | CPU, ~0 VRAM | **default del mask** |
 | Zonos :8093 (config `enabled = true`, `stream = true`) | multilingüe, clonación zero-shot | sí | GPU/CPU | mejor timbre, más pesado; hoy no está escuchando |
 | **Qwen3-TTS 0.6B / 1.7B** (Apache-2.0, ene-2026) | 10 idiomas **incluye es**, perfiles dialectales | **97 ms primer paquete**, clonación con 3 s | ~2,7 GB VRAM idle (0.6B) | el experimento que vale: clone + streaming; **NO VERIFICADO** si hay camino GGUF/CPU |
-| NeuTTS nano es (hay muestra en `kateto-tts/neutts-nano-es.wav`) | sí | ? | CPU | ya probado, sin números |
+| NeuTTS nano es (hay muestra en `hipotenusa-tts/neutts-nano-es.wav`) | sí | ? | CPU | ya probado, sin números |
 
 ### 3.5 El "modelo único" (audio in + audio out + razonamiento)
 
@@ -174,7 +174,7 @@ elegir una base que ya tenga encoder/decoder de audio, y ninguna de 8–24B lo t
 
 ## 4. Por qué la cascada no es el problema (y qué sí lo es)
 
-Lo que ya está resuelto en Kateto, verificado leyendo el código y el config:
+Lo que ya está resuelto en Hipotenusa, verificado leyendo el código y el config:
 
 - `audio_input_mask` con Silero VAD, `interrupt_on_vad`, `turn_silence_timeout` y — esto es lo
   importante — un **gate semántico de interrupción** (`semantic interrupt gate`) más discriminador de
@@ -266,7 +266,7 @@ migrar a un omni. Ninguna de las tres paga su costo con los números de §1.
 
 ---
 
-## 8. Estado de Kateto-train: qué faltaba para cerrarlo
+## 8. Estado de Hipotenusa-train: qué faltaba para cerrarlo
 
 Relevado en `/run/media/chaos/terciario/proyectos/kateto-train` (git al 2026-10-17, último commit
 `8eee078 fix(kaggle): inicializar el submodulo RWKV-PEFT antes de entrenar`).
@@ -275,24 +275,24 @@ Relevado en `/run/media/chaos/terciario/proyectos/kateto-train` (git al 2026-10-
 
 | Artefacto | Tamaño / fecha |
 |---|---|
-| `out/kateto-rwkv29-merged.pth` (2.9B fusionado) | 8,7 GB · 2026-09-05 |
-| `out/kateto-rwkv29-f16.gguf` / `-Q4_K_M.gguf` | 5,6 GB / 1,8 GB · 2026-09-05 |
-| `out/quants/kateto29-Q6_K.gguf` / `-Q8_0.gguf` | 2,6 / 3,3 GB · 2026-09-12 |
+| `out/hipotenusa-rwkv29-merged.pth` (2.9B fusionado) | 8,7 GB · 2026-09-05 |
+| `out/hipotenusa-rwkv29-f16.gguf` / `-Q4_K_M.gguf` | 5,6 GB / 1,8 GB · 2026-09-05 |
+| `out/quants/hipotenusa29-Q6_K.gguf` / `-Q8_0.gguf` | 2,6 / 3,3 GB · 2026-09-12 |
 | estados de voz `out/rwkv_states/{jane,seco-…,streamer,whisperer}/` | 6,3 MB cada uno · 2026-09-06 |
 | base oficial `base/rwkv7-g1j-2.9b-…pth` | 5,9 GB |
 
 **Lo que falta, y es lo que bloquea el cierre:**
 
 1. **El 1.5B no existe.** Los dos checkpoints subidos desde Kaggle están en **0 bytes**:
-   `/run/media/chaos/secundario/kateto-kaggle-out/kateto-ckpt/kateto-1.5b-v2.pth` (27-sep) y
-   `kateto-1.5b-seco.pth` (08-oct). Un `ls -la` alcanza para verlo. O sea: la cadena se cortó en la
+   `/run/media/chaos/secundario/hipotenusa-kaggle-out/hipotenusa-ckpt/hipotenusa-1.5b-v2.pth` (27-sep) y
+   `hipotenusa-1.5b-seco.pth` (08-oct). Un `ls -la` alcanza para verlo. O sea: la cadena se cortó en la
    subida, no en el entrenamiento.
 2. **El entrenamiento local no pasa de la época 1.** `out/entrenar-local-1.5b.log`:
    `torch.OutOfMemoryError: HIP out of memory … total capacity of 3.98 GiB` en el `cross_entropy`;
    `out/entrenar-orpo-1.5b.log`: mismo OOM en `_logp_medio` del paso ORPO. Coincide con el handoff
    del 15-oct: la época 1 cierra sana y la 2 muere al arrancar.
-3. **El hilo abierto es un NaN en ORPO.** `kaggle_orpo/kateto_orpo_v7_2xt4.ipynb` (18-oct) existe para
-   eso: corre sobre `kateto-v7-sft` (`rwkv-0.pth`, 3.055.569.567 bytes chequeados a mano) con
+3. **El hilo abierto es un NaN en ORPO.** `kaggle_orpo/hipotenusa_orpo_v7_2xt4.ipynb` (18-oct) existe para
+   eso: corre sobre `hipotenusa-v7-sft` (`rwkv-0.pth`, 3.055.569.567 bytes chequeados a mano) con
    instrumentación `[orpo-diag]` por paso (`tot_finite`, `lw_finite`), corrida B en fp32 si A da NaN,
    y un veredicto automático de tres estados ("LIMPIO EN BF16" / "BF16 NA el NaN, FP32 LIMPIO" / "NaN").
    **No pude verificar si esa corrida se ejecutó ni su veredicto**: no hay log de ese kernel en disco
@@ -301,7 +301,7 @@ Relevado en `/run/media/chaos/terciario/proyectos/kateto-train` (git al 2026-10-
    `eval_v2` da 0 silencios sobre 30 con un modelo que emite papilla fluida. Sin held-out de contenido
    verificable, "terminado" no significa nada aunque el checkpoint exista.
 
-**Resumen en una frase:** a Kateto-train no le faltan datos ni arquitectura; le falta **una corrida de
+**Resumen en una frase:** a Hipotenusa-train no le faltan datos ni arquitectura; le falta **una corrida de
 ORPO que no muera en NaN ni en OOM y una subida que no llegue en 0 bytes**, más una vara que distinga
 registro de conocimiento. Las tres cosas están identificadas y dos de las tres ya tienen el
 instrumento escrito.

@@ -15,7 +15,7 @@ Se escribieron los siguientes 15 archivos bajo `mask/hardware/`:
 5. `mask/hardware/firmware/README.md`: Instrucciones de compilacion nativa, flasheo con `arduino-cli`, configuracion de board y tabla pin-actuador.
 6. `mask/hardware/tools/mask_servo_cli.py`: CLI de host (Python 3 stdlib) con modos `--sim`, `--port`, `--cmd`, `--script` y validacion estricta con clamping.
 7. `mask/hardware/tools/test_cli.py`: Suite de 6 tests pytest para el CLI.
-8. `mask/hardware/docs/PROTOCOL.md`: Especificacion de protocolo serie 115200 8N1, JSON line-delimited, watchdog, latencia, mapeo desde visemas de Kateto y diseno BLE diferido (NUS).
+8. `mask/hardware/docs/PROTOCOL.md`: Especificacion de protocolo serie 115200 8N1, JSON line-delimited, watchdog, latencia, mapeo desde visemas de Hipotenusa y diseno BLE diferido (NUS).
 9. `mask/hardware/docs/HARDWARE.md`: Guia de conexion electrica, rail dedicado de 5V 2A para servos, desacoplo (470 µF + 100 nF), circuito de solenoide con IRLZ44N y flyback 1N4007, y BOM con precios.
 10. `mask/hardware/cad/params.scad`: Dimensiones y tolerancias parametricas para micro-servos MG90S, solenoide JF-0530B y tornilleria M2/M3.
 11. `mask/hardware/cad/jaw_mount.scad`: Soporte imprimible FDM para servo de mandibula.

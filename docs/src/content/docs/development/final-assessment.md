@@ -7,20 +7,20 @@ description: "Final assessment del build week"
 
 **Assessment date:** 2026-07-20
 **Track:** Work and Productivity
-**Project:** Kateto
+**Project:** Hipotenusa
 
 ## Verdict
 
-Kateto is a credible, runnable MVP vertical slice for the track. Its strongest differentiator is the event-oriented team runtime: audio, classification, voices, workflows, tools, TUI state, errors, and hot reload all communicate through the PluginManager. The fixture mode makes the core behavior judgeable without private infrastructure.
+Hipotenusa is a credible, runnable MVP vertical slice for the track. Its strongest differentiator is the event-oriented team runtime: audio, classification, voices, workflows, tools, TUI state, errors, and hot reload all communicate through the PluginManager. The fixture mode makes the core behavior judgeable without private infrastructure.
 
 The release is not yet a general hosted voice service. Microphone capture, model serving, TTS, provider quotas, and hardware compatibility remain deployment concerns. The safe publication strategy is therefore a fixture-first Gradio Space on the maintainer’s ZeroGPU entitlement with opt-in live providers, rather than embedding the maintainer’s keys or promising an unlimited free GPU.
 
 ## Evidence of work
 
-- Runtime: `kateto/live.py`, `kateto/run_mode.py`, and `kateto/core/manager.py` assemble the event runtime and lifecycle.
-- Event contracts: `kateto/core/event.py` defines typed Pydantic payloads and envelopes.
+- Runtime: `hipotenusa/live.py`, `hipotenusa/run_mode.py`, and `hipotenusa/core/manager.py` assemble the event runtime and lifecycle.
+- Event contracts: `hipotenusa/core/event.py` defines typed Pydantic payloads and envelopes.
 - Work execution: workflow catalog/engine, per-voice workflows, backlog/TODO executors, and MCP runtime state are visible to the TUI.
-- Product surface: `kateto/plugins/system/tui.py` exposes events, plugins, voices, workflows, MCPs, configuration, statuses, and notifications.
+- Product surface: `hipotenusa/plugins/system/tui.py` exposes events, plugins, voices, workflows, MCPs, configuration, statuses, and notifications.
 - Reliability: fixture mode, interruption handling, error events, hot reload, bounded event histories, and focused async tests.
 - Development evidence: the dated Git history documents incremental Codex-assisted implementation; the Build Week submission should additionally provide the required `/feedback` session ID.
 
@@ -51,8 +51,8 @@ The release is not yet a general hosted voice service. Microphone capture, model
 - [ ] Required Codex `/feedback` session ID is recorded in the submission form.
 - [ ] Final dependency/provider/model licenses and terms are checked against the official sources.
 
-Current release blocker: `kateto smoke --fixture` still references the removed `scripts/qa/acceptance.py`; this is tracked as [bug 26](../bugs/26-smoke-cli-deleted-qa-path.md). The focused event-manager and TUI regression tests pass, but the smoke command must be repaired before publishing.
+Current release blocker: `hipotenusa smoke --fixture` still references the removed `scripts/qa/acceptance.py`; this is tracked as [bug 26](../bugs/26-smoke-cli-deleted-qa-path.md). The focused event-manager and TUI regression tests pass, but the smoke command must be repaired before publishing.
 
-The full `uv run pytest` invocation also has collection failures from removed `kateto.qa`/legacy voice modules. Those existing repository-drift failures must be resolved or explicitly excluded in the judge-facing validation command before release; they are not hidden by the fixture-first plan.
+The full `uv run pytest` invocation also has collection failures from removed `hipotenusa.qa`/legacy voice modules. Those existing repository-drift failures must be resolved or explicitly excluded in the judge-facing validation command before release; they are not hidden by the fixture-first plan.
 
 The complete deployment sequence and provider safety controls live in [`free-publishing-plan.md`](./free-publishing-plan.md).

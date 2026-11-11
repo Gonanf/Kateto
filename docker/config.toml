@@ -1,5 +1,5 @@
-[kateto]
-name = "Kateto Docker"
+[hipotenusa]
+name = "Hipotenusa Docker"
 language = "en"
 debug = false
 hot_reload = false
@@ -60,7 +60,7 @@ mcp_servers = ["system"]
 stream = true
 
 [mcp_servers.system]
-command = "kateto"
+command = "hipotenusa"
 
 [cli]
 allowlist = ["git", "ls", "pwd", "cat", "echo", "date"]

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 #
-# Build from Kateto with the sibling classifier as a named context:
-# docker build --build-context classifier=../classifiers/mmbert -t kateto-local .
+# Build from Hipotenusa with the sibling classifier as a named context:
+# docker build --build-context classifier=../classifiers/mmbert -t hipotenusa-local .
 
 ARG LLAMA_REF=846e991ec3c7ccec49112ff2c5b00b710e5f551d
 ARG WHISPER_REF=080bbbe85230f624f0b52127f1ae1218247989f9
@@ -57,7 +57,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/opt/models/huggingface \
     HF_HUB_DISABLE_TELEMETRY=1 \
-    XDG_CONFIG_HOME=/opt/kateto-config \
+    XDG_CONFIG_HOME=/opt/hipotenusa-config \
     WHISPER_MODEL_FILE=${WHISPER_MODEL} \
     LLAMA_MODEL_REPO=${LLAMA_MODEL_REPO} \
     LLAMA_MODEL_FILE=${LLAMA_MODEL_FILE}
@@ -73,14 +73,14 @@ RUN apt-get update \
 COPY --from=native-build /src/llama.cpp/build/bin/llama-server /usr/local/bin/llama-server
 COPY --from=native-build /src/whisper.cpp/build/bin/whisper-server /usr/local/bin/whisper-server
 
-WORKDIR /opt/kateto
+WORKDIR /opt/hipotenusa
 COPY pyproject.toml uv.lock README.md ./
-COPY kateto ./kateto
+COPY hipotenusa ./hipotenusa
 COPY config ./config
 COPY docs ./docs
 COPY public ./public
 
-# BuildKit named contexts avoid vendoring the sibling classifier into Kateto.
+# BuildKit named contexts avoid vendoring the sibling classifier into Hipotenusa.
 COPY --from=classifier server.py pyproject.toml uv.lock /opt/classifier/
 
 RUN python -m pip install --no-cache-dir uv \
@@ -88,11 +88,11 @@ RUN python -m pip install --no-cache-dir uv \
     && uv pip install --system /opt/classifier \
     && python -m pip install --no-cache-dir huggingface_hub
 
-COPY docker/config.toml /opt/kateto-config/kateto/config.toml
-COPY docker/entrypoint.sh /usr/local/bin/kateto-entrypoint
-RUN chmod 0755 /usr/local/bin/kateto-entrypoint \
-    && mkdir -p /opt/kateto-config/kateto/voices \
-    && cp -a config/defaults/voices/. /opt/kateto-config/kateto/voices/
+COPY docker/config.toml /opt/hipotenusa-config/hipotenusa/config.toml
+COPY docker/entrypoint.sh /usr/local/bin/hipotenusa-entrypoint
+RUN chmod 0755 /usr/local/bin/hipotenusa-entrypoint \
+    && mkdir -p /opt/hipotenusa-config/hipotenusa/voices \
+    && cp -a config/defaults/voices/. /opt/hipotenusa-config/hipotenusa/voices/
 
 RUN python - <<'PY'
 import os
@@ -123,4 +123,4 @@ EXPOSE 8090 8091 8092
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
     CMD python -c "import urllib.request; [urllib.request.urlopen(url, timeout=5) for url in ('http://127.0.0.1:8090/', 'http://127.0.0.1:8091/health', 'http://127.0.0.1:8092/health')]"
 
-ENTRYPOINT ["/usr/local/bin/kateto-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/hipotenusa-entrypoint"]

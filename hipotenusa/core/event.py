@@ -1,0 +1,472 @@
+from datetime import datetime, timezone
+from enum import StrEnum
+from typing import Generic, Literal, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+
+
+class EventModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+
+class Classification(StrEnum):
+    EXECUTE = "EXECUTE"
+    IGNORE_SELF_TALK = "IGNORE_SELF_TALK"
+    IGNORE_THIRD_PARTY = "IGNORE_THIRD_PARTY"
+
+
+def is_ignored_category(category: Classification | str) -> bool:
+    """True para cualquier categoría de ignorado (IGNORE_* actual o futura)."""
+    text = category.value if isinstance(category, Classification) else str(category)
+    return text.startswith("IGNORE")
+
+
+class ProjectState(StrEnum):
+    NEW = "new"
+    ALREADY_UNDERWAY = "already_underway"
+
+
+class BacklogPriority(StrEnum):
+    MUST = "Must"
+    SHOULD = "Should"
+    COULD = "Could"
+    WONT = "Won't"
+
+
+class BacklogStatus(StrEnum):
+    BACKLOG = "Backlog"
+    READY = "Ready"
+    IN_SPRINT = "In Sprint"
+    DONE = "Done"
+
+
+class AudioData(EventModel):
+    samples: bytes
+    sample_rate: int = Field(default=16_000, gt=0)
+    channels: int = Field(default=1, gt=0)
+    format: str = "wav"
+    source: str = ""
+    duration_ms: float = Field(default=0.0, ge=0.0)
+
+
+class TranscriptionData(EventModel):
+    text: str = Field(min_length=1)
+    language: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    duration_ms: float | None = Field(default=None, ge=0.0)
+    # Streaming (parakeet `--stream`): True = hipótesis intermedia, False = turno
+    # cerrado. Mismo evento `transcription` en ambos casos; quien hoy escucha sin
+    # filtrar sigue recibiendo solo finales si ignora el campo (compat total).
+    partial: bool = False
+    # Etiqueta de hablante ("owner" = el dueño del teléfono, "other" = otra voz en
+    # la habitación). Lo llena el audio_processor con SpeakerTracker; si no hay
+    # diarización queda None y el flujo se comporta como siempre.
+    speaker: str | None = None
+
+
+class VisionFrameData(EventModel):
+    frame: bytes
+    source_pid: int | None = None
+    ts: float
+    dept: str = "fun"
+    source: str = "screen"
+
+
+class VisionCaptureTriggerData(EventModel):
+    dept: str = "fun"
+
+
+class VisionDescribeRequestData(EventModel):
+    requester: str
+    source: str = "auto"
+    window_secs: float | None = None
+    max_images: int | None = None
+    correlation_id: str | None = None
+
+
+class VisionDescribeResultData(EventModel):
+    text: str
+    frame_count: int
+    kept_count: int
+    dropped: int
+    window_start: float
+    window_end: float
+    source: str
+    via: str = "primary"
+    correlation_id: str | None = None
+    ambient: bool = Field(default=False)  # fondo: entra al historial de la voz, no dispara turno
+
+
+class ProcessTranscriptionData(EventModel):
+    text: str = Field(min_length=1)
+    source_pid: int
+    ts: float
+    dept: str = "fun"
+    language: str | None = None
+
+
+class ClassificationData(EventModel):
+    text: str = Field(min_length=1)
+    category: Classification
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    voice: str | None = None
+    workflow: str | None = None
+    project_state: ProjectState = ProjectState.NEW
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def parse_category(cls, value: Classification | str) -> Classification:
+        return Classification(value)
+
+
+class TextChunk(EventModel):
+    text: str
+    sequence: int = Field(ge=0)
+    final: bool = False
+    voice_id: str | None = None
+
+
+class VisualExplanationData(EventModel):
+    """Diagrama generado por una voz para explicar visualmente (no se habla)."""
+
+    voice_id: str  # voz que lo emite (self.name)
+    kind: Literal["mermaid"] = "mermaid"
+    title: str = ""
+    code: str  # fuente mermaid (válido de parsear o fallback <pre>)
+    msg_ref: str | None = None  # opcional: correlación con un text_chunk (trace/count)
+
+
+class WordTiming(EventModel):
+    """One spoken word with sentence-relative timing (EdgeTTS WordBoundary)."""
+
+    text: str = Field(min_length=1)
+    start_ms: float = Field(ge=0.0)
+    end_ms: float = Field(ge=0.0)
+
+
+class AudioOutput(EventModel):
+    samples: bytes
+    sample_rate: int = Field(gt=0)
+    channels: int = Field(gt=0)
+    format: str = "wav"
+    voice_id: str | None = None
+    sequence: int = Field(default=0, ge=0)
+    final: bool = False
+    rms: float | None = Field(default=None, ge=0.0, le=1.0)
+    text: str | None = None
+    words: list[WordTiming] | None = None
+
+
+class VisemeData(EventModel):
+    """Per-chunk viseme kinematics for the phone avatar (screen only)."""
+
+    voice_id: str | None = None
+    sequence: int = Field(default=0, ge=0)
+    rms: float = Field(default=0.0, ge=0.0, le=1.0)
+    is_speaking: bool = False
+    jaw_offset_x: float = 0.0
+    jaw_offset_y: float = 0.0
+    jaw_rotation: float = 0.0
+    head_offset_y: float = 0.0
+    audio_ms: float | None = None
+    timestamp_us: int = Field(default=0, ge=0)
+
+
+class OverlayLayout(EventModel):
+    layout: str = "row"
+    positions: dict[str, str] = Field(default_factory=dict)
+    voices: list[str] | None = None
+
+
+class AudioInputStatus(StrEnum):
+    IDLE = "idle"
+    RECORDING = "recording"
+
+
+class AudioInputStatusData(EventModel):
+    status: AudioInputStatus
+
+
+class AudioOutputStatus(StrEnum):
+    IDLE = "idle"
+    PLAYING = "playing"
+
+
+class AudioOutputStatusData(EventModel):
+    status: AudioOutputStatus
+
+
+class InterruptData(EventModel):
+    reason: str = "voice_activity"
+    dept: str | None = None
+
+
+class PluginErrorData(EventModel):
+    plugin: str = Field(min_length=1)
+    event_name: str = Field(min_length=1)
+    error_type: str = Field(min_length=1)
+    message: str
+
+
+class GenerateData(EventModel):
+    prompt: str | None = None
+    workflow: str | None = None
+    phase_id: str | None = None
+    # Turn priority at the TurnGate: "external" (user/system), "followup"
+    # (inter-voice) or "ambient" (video-rag narration; never outranks the user).
+    # None = el emisor no opina: la voz resuelve el origen como siempre
+    # (followup si hay un followup pendiente, si no external).
+    origin: str | None = None
+
+
+GENERATE_REQUEST_MAX_DEPTH: int = 3
+
+
+class GenerateRequestData(EventModel):
+    target_voice: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    source_voice: str = Field(min_length=1)
+    depth: int = Field(default=0, ge=0)
+    dept: str | None = None
+
+
+class SpeakRequestData(EventModel):
+    voice: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    workflow: str | None = None
+    phase_id: str | None = None
+    # Turn priority at the TurnGate, same vocabulary as GenerateData.origin:
+    # "external" (user/system), "followup" (inter-voice), "ambient" (vision
+    # narration) or "impulse" (a voice speaking unprompted). None = external.
+    # Sin esto el impulso se clasificaba como turno del usuario y el EOT gate lo
+    # descartaba (SUPPRESS) antes de generar.
+    origin: str | None = None
+    # true = `prompt` se dice tal cual, sin pasar por el LLM. Lo usa el modo
+    # chat/stream para leer mensajes de la audiencia sin que el modelo improvise.
+    literal: bool = False
+
+
+class ScheduleType(StrEnum):
+    ONE_SHOT = "one_shot"
+    INTERVAL = "interval"
+    CRON = "cron"
+
+
+class ScheduleRequestData(EventModel):
+    schedule_type: ScheduleType
+    expression: str = Field(min_length=1)  # "30s"/"5m"/"1h" o cron expr "*/5 * * * *"
+    event_name: str = Field(min_length=1)
+    data: dict[str, JsonValue] = Field(default_factory=dict)
+    job_id: str | None = None
+    target_voice: str | None = None  # None => voz al azar al disparar
+    dept: str | None = None
+    jitter_seconds: float = Field(default=0, ge=0)
+    max_fires: int | None = Field(default=None, gt=0)
+    active_hours: str | None = None  # "09:00-22:00"; None = sin restricción
+
+
+class ScheduleResultData(EventModel):
+    job_id: str
+    next_run: str | None = None
+    error: str | None = None
+
+
+class ScheduleCancelData(EventModel):
+    job_id: str = Field(min_length=1)
+
+
+class SpeakingStateData(EventModel):
+    voice: str
+    active: bool
+
+
+class InterjectData(EventModel):
+    voice: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+
+
+class VoiceRequestData(EventModel):
+    voice: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+    workflow: str | None = None
+    phase_id: str | None = None
+
+
+class VoiceIdleData(EventModel):
+    voice: str
+
+
+class VoiceEnableData(EventModel):
+    voice_name: str = Field(min_length=1)
+    enable: bool = True
+
+
+class VoiceEnabledData(EventModel):
+    voice_name: str = Field(min_length=1)
+
+
+class VoiceStatus(StrEnum):
+    IDLE = "idle"
+    WAITING = "waiting"
+    THINKING = "thinking"
+    TALKING = "talking"
+
+
+class VoiceStatusData(EventModel):
+    voice: str
+    status: VoiceStatus
+
+
+class ToolCallData(EventModel):
+    tool_name: str = Field(min_length=1)
+    arguments: dict[str, JsonValue] = Field(default_factory=dict)
+    correlation_id: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+
+
+class ToolResultData(EventModel):
+    correlation_id: str = Field(min_length=1)
+    tool_name: str = Field(min_length=1)
+    result: str = Field(default="")
+    error: str | None = Field(default=None)
+    voice: str = Field(min_length=1)
+
+
+class TodoItemData(EventModel):
+    voice: str = Field(min_length=1)
+    task: str = Field(min_length=1)
+    completed: bool = False
+
+
+class WorkflowRunData(EventModel):
+    workflow: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+    context: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+class WorkflowStartedData(EventModel):
+    workflow: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+    context: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+class WorkflowCheckpointResult(EventModel):
+    checkpoint: str = Field(min_length=1)
+    passed: bool
+
+
+class WorkflowStopData(EventModel):
+    workflow: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+class WorkflowPhaseStartData(EventModel):
+    workflow: str = Field(min_length=1)
+    phase_id: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+    instructions: list[str] = Field(default_factory=list)
+
+
+class WorkflowPhaseCompleteData(EventModel):
+    workflow: str = Field(min_length=1)
+    phase_id: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+    deliverables: list[str] = Field(default_factory=list)
+    checkpoint_results: list[WorkflowCheckpointResult] = Field(default_factory=list)
+
+
+class WorkflowCheckpointFailData(EventModel):
+    workflow: str = Field(min_length=1)
+    phase_id: str = Field(min_length=1)
+    checkpoint: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+
+
+class WorkflowCompletedData(EventModel):
+    workflow: str = Field(min_length=1)
+    voice: str = Field(min_length=1)
+
+
+def _parse_backlog_enum(
+    value: BacklogPriority | BacklogStatus | str,
+    *,
+    primary_first: bool = True,
+) -> BacklogPriority | BacklogStatus:
+    if isinstance(value, BacklogPriority | BacklogStatus):
+        return value
+    first, second = (BacklogPriority, BacklogStatus) if primary_first else (BacklogStatus, BacklogPriority)
+    try:
+        return first(value)
+    except ValueError:
+        return second(value)
+
+
+class BacklogItem(EventModel):
+    id: str
+    title: str = Field(min_length=1)
+    description: str = ""
+    priority: BacklogPriority
+    status: BacklogStatus = BacklogStatus.BACKLOG
+    estimate: int | float | None = Field(default=None, ge=0)
+    dependencies: list[str] = Field(default_factory=list)
+    created_by: str
+    tags: list[str] = Field(default_factory=list)
+
+    @field_validator("priority", "status", mode="before")
+    @classmethod
+    def parse_backlog_enum(cls, value: BacklogPriority | BacklogStatus | str) -> BacklogPriority | BacklogStatus:
+        return _parse_backlog_enum(value, primary_first=True)
+
+
+class BacklogListData(EventModel):
+    status: BacklogStatus | BacklogPriority | None = None
+    priority: BacklogPriority | BacklogStatus | None = None
+
+    @field_validator("status", "priority", mode="before")
+    @classmethod
+    def parse_filter_enum(cls, value: BacklogPriority | BacklogStatus | str) -> BacklogPriority | BacklogStatus:
+        return _parse_backlog_enum(value, primary_first=False)
+
+
+class BacklogAddData(EventModel):
+    item: BacklogItem
+
+
+class BacklogUpdateData(EventModel):
+    id: str
+    status: BacklogStatus | None = None
+    priority: BacklogPriority | None = None
+    title: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    estimate: int | float | None = Field(default=None, ge=0)
+    tags: list[str] | None = None
+
+    @field_validator("status", "priority", mode="before")
+    @classmethod
+    def parse_update_enum(cls, value: BacklogPriority | BacklogStatus | str) -> BacklogPriority | BacklogStatus:
+        return _parse_backlog_enum(value, primary_first=False)
+
+
+Payload = TypeVar("Payload", bound=BaseModel)
+
+
+class EventEnvelope(EventModel, Generic[Payload]):
+    name: str = Field(min_length=1)
+    data: Payload
+    source: str = Field(min_length=1)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    target: str | None = None
+    dept: str | None = None
+    capabilities: list[str] | None = None
+    only_once: bool = False
+    reply_to: str | None = None
+    correlation_id: str | None = None
+    trace_id: str | None = None
+
+    @field_validator("timestamp")
+    @classmethod
+    def timestamp_is_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("timestamp must be timezone-aware UTC")
+        return value.astimezone(timezone.utc)

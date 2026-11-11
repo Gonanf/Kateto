@@ -1,7 +1,7 @@
 [project]
-name = "kateto"
+name = "hipotenusa"
 version = "0.1.0"
-description = "Kateto MVP"
+description = "Hipotenusa MVP"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -42,12 +42,15 @@ llamacpp = [
 piper = [
     "piper-tts>=1.6.0",
 ]
+phonon = [
+    "ptts>=0.7.0",
+]
 all = [
-    "kateto[classifier,llamacpp,whispercpp,piper]",
+    "hipotenusa[classifier,llamacpp,whispercpp,piper,phonon]",
 ]
 
 [project.scripts]
-kateto = "kateto.__main__:main"
+hipotenusa = "hipotenusa.__main__:main"
 
 [dependency-groups]
 dev = [
@@ -56,7 +59,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["kateto/tests"]
+testpaths = ["hipotenusa/tests"]
 
 [build-system]
 requires = ["uv_build>=0.11.28,<0.12.0"]

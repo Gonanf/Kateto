@@ -1,11 +1,11 @@
 ---
 title: Overlay visual (muppet cutout)
-description: "El overlay visual de Kateto: avatar con boca que reacciona al audio en OBS."
+description: "El overlay visual de Hipotenusa: avatar con boca que reacciona al audio en OBS."
 ---
 
 # Overlay visual
 
-Kateto tiene un **overlay visual** para OBS: un avatar (muppet cutout) con dos capas — cabeza fija y mandíbula móvil — que reacciona al RMS del audio reproducido.
+Hipotenusa tiene un **overlay visual** para OBS: un avatar (muppet cutout) con dos capas — cabeza fija y mandíbula móvil — que reacciona al RMS del audio reproducido.
 
 ## Arquitectura
 
@@ -16,7 +16,7 @@ Kateto tiene un **overlay visual** para OBS: un avatar (muppet cutout) con dos c
 
 ## Sprites
 
-Los sprites viven en `~/.config/kateto/voices/{name}/`. Son **stock elegidos por el usuario**, generados offline — el runtime NO genera assets, solo los consume.
+Los sprites viven en `~/.config/hipotenusa/voices/{name}/`. Son **stock elegidos por el usuario**, generados offline — el runtime NO genera assets, solo los consume.
 
 ## Convención de signos (bug 125 — no invertir)
 
@@ -25,7 +25,7 @@ La capa que se anima (`.layer-jaw`, `avatar_jaw.png`) es la mitad de **ARRIBA** 
 - `jawOffsetY` **NEGATIVO** = la capa de arriba **SUBE** = boca que abre. Neutro = 0 = cerrada. Positivo la baja y la boca se cierra/hunde.
 - `headOffsetY` **POSITIVO** leve (máx 1.8 px) = la pieza de abajo baja = ayuda a abrir. Nunca negativo al hablar.
 - Silencio = 0 exacto en ambos, sin piso fijo. Tope del jaw: 32 px hacia arriba.
-- Fuente única: `SHARED CONVENTION` en `kateto/plugins/visual_overlay/web/kateto-avatar.js`; el backend (`kateto/core/rms.py`) usa el mismo signo.
+- Fuente única: `SHARED CONVENTION` en `hipotenusa/plugins/visual_overlay/web/hipotenusa-avatar.js`; el backend (`hipotenusa/core/rms.py`) usa el mismo signo.
 
 ## Regla OBS
 

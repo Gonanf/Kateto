@@ -8,7 +8,7 @@ El estado interno de RWKV-7 se trata como un objeto opaco: el módulo no depende
 
 ## 2. API
 
-Módulo: `kateto.mask.state_snapshots`
+Módulo: `hipotenusa.mask.state_snapshots`
 
 ### Constantes
 
@@ -73,14 +73,14 @@ El cálculo incluye los 2 snapshots (`S_turn_start` + `S_barge_in`) por agente:
 ## 5. Límites Explícitos
 
 - Los tiempos en milisegundos (`400.0` ms de ventana, `5` tokens de presupuesto, `0.8` ms/token) corresponden a presupuestos teóricos del handoff de arquitectura (§3.4), no a mediciones empíricas en hardware con el modelo real corriendo.
-- El módulo `kateto.mask.state_snapshots` es una implementación desacoplada y deliberadamente no está cableada de forma directa con `kateto/providers/rwkv_rocm.py`.
+- El módulo `hipotenusa.mask.state_snapshots` es una implementación desacoplada y deliberadamente no está cableada de forma directa con `hipotenusa/providers/rwkv_rocm.py`.
 - No realiza sincronización por reloj de sistema ni concurrencia asíncrona; su lógica es pura y determinista.
 
 ## 6. Archivos
 
-- `kateto/mask/__init__.py`: Inicialización del paquete de máscara.
-- `kateto/mask/state_snapshots.py`: Implementación de snapshots, ciclo de vida de turnos, presupuesto y backend de prueba.
-- `kateto/tests/test_mask_state_snapshots.py`: Suite de 13 pruebas unitarias exhaustivas con formato BDD.
+- `hipotenusa/mask/__init__.py`: Inicialización del paquete de máscara.
+- `hipotenusa/mask/state_snapshots.py`: Implementación de snapshots, ciclo de vida de turnos, presupuesto y backend de prueba.
+- `hipotenusa/tests/test_mask_state_snapshots.py`: Suite de 13 pruebas unitarias exhaustivas con formato BDD.
 - `REPORT-MASK9.md`: Este reporte.
 
 ## 7. Ejecución del Gate
@@ -88,8 +88,8 @@ El cálculo incluye los 2 snapshots (`S_turn_start` + `S_barge_in`) por agente:
 Comando exacto ejecutado:
 
 ```bash
-PYTHONPATH=$PWD /home/chaos/proyectos/OpenaiBuildWeek/Kateto/.venv/bin/python -m pytest \
-  kateto/tests/test_mask_state_snapshots.py kateto/tests/test_audio_barge_in.py -q
+PYTHONPATH=$PWD /home/chaos/proyectos/OpenaiBuildWeek/Hipotenusa/.venv/bin/python -m pytest \
+  hipotenusa/tests/test_mask_state_snapshots.py hipotenusa/tests/test_audio_barge_in.py -q
 ```
 
 Resultado:

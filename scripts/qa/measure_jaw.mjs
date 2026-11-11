@@ -26,7 +26,7 @@ globalThis.HTMLElement = class HTMLElement {};
 globalThis.customElements = { get: () => undefined, define: () => {} };
 
 const modPath = new URL(
-  "../../kateto/plugins/visual_overlay/web/kateto-avatar.js",
+  "../../hipotenusa/plugins/visual_overlay/web/hipotenusa-avatar.js",
   import.meta.url,
 ).href;
 const { computeJawKinematics, computeBackendKinematics, IdleMotion, JawSwayMotion, combineIdleWithVoice, VOICE_MIN_RMS } =
@@ -91,7 +91,7 @@ function zeroCrossings(vals) {
 }
 
 // Cruces de nivel medio de la serie de habla (nivel = (min+max)/2, misma
-// convención que midCrossings en kateto-avatar.test.mjs).
+// convención que midCrossings en hipotenusa-avatar.test.mjs).
 function midCrossings(vals) {
   const mid = (Math.min(...vals) + Math.max(...vals)) / 2;
   let n = 0;

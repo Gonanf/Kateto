@@ -5,11 +5,11 @@ description: "Spec de implementación — 2026 08 13 Turn Gating."
 
 # Spec: Gating de turno + Steering/Follow-up + Barge-in
 
-Fecha: 2026-08-13 | Worktree: wt/turn-gating | Fuente: harness research (brainstorm-kateto.md §A8/H2/G5/H8)
+Fecha: 2026-08-13 | Worktree: wt/turn-gating | Fuente: harness research (brainstorm-hipotenusa.md §A8/H2/G5/H8)
 
 ## Problem Statement
 
-Kateto produce respuestas duplicadas y voces que se pisan: cada `generate` dispara al LLM aunque el mixer ya esté reproduciendo otra voz, el clasificador dijo IGNORE, o ya haya un turno en vuelo. El barge-in (el usuario interrumpe hablando) no corta de forma fiable la generación ni el audio en curso, y el `request_generation` inter-voz puede interrumpir a una voz que está a mitad de respuesta.
+Hipotenusa produce respuestas duplicadas y voces que se pisan: cada `generate` dispara al LLM aunque el mixer ya esté reproduciendo otra voz, el clasificador dijo IGNORE, o ya haya un turno en vuelo. El barge-in (el usuario interrumpe hablando) no corta de forma fiable la generación ni el audio en curso, y el `request_generation` inter-voz puede interrumpir a una voz que está a mitad de respuesta.
 
 ## Solution
 
@@ -26,7 +26,7 @@ Un estado de turno por voz (idle/thinking/speaking) alimentado exclusivamente po
 
 ## Implementation Decisions
 
-- **VoiceTurnState por voz** (idle/thinking/speaking), actualizado por suscripción a eventos existentes: `speak`, `audio_output`, `voice_idle`, `interrupt`, `transcription`. No se crea un singleton global nuevo: el estado es derivable del bus (es el "Signals" de Kateto, pero sin duplicar mecanismos).
+- **VoiceTurnState por voz** (idle/thinking/speaking), actualizado por suscripción a eventos existentes: `speak`, `audio_output`, `voice_idle`, `interrupt`, `transcription`. No se crea un singleton global nuevo: el estado es derivable del bus (es el "Signals" de Hipotenusa, pero sin duplicar mecanismos).
 - **Gate de turno**: en el camino `generate -> voz`, antes de llamar al LLM, se consulta: ¿mixer ocupado? ¿turno en vuelo? ¿clasificador IGNORE? ¿voz en latch de barge-in? Si alguna condición bloquea, el `generate` se encola como Follow-up o se descarta según política.
 - **Colas duales**:
   - Steering: VAD detecta habla del usuario durante la generación → `asyncio.Event` de aborto del stream de la voz activa + el nuevo mensaje se inyecta como prioridad antes del siguiente turno.
@@ -48,4 +48,4 @@ Un estado de turno por voz (idle/thinking/speaking) alimentado exclusivamente po
 ## Further Notes
 
 - Los eventos `interrupt`/`interject` ya existen (§3 Interrupt Executor); esta spec formaliza el gating y las colas, no crea un bus nuevo.
-- Ver brainstorming-kateto.md §A8/H2/G5/H8.
+- Ver brainstorming-hipotenusa.md §A8/H2/G5/H8.

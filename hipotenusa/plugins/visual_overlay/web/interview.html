@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <link rel="icon" href="data:," />
+  <title>Hipotenusa · Entrevista</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #05070d; color: #e6edf7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; overflow: hidden; }
+    #stage { position: fixed; inset: 0; }
+
+    /* El avatar lo dibuja el overlay existente: no duplicamos audio ni visemas. */
+    #guest { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+    #plate {
+      position: absolute; left: 32px; bottom: 32px; padding: 10px 18px;
+      background: rgba(5, 7, 13, .82); border: 1px solid rgba(255,255,255,.14);
+      border-radius: 10px; font-size: 1.05rem; letter-spacing: .04em; text-transform: uppercase;
+    }
+    #plate small { display: block; font-size: .68rem; opacity: .55; letter-spacing: .16em; text-transform: uppercase; }
+
+    #qcard {
+      position: absolute; left: 32px; right: 32px; top: 32px;
+      padding: 20px 24px; background: rgba(5, 7, 13, .86);
+      border-left: 3px solid #7dd3fc; border-radius: 6px;
+      font-size: 1.5rem; line-height: 1.28; min-height: 3rem;
+      max-height: 34vh; overflow: hidden; transition: opacity .2s ease;
+    }
+    #qcard .tag { display: block; font-size: .65rem; letter-spacing: .18em;
+      text-transform: uppercase; opacity: .5; margin-bottom: 8px; }
+    #qcard.empty { opacity: .3; }
+
+    #err {
+      position: absolute; inset: auto 32px 32px 32px; padding: 14px 18px;
+      background: #3b0d0d; border: 1px solid #ef4444; border-radius: 8px;
+      font-size: .9rem; display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <iframe id="guest" title="invitado" allow="autoplay"></iframe>
+    <div id="qcard" class="empty"><span class="tag">Pregunta</span><span id="qtext">esperando…</span></div>
+    <div id="plate"><small>Invitado</small><span id="pname">—</span></div>
+    <div id="err"></div>
+  </div>
+
+  <script type="module">
+    const params = new URLSearchParams(location.search);
+    const voice = (params.get('voice') || '').trim().toLowerCase();
+    const name = (params.get('name') || voice || '').trim();
+    const autoplay = params.get('audio') === '0' ? 0 : 1;
+
+
+    // La página puede servirse desde otro host (dev, OBS, archivo local):
+    // el runtime se resuelve aparte para no asumir que somos nosotros.
+    const runtime = (params.get('runtime') || location.host).trim();
+    const base = `${location.protocol}//${runtime}`;
+
+    function fail(msg) {
+      const box = document.getElementById('err');
+      box.textContent = msg;
+      box.style.display = 'block';
+      document.getElementById('qcard').style.display = 'none';
+    }
+
+    // Chequeo en el mismo lugar donde se usa: sin voz válida la página no miente.
+    if (!voice) {
+      fail('Falta ?voice=. Ejemplos: /interview?voice=truman o ?voice=elchacal');
+    } else {
+      document.getElementById('pname').textContent = name;
+
+      // Reutiliza el overlay probado: un solo avatar grande, sin controles,
+      // con audio (el iframe es el dueño de la reproducción PCM).
+      const src = `${base}/overlay?voices=${encodeURIComponent(voice)}&layout=single&controls=0&audio=${autoplay}`;
+      document.getElementById('guest').src = src;
+
+      // La pregunta es lo que él dice: llega como transcripción del runtime.
+      const qcard = document.getElementById('qcard');
+      const qtext = document.getElementById('qtext');
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+      function connect() {
+        const ws = new WebSocket(`${proto}//${runtime}/ws/overlay`);
+        ws.onmessage = (ev) => {
+          let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+          if (!msg) return;
+          if (msg.event === 'transcription') {
+            const text = (msg.text || (msg.data && msg.data.text) || '').trim();
+            if (text) { qtext.textContent = text; qcard.classList.remove('empty'); }
+          }
+          if (msg.event === 'voice_idle') {
+            // Nueva pregunta habilitada: la anterior ya se respondió.
+            qcard.classList.add('empty');
+          }
+        };
+        ws.onclose = () => setTimeout(connect, 1500);
+      }
+      connect();
+
+      // Sin lista hardcodeada: se pregunta por el arte real de esta voz.
+      // Solo desde el mismo origen: cross-origin el fetch es opaco y mentiría.
+      const probe = runtime === location.host
+        ? fetch(`${base}/voices/${encodeURIComponent(voice)}/avatar_head.png`, { method: 'HEAD' })
+        : Promise.resolve({ ok: true });
+      probe
+        .then((r) => {
+          if (!r.ok) {
+            document.getElementById('err').textContent =
+              `${voice} no tiene arte todavía: falta avatar_head.png (el escenario queda vacío).`;
+            document.getElementById('err').style.display = 'block';
+          }
+        })
+        .catch(() => {});
+    }
+  </script>
+</body>
+</html>

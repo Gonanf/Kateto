@@ -1,6 +1,6 @@
 ---
 title: Event System
-description: Event System — documentación de Kateto.
+description: Event System — documentación de Hipotenusa.
 ---
 
 # Event System

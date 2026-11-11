@@ -1,16 +1,16 @@
 ---
 title: Config
-description: Config — documentación de Kateto.
+description: Config — documentación de Hipotenusa.
 ---
 
 # Configuration
 
 ## Main Config: `config.toml`
 
-A single TOML file. Each section header matches a plugin name, and the PluginManager injects only the relevant section into each plugin. Defaults live in `config/defaults/config.toml` and bootstrap copies missing keys to the user config dir (`~/.config/kateto/`) — user config is authoritative and is never overwritten.
+A single TOML file. Each section header matches a plugin name, and the PluginManager injects only the relevant section into each plugin. Defaults live in `config/defaults/config.toml` and bootstrap copies missing keys to the user config dir (`~/.config/hipotenusa/`) — user config is authoritative and is never overwritten.
 
 ```toml
-[kateto]
+[hipotenusa]
 debug = true
 
 [plugin.audio_input_mic]
@@ -42,7 +42,7 @@ endpoint = "http://127.0.0.1:8091/v1"
 [plugin.voice_llm]
 enabled = true
 endpoint = "http://127.0.0.1:11434/v1"   # llama.cpp / OpenAI-compatible
-model = "KatetoTalker"
+model = "HipotenusaTalker"
 
 [voice.jane]
 enabled = true
@@ -59,14 +59,14 @@ timeout = 600
 `voices/<name>/config.toml` (or `voice.toml`) has priority over `[voice] <name>.*`
 in the main `config.toml`. Every overridden key logs a warning at load with the
 key, the principal value, the file value, and the winning file — and
-`kateto config check` prints the effective per-voice values with their source
+`hipotenusa config check` prints the effective per-voice values with their source
 (`voices/<name>/config.toml` vs `principal`).
 
 ## Local (self-contained) mode
 
-Kateto can run the whisper and classifier backends **without any HTTP server** by
+Hipotenusa can run the whisper and classifier backends **without any HTTP server** by
 setting `command` on the plugin section: the `LocalCommandProvider`
-(`kateto/providers/_local.py`) spawns the binary per call and parses its output.
+(`hipotenusa/providers/_local.py`) spawns the binary per call and parses its output.
 `model` is interpreted as a model-file path in this mode. The voice LLM is
 HTTP-only today (OpenAI-compatible endpoint); a local subprocess path for the
 LLM is a future option.
@@ -74,14 +74,14 @@ LLM is a future option.
 ## Secrets: `.env`
 
 API keys and credentials go in `.env` (or `secrets/.env`), never in `config.toml`.
-Config values can reference them with `env:KEY_NAME`. `kateto doctor` and
-`kateto setup` handle discovery/masking of keys.
+Config values can reference them with `env:KEY_NAME`. `hipotenusa doctor` and
+`hipotenusa setup` handle discovery/masking of keys.
 
 ## UI
 
 The Textual TUI is deprecated. The Dashboard (Nuxt) talks to the FastAPI +
-WebSocket server in `kateto/plugins/system/http_server.py` (port 8080 default,
-also serves the visual overlay). The CLI (`kateto`) is for setup/ops (setup,
+WebSocket server in `hipotenusa/plugins/system/http_server.py` (port 8080 default,
+also serves the visual overlay). The CLI (`hipotenusa`) is for setup/ops (setup,
 doctor, config check, run, install) — it is not a TUI and does not yet expose
 every plugin setting; that surface belongs to the Dashboard.
 

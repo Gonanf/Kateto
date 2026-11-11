@@ -16,7 +16,7 @@ firmware en este alcance.
 
 ## 2. Contrato del evento `viseme`
 
-`VisemeData` en `kateto/core/event.py` (frozen + strict, `EventModel`).
+`VisemeData` en `hipotenusa/core/event.py` (frozen + strict, `EventModel`).
 
 | Campo | Tipo | Rango / default | Notas |
 | --- | --- | --- | --- |
@@ -32,7 +32,7 @@ firmware en este alcance.
 | `timestamp_us` | `int` | `>= 0`, `0` | `time.monotonic_ns() // 1000` |
 
 Todos con default para no romper otros emisores. La cinemática sale de
-`map_rms_to_puppet_transform` (`kateto/core/rms.py`), la misma que ya alimenta
+`map_rms_to_puppet_transform` (`hipotenusa/core/rms.py`), la misma que ya alimenta
 `VisualOverlayPlugin.update_viseme`.
 
 ## 3. Flujo

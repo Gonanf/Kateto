@@ -1,6 +1,6 @@
 ---
 title: System
-description: System — documentación de Kateto.
+description: System — documentación de Hipotenusa.
 ---
 
 # System Plugins
@@ -59,7 +59,7 @@ Once an authorized, config-declared server is created, the system:
 
 ### Purpose
 
-Allows authorized external AI agents (Codex, Claude, etc.) to communicate with Kateto through the MCP protocol.
+Allows authorized external AI agents (Codex, Claude, etc.) to communicate with Hipotenusa through the MCP protocol.
 
 ## External MCP Plugin (P0)
 

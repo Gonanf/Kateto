@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Kateto" width="100%">
+  <img src="assets/banner.png" alt="Hipotenusa" width="100%">
 </p>
 
-# Kateto — Event-Driven Voice Team for Project Work
+# Hipotenusa — Event-Driven Voice Team for Project Work
 
 ![Jane](public/jane1.svg) ![Doktor](public/doktor1.svg) ![Conquest](public/conquest1.svg)
 
-Kateto is an autonomous, event-driven voice team designed for real-time project management and technical collaboration. Instead of forcing conversations through a brittle, linear request-response chain, Kateto runs an event-driven architecture where specialized voice agents, audio hardware, intent classifiers, and autonomous workflows interact concurrently through a centralized `PluginManager` event bus.
+Hipotenusa is an autonomous, event-driven voice team designed for real-time project management and technical collaboration. Instead of forcing conversations through a brittle, linear request-response chain, Hipotenusa runs an event-driven architecture where specialized voice agents, audio hardware, intent classifiers, and autonomous workflows interact concurrently through a centralized `PluginManager` event bus.
 
 ---
 
@@ -39,7 +39,7 @@ Kateto is an autonomous, event-driven voice team designed for real-time project 
 
 ### The Department & Voice Model
 
-Kateto models organizations as **Departments** populated by domain-specialized **Voices**:
+Hipotenusa models organizations as **Departments** populated by domain-specialized **Voices**:
 - **Jane (`voice.jane`)** — *Project Coordinator & Orchestrator*. Manages high-level communication, coordinates inter-voice delegation, and interfaces with external stakeholders.
 - **Doktor (`voice.doktor`)** — *Technical Planner & Delivery Advisor*. Translates fuzzy requirements into Work Breakdown Structures (WBS), risk matrices, and prioritized backlogs.
 - **Conquest (`voice.conquest`)** — *Agile Lead & Scrum Facilitator*. Facilitates standups, sprint retrospectives, process enforcement, and milestone tracking.
@@ -67,7 +67,7 @@ Kateto models organizations as **Departments** populated by domain-specialized *
   - Rotational tilt up to **±34°** coupled directly to lateral movement direction for lifelike cartoon physics.
 
 ### 🧠 LLM KV-Cache Prefilling
-- **Zero First-Turn Ingestion Latency**: On runtime startup, Kateto automatically builds each active voice's stable system prompt (personality, tool definitions, durable memories) and dispatches a lightweight 1-token prefill ping with session affinity headers (`x-session-affinity`).
+- **Zero First-Turn Ingestion Latency**: On runtime startup, Hipotenusa automatically builds each active voice's stable system prompt (personality, tool definitions, durable memories) and dispatches a lightweight 1-token prefill ping with session affinity headers (`x-session-affinity`).
 - Inference engines with prefix-caching (such as `llama-server --cache-reuse`, vLLM, or Ollama) ingest and retain the entire prompt prefix in KV memory before the user speaks their first word.
 
 ---
@@ -85,8 +85,8 @@ Kateto models organizations as **Departments** populated by domain-specialized *
 
 ```bash
 # Clone the repository
-git clone https://github.com/Gonanf/Kateto.git
-cd Kateto
+git clone https://github.com/Gonanf/Hipotenusa.git
+cd Hipotenusa
 
 # Synchronize environment with uv
 uv sync
@@ -95,24 +95,24 @@ uv sync
 uv sync --extra classifier --extra whispercpp
 
 # Or install globally as a standalone CLI tool
-uv tool install "kateto[classifier,llamacpp,whispercpp]"
+uv tool install "hipotenusa[classifier,llamacpp,whispercpp]"
 ```
 
 ---
 
 ## 4. Configuration
 
-Bootstrap default configuration files into `~/.config/kateto/`:
+Bootstrap default configuration files into `~/.config/hipotenusa/`:
 
 ```bash
-uv run kateto config check
+uv run hipotenusa config check
 ```
 
-Edit `~/.config/kateto/config.toml`:
+Edit `~/.config/hipotenusa/config.toml`:
 
 ```toml
-[kateto]
-name = "Kateto"
+[hipotenusa]
+name = "Hipotenusa"
 language = "es_ar"
 log_level = "INFO"
 
@@ -155,7 +155,7 @@ visual_overlay.enabled = true
 ### Start the Runtime
 
 ```bash
-uv run kateto run
+uv run hipotenusa run
 ```
 
 This starts:
@@ -172,41 +172,41 @@ Compile native `whisper.cpp` or `llama.cpp` targeting your specific hardware:
 
 ```bash
 # Vulkan acceleration (AMD / Intel / NVIDIA)
-uv run kateto compile whisper --backend vulkan
-uv run kateto compile llama --backend vulkan
+uv run hipotenusa compile whisper --backend vulkan
+uv run hipotenusa compile llama --backend vulkan
 
 # NVIDIA CUDA acceleration
-uv run kateto compile all --backend cuda
+uv run hipotenusa compile all --backend cuda
 
 # CPU fallback
-uv run kateto compile whisper --backend cpu
+uv run hipotenusa compile whisper --backend cpu
 ```
 
 ---
 
 ## 6. Testing & Quality Assurance
 
-Kateto enforces strict asynchronous event-safety and zero-regression testing with `pytest-asyncio`:
+Hipotenusa enforces strict asynchronous event-safety and zero-regression testing with `pytest-asyncio`:
 
 ```bash
 # Run the complete test suite
 uv run pytest
 
 # Run the bounded end-to-end smoke test
-uv run kateto smoke
+uv run hipotenusa smoke
 
 # Run targeted component suites
-uv run pytest kateto/tests/test_whisper_provider.py \
-              kateto/tests/test_camb_audio_output.py \
-              kateto/tests/test_visual_overlay.py \
-              kateto/tests/test_streaming_latency.py
+uv run pytest hipotenusa/tests/test_whisper_provider.py \
+              hipotenusa/tests/test_camb_audio_output.py \
+              hipotenusa/tests/test_visual_overlay.py \
+              hipotenusa/tests/test_streaming_latency.py
 ```
 
 ---
 
 ## 7. Project Journal & Development Tracking
 
-Kateto uses `pj` (Project Journal) to track tasks, features, chores, and bug resolutions:
+Hipotenusa uses `pj` (Project Journal) to track tasks, features, chores, and bug resolutions:
 
 ```bash
 # List all tracked project items

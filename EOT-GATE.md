@@ -13,7 +13,7 @@ enabled = true   # false (default) = decide() sync de hoy, sin cambios
 ```
 
 `EOT_ETAPA2=base|ft` (default base). Requiere el script hermano
-`kateto-eot2/clasificador_hibrido.py`; si falta, fail-open.
+`hipotenusa-eot2/clasificador_hibrido.py`; si falta, fail-open.
 
 ## Salidas reales (CPU, `/tmp/opencode/eot_real_run.json`)
 

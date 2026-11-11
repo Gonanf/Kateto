@@ -1,6 +1,6 @@
 ---
 title: Executors
-description: Executors — documentación de Kateto.
+description: Executors — documentación de Hipotenusa.
 ---
 
 # Executor Plugins
@@ -49,7 +49,7 @@ Detects when there is a need to organize tasks into a structured project plan.
 
 ### MVP file contract
 
-The shipped MVP has one TODO file per voice: `config/kateto/voices/{voice}/TODO.md`.
+The shipped MVP has one TODO file per voice: `config/hipotenusa/voices/{voice}/TODO.md`.
 The executor creates or updates that file using Markdown task entries in the form
 `- [ ] task` or `- [x] task`. It does not create project subdirectories, maintain
 global TODO files, or treat `TODO.md` as the canonical backlog. The backlog remains
@@ -59,7 +59,7 @@ the backlog integration can synchronize it.
 ### Flow
 
 1. An `EXECUTE` classification is parsed for a supported task or completion command.
-2. The matching voice's `config/kateto/voices/{voice}/TODO.md` is read and updated
+2. The matching voice's `config/hipotenusa/voices/{voice}/TODO.md` is read and updated
    idempotently.
 3. `todo_updated` is emitted for a change; completing an existing task also emits
    `todo_completed` for backlog synchronization.

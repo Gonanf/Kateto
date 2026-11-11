@@ -1,6 +1,6 @@
 ---
 title: Skills And Mcp
-description: Skills And Mcp — documentación de Kateto.
+description: Skills And Mcp — documentación de Hipotenusa.
 ---
 
 # Skills & MCP Per Voice
@@ -28,14 +28,14 @@ The authorization boundary is deny-by-default:
 2. The requesting voice must list that exact name in `voice.<name>.mcp_servers`.
 3. Event tools are generated only from currently registered live event receivers.
 
-An undeclared server, an ungranted voice, or a voice with no `mcp_servers` entry is denied. Kateto does not scan installed or running MCP processes, and a voice does not inherit every declared server.
+An undeclared server, an ungranted voice, or a voice with no `mcp_servers` entry is denied. Hipotenusa does not scan installed or running MCP processes, and a voice does not inherit every declared server.
 
 ## Skills
 
 **Skills** are reusable knowledge, not executable MCP processes. A skill lives in a directory with markdown instructions that the voice reads and follows.
 
 ```text
-config/kateto/skills/{skill_name}/
+config/hipotenusa/skills/{skill_name}/
 └── SKILL.md
 ```
 

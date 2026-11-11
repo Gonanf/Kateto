@@ -7,4 +7,4 @@ Scene photos cropped from:
   ["Boone County Courthouse courtroom front.jpg"](https://commons.wikimedia.org/wiki/File:Boone_County_Courthouse_courtroom_front.jpg)
   by Jason D. C. Jones, **CC0 1.0** (Wikimedia Commons).
 
-- `jane.png`, `doktor.png`, `conquest.png` — Kateto character portraits (project assets).
+- `jane.png`, `doktor.png`, `conquest.png` — Hipotenusa character portraits (project assets).

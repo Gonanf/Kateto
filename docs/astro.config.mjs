@@ -26,21 +26,22 @@ export default defineConfig({
 			inline: true,
 		}),
 		starlight({
-			title: 'Kateto Docs',
-			description: 'Documentación del equipo de voces event-driven de Kateto.',
+			title: 'Hipotenusa Docs',
+			description: 'Documentación del equipo de voces event-driven de Hipotenusa.',
 			logo: {
-				src: './src/assets/kateto-logo.svg',
-				alt: 'Kateto',
+				src: './src/assets/hipotenusa-logo.svg',
+				alt: 'Hipotenusa',
 			},
 			favicon: '/favicon.svg',
 			plugins: [
 				starlightSidebarTopics(
 					[
 						{ id: 'guias', label: 'Guías', link: '/guides/como-usar', items: ['guides/como-usar'] },
-						{ id: 'filosofia', label: 'Filosofía', link: '/philosophy/por-que-kateto', items: ['philosophy/por-que-kateto'] },
+						{ id: 'filosofia', label: 'Filosofía', link: '/philosophy/por-que-hipotenusa', items: ['philosophy/por-que-hipotenusa'] },
 						{ id: 'arquitectura', label: 'Arquitectura', link: '/architecture/overview', items: ['architecture/overview', 'architecture/plugin-manager', 'architecture/event-system', 'architecture/config', 'architecture/design-decisions'] },
 						{ id: 'plugins', label: 'Plugins', link: '/plugins/overview', items: ['plugins/overview', 'plugins/audio-input', 'plugins/audio-processor', 'plugins/audio-output', 'plugins/executors', 'plugins/voice-manager', 'plugins/system', 'plugins/connectors'] },
 						{ id: 'voces', label: 'Voces', link: '/voices/overview', items: ['voices/overview', 'voices/voice-agent', 'voices/skills-and-mcp', 'voices/workflows', 'voices/voice-evolution', 'voices/backlog', 'voices/voice-list-future'] },
+						{ id: 'producto', label: 'Producto', link: '/producto/stream', items: ['producto/stream'] },
 						{ id: 'runtime', label: 'Runtime', link: '/runtime/headless', items: ['runtime/headless', 'runtime/overlay', 'runtime/pipeline', 'runtime/run-mode-spec'] },
 						{ id: 'desarrollo', label: 'Desarrollo', link: '/development/tdd', items: ['development/tdd', 'development/tooling', 'development/build-week', 'development/final-assessment', 'development/agent', 'development/system-mcp-architecture', 'development/spec2-plan', 'development/future-plugins'] },
 						{ id: 'bugs', label: 'Bugs', link: '/bugs/overview', items: ['bugs/overview', 'bugs/known-issues'] },
@@ -54,9 +55,9 @@ export default defineConfig({
 					}
 				),
 				starlightBlog({
-					title: 'Blog de Kateto',
+					title: 'Blog de Hipotenusa',
 					authors: {
-						kateto: { name: 'Kateto', title: 'Equipo de voces' },
+						hipotenusa: { name: 'Hipotenusa', title: 'Equipo de voces' },
 					},
 				}),
 				starlightImageZoom(),
@@ -69,7 +70,7 @@ export default defineConfig({
 					announcements: [
 						{
 							id: 'docs-launch',
-							content: '🎉 <strong>Nuevo sitio de documentación</strong> — bienvenido a las docs de Kateto.',
+							content: '🎉 <strong>Nuevo sitio de documentación</strong> — bienvenido a las docs de Hipotenusa.',
 							variant: 'tip',
 						},
 					],

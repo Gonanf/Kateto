@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -1298,6 +1298,7 @@ all = [
     { name = "llama-cpp-python" },
     { name = "onnxruntime" },
     { name = "piper-tts" },
+    { name = "ptts" },
     { name = "pywhispercpp" },
     { name = "tokenizers" },
 ]
@@ -1308,6 +1309,9 @@ classifier = [
 ]
 llamacpp = [
     { name = "llama-cpp-python" },
+]
+phonon = [
+    { name = "ptts" },
 ]
 piper = [
     { name = "piper-tts" },
@@ -1331,7 +1335,7 @@ requires-dist = [
     { name = "fastapi", specifier = "==0.140.0" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "huggingface-hub", marker = "extra == 'classifier'", specifier = ">=0.27.0" },
-    { name = "kateto", extras = ["classifier", "llamacpp", "whispercpp", "piper"], marker = "extra == 'all'" },
+    { name = "kateto", extras = ["classifier", "llamacpp", "whispercpp", "piper", "phonon"], marker = "extra == 'all'" },
     { name = "llama-cpp-python", marker = "extra == 'llamacpp'", specifier = ">=0.3.0" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "mcp", specifier = "==1.28.1" },
@@ -1339,6 +1343,7 @@ requires-dist = [
     { name = "onnxruntime", marker = "extra == 'classifier'", specifier = ">=1.20.0" },
     { name = "openai", specifier = "==2.45.0" },
     { name = "piper-tts", marker = "extra == 'piper'", specifier = ">=1.6.0" },
+    { name = "ptts", marker = "extra == 'phonon'", specifier = ">=0.7.0" },
     { name = "pydantic", specifier = "==2.13.4" },
     { name = "pydantic-ai", specifier = ">=2.18.0" },
     { name = "pydantic-ai-harness", extras = ["codemode", "dynamic-workflow", "skills"], specifier = ">=0.11.0" },
@@ -1352,7 +1357,7 @@ requires-dist = [
     { name = "watchfiles", specifier = ">=1.2.0" },
     { name = "zodb", specifier = ">=6.3" },
 ]
-provides-extras = ["classifier", "whispercpp", "llamacpp", "piper", "all"]
+provides-extras = ["classifier", "whispercpp", "llamacpp", "piper", "phonon", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2262,6 +2267,25 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d8/bc/6d6c7ba8709c85f8f2c390b2b118d6fb08a783676a572271851bf45a7d22/protobuf-7.35.1-cp310-abi3-win32.whl", hash = "sha256:353652e4efd0bca5b5fc2656abf8307ef351f0cf938c9eba09f0e09c20a25c30", size = 428945, upload-time = "2026-06-11T21:55:37.034Z" },
     { url = "https://files.pythonhosted.org/packages/0a/19/8d0cb6f20a1ef7b18f1c8986ad5783f22f84cce39c6ce9a6e645ea55192e/protobuf-7.35.1-cp310-abi3-win_amd64.whl", hash = "sha256:230a75ddfc2de4806e56696ce9640c1cdfdb6543b7cfce98d42a4c0a0e7bdb87", size = 439996, upload-time = "2026-06-11T21:55:38.123Z" },
     { url = "https://files.pythonhosted.org/packages/19/c7/5f7c636ec43e0c545e28d1f1db71990108306f7bdcb89f069ba97e428e7f/protobuf-7.35.1-py3-none-any.whl", hash = "sha256:4bc97768d8fe4ad6743c8a19403e314511ed9f6d13205b687e52421c023ac1b9", size = 171659, upload-time = "2026-06-11T21:55:39.155Z" },
+]
+
+[[package]]
+name = "ptts"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/78/82383f167db6dcb44a816f90faaaf9ac696f49008b057d49a36811c7b39c/ptts-0.7.0.tar.gz", hash = "sha256:fb6c13097666cf447bf4475073c56f9938688848494c668e8227960fa54d0929", size = 325489, upload-time = "2026-11-09T11:20:00.006Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/7a/7d522f667f2f69f707fa0e2c8ed8e71d56aadb1be88d79d2cba4abee611a/ptts-0.7.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:d7d65cc4cb66ac99d5becf689e6602dd066a2930fd79725d29cfae07cb715bf1", size = 6947332, upload-time = "2026-11-09T11:19:47.312Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/1d/ca6bff530716b8ceb0efc4e7e98f1cb03adcc4187a55a559e3cc640b782e/ptts-0.7.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:546f3f6d2319a054a3f3bc1838e596a7e41a3ba093e31c8df84bc8d8c4b65c79", size = 6874211, upload-time = "2026-11-09T11:19:49.176Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/9d/b6b3341fda5f76d0e9a024a93ab61f509c17a14f005d44093c56ff0a327a/ptts-0.7.0-cp39-abi3-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:63751dbfefb6ed17d8fa345bfe958f518bd6d501e96a03fa9ec5fcbbbc499a8d", size = 6854332, upload-time = "2026-11-09T11:19:50.801Z" },
+    { url = "https://files.pythonhosted.org/packages/61/7d/9dc240a872d74539ce88bb83f32bd1b82bbfe11778e1927c3cbd7e46a8f4/ptts-0.7.0-cp39-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:15e248596d8c6e17aa2ef6d6867a28a152dfd0d8759a9b63cabc93b58a22d11e", size = 7503889, upload-time = "2026-11-09T11:19:52.416Z" },
+    { url = "https://files.pythonhosted.org/packages/11/37/17307f2eb8739bd07844ee4fb3a2ff21cf9d60e053048d16dca7c0572d32/ptts-0.7.0-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:d4042a3f9ac24b2e67c79e213eab389547d9e06b707d745a77373797bb41549e", size = 7032454, upload-time = "2026-11-09T11:19:54.265Z" },
+    { url = "https://files.pythonhosted.org/packages/14/54/7b9c7d92e7856c628334a4986291652be90ffc5e1c231d5f634b066f6efa/ptts-0.7.0-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:4decd6ff1be956b76fa1aeb115fb29569c6fc0b2c7ce7f4762d4c7c503bd24ba", size = 7536477, upload-time = "2026-11-09T11:19:55.717Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/62/d33abd76ab80a40f0bea22e692661f0ad27e58a1d3de7526193591000db0/ptts-0.7.0-cp39-abi3-win_amd64.whl", hash = "sha256:020936f8cef3ec80d736895fb510f1cfbfe8ac5b635c6c6477fc740f07783a6e", size = 6901225, upload-time = "2026-11-09T11:19:57.088Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/33/11396feb523c33209f65639e8a8ed71d6d3ef8eb7b1784f890cc5dfcdf3f/ptts-0.7.0-cp39-abi3-win_arm64.whl", hash = "sha256:5fff8562639d652a4a90a5f6887095c450a9d4c01a94544254d8d044b2a2fe4c", size = 6607527, upload-time = "2026-11-09T11:19:58.676Z" },
 ]
 
 [[package]]

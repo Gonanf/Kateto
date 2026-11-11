@@ -1,6 +1,6 @@
 ---
 title: Connectors
-description: Connectors — documentación de Kateto.
+description: Connectors — documentación de Hipotenusa.
 ---
 
 # Connector Plugins

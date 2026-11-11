@@ -9,20 +9,20 @@
 - Antes: solo `conquest` tenía ambos; `jane/doktor/whisperer` solo `top.png/mouth.png` → `HttpServer` 404 para `/voices/{jane,doktor,whisperer}/avatar_head.png`.
 - Fix: generados `avatar_head.png` (copia de `top.png`) y `avatar_jaw.png` (copia de `mouth.png`) para `jane/doktor/whisperer`. Verificado: `ls voices/*/avatar*.png` ahora 8 archivos presentes.
 
-**Frontend `kateto-avatar.js`:**
+**Frontend `hipotenusa-avatar.js`:**
 
-- Mantiene `<kateto-avatar>` con dos capas `layer-head` + `layer-jaw` (`/voices/{voice}/avatar_head.png` + `avatar_jaw.png`) y fallback `top/mouth`.
+- Mantiene `<hipotenusa-avatar>` con dos capas `layer-head` + `layer-jaw` (`/voices/{voice}/avatar_head.png` + `avatar_jaw.png`) y fallback `top/mouth`.
 - Fix RMS desalineado (P0-1):
   - `computeJawKinematics()` bajado de 52px/28px/34° aleatorio a **18px / 6° determinístico** (sin `Math.random`), `headOffsetY` sutil; documentado como fallback sintético.
   - Nuevo `computeBackendKinematics(rms)` replica fórmula backend (16px/4.5° floor 0.05) como fallback autoritativo.
   - Añadido `setJawTransform({jawOffsetX, jawOffsetY, jawRotation, headOffsetY})` — **backend es autoridad**. `setRms()` ahora delega a `setJawTransform` tras `computeJawKinematics`. `layer-head` ahora tiene `transform` + `transition` y `headOffsetY` mueve cabeza sutilmente (`-1.5px` a `-1.8px` máx).
   - `transform-origin` jaw cambiado de `50% 65%` a `50% 22%` (bisagra realista).
 
-**Backend `kateto/core/rms.py`:**
+**Backend `hipotenusa/core/rms.py`:**
 
 - Nueva `map_rms_to_puppet_transform(rms)` → `{jawOffsetX, jawOffsetY, jawRotation, headOffsetY}` (determinística, `headOffsetY=-factor*1.8`). `map_rms_to_jaw_transform` preservada exacta para tests (`0.525 → 8.0,2.25`).
 
-**Backend `kateto/plugins/visual_overlay/visual_overlay_plugin.py`:**
+**Backend `hipotenusa/plugins/visual_overlay/visual_overlay_plugin.py`:**
 
 - Importa `map_rms_to_puppet_transform`.
 - `update_viseme` y `on_audio_output` ahora emiten `jawOffsetX/Y/Rotation + headOffsetY` (backend authoritative) + `is_speaking` alineado a `rms > 0.05` (antes 0.01, desalineado con `noise_floor 0.05`). Payload incluye ambos niveles `payload[jawOffset*]` y `payload.data[jawOffset*]`.
@@ -32,13 +32,13 @@
 
 ## 2) Acta judicial → de overlay derecha a dock abajo (flex/grid)
 
-**Problema:** `kateto-paper-transcript` estaba `position:absolute; right:1.2vw; bottom:11vh; width:21vw; height:66vh; z-index:30` tapando `zone-right` en 1280px y no responsivo.
+**Problema:** `hipotenusa-paper-transcript` estaba `position:absolute; right:1.2vw; bottom:11vh; width:21vw; height:66vh; z-index:30` tapando `zone-right` en 1280px y no responsivo.
 
 **Fix `courtroom.html`:**
 
 - Nuevo layout flex: `#court-layout {display:flex; flex-direction:column; height:100dvh}` con `#court-stage {flex:1; position:relative; overflow:hidden}` (contiene `#scene` + 3 zones) y `#acta-dock {flex:0 0 30vh; min-height:180px; max-height:36vh; border-top:2px solid gold}`.
-- HTML reestructurado: todo el tribunal dentro de `#court-stage`, `<kateto-paper-transcript>` movida dentro de `#acta-dock` (ya no absolute). CSS override `#acta-dock kateto-paper-transcript {position:relative!important; width:100%!important; height:100%!important; inset:auto!important}`.
-- Legacy fallback guard: `kateto-paper-transcript:not(#acta-dock kateto-paper-transcript)` mantiene posición antigua si dock no existe.
+- HTML reestructurado: todo el tribunal dentro de `#court-stage`, `<hipotenusa-paper-transcript>` movida dentro de `#acta-dock` (ya no absolute). CSS override `#acta-dock hipotenusa-paper-transcript {position:relative!important; width:100%!important; height:100%!important; inset:auto!important}`.
+- Legacy fallback guard: `hipotenusa-paper-transcript:not(#acta-dock hipotenusa-paper-transcript)` mantiene posición antigua si dock no existe.
 - Resultado: el acta empuja courtroom hacia arriba, no tapa; scroll interno sigue funcionando; `filter` eliminado en dock para evitar recorte.
 
 **Transcript component:** sin cambios funcionales; lazy audio unlock se mantiene.
@@ -63,10 +63,10 @@
 ## 4) Build / run verificable
 
 ```bash
-uv run pytest kateto/tests/test_visual_overlay.py kateto/tests/test_bate_debate.py kateto/tests/test_http_server.py -v
+uv run pytest hipotenusa/tests/test_visual_overlay.py hipotenusa/tests/test_bate_debate.py hipotenusa/tests/test_http_server.py -v
 # 10 + 6 + 3 = 19 passed (visual_overlay 10 past, bate_debate 6, http_server 3)
-uv build  # wheel + sdist OK → dist/kateto-0.1.0-py3-none-any.whl
-uv run python -c "from kateto.core.rms import map_rms_to_puppet_transform; print(map_rms_to_puppet_transform(0.525))"
+uv build  # wheel + sdist OK → dist/hipotenusa-0.1.0-py3-none-any.whl
+uv run python -c "from hipotenusa.core.rms import map_rms_to_puppet_transform; print(map_rms_to_puppet_transform(0.525))"
 # {'jawOffsetX':0.0,'jawOffsetY':8.0,'jawRotation':2.25,'headOffsetY':-0.9}
 ```
 
@@ -77,12 +77,12 @@ uv run python -c "from kateto.core.rms import map_rms_to_puppet_transform; print
 
 ## Archivos modificados
 
-- `kateto/plugins/visual_overlay/web/kateto-avatar.js` — puppet 2 capas, setJawTransform, deterministic kinematics, head subtle
-- `kateto/core/rms.py` — +`map_rms_to_puppet_transform`
-- `kateto/plugins/visual_overlay/visual_overlay_plugin.py` — puppet payload, thresholds 0.05, EMA reset, on_debate
-- `kateto/plugins/visual_overlay/web/courtroom.html` — flex layout dock abajo, overlay_layout handler, backend viseme, FLUSTER_RE/turnKey, restoreState fix
-- `kateto/plugins/visual_overlay/web/index.html` — consume backend puppet, threshold 0.05
-- `kateto/plugins/system/http_server.py` — dedup VALID_AVATAR_FILES, SOUNDS_DIR top-level, game viseme puppet
+- `hipotenusa/plugins/visual_overlay/web/hipotenusa-avatar.js` — puppet 2 capas, setJawTransform, deterministic kinematics, head subtle
+- `hipotenusa/core/rms.py` — +`map_rms_to_puppet_transform`
+- `hipotenusa/plugins/visual_overlay/visual_overlay_plugin.py` — puppet payload, thresholds 0.05, EMA reset, on_debate
+- `hipotenusa/plugins/visual_overlay/web/courtroom.html` — flex layout dock abajo, overlay_layout handler, backend viseme, FLUSTER_RE/turnKey, restoreState fix
+- `hipotenusa/plugins/visual_overlay/web/index.html` — consume backend puppet, threshold 0.05
+- `hipotenusa/plugins/system/http_server.py` — dedup VALID_AVATAR_FILES, SOUNDS_DIR top-level, game viseme puppet
 - `config/defaults/voices/{jane,doktor,whisperer}/avatar_head.png|avatar_jaw.png` — generados
 - `assets/bate_debate/whisperer.png` — generado
 

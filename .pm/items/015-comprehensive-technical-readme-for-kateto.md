@@ -1,6 +1,6 @@
 +++
 id = 15
-title = 'Comprehensive Technical README for Kateto'
+title = 'Comprehensive Technical README for Hipotenusa'
 description = 'Write production-grade technical README.md detailing architecture, Vulkan acceleration, Camb AI streaming, VTuber kinematics, KV cache prefill, and configuration.'
 state = 'done'
 type = 'docs'

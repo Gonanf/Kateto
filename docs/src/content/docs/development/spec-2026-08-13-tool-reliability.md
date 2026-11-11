@@ -5,11 +5,11 @@ description: "Spec de implementación — 2026 08 13 Tool Reliability."
 
 # Spec: Confiabilidad de tools (guardia de truncamiento + preflight + faux provider)
 
-Fecha: 2026-08-13 | Worktree: wt/tool-reliability | Fuente: harness research (brainstorm-kateto.md §A6/G6/G4)
+Fecha: 2026-08-13 | Worktree: wt/tool-reliability | Fuente: harness research (brainstorm-hipotenusa.md §A6/G6/G4)
 
 ## Problem Statement
 
-El tool-calling de las voces es frágil: cuando el LLM corta por límite de tokens (`stop_reason == "length"`), los argumentos JSON de los tool calls pueden venir truncados o malformados y Kateto los ejecuta igual, produciendo comandos Shell/FileSystem corruptos y errores crípticos. No hay validación de argumentos antes de invocar, y los tests del pipeline dependen de modelos reales (lentos y caros).
+El tool-calling de las voces es frágil: cuando el LLM corta por límite de tokens (`stop_reason == "length"`), los argumentos JSON de los tool calls pueden venir truncados o malformados y Hipotenusa los ejecuta igual, produciendo comandos Shell/FileSystem corruptos y errores crípticos. No hay validación de argumentos antes de invocar, y los tests del pipeline dependen de modelos reales (lentos y caros).
 
 ## Solution
 
@@ -45,5 +45,5 @@ Antes de ejecutar cualquier tool call, una guardia verifica el stop reason de la
 
 ## Further Notes
 
-- Ver brainstorming-kateto.md §A6/G6/G4.
+- Ver brainstorming-hipotenusa.md §A6/G6/G4.
 - Este cambio es requisito de estabilidad para las specs de turn-gating y prompt-consistency.

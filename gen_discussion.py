@@ -1,7 +1,7 @@
-"""Discusion tipo panel usando las voces REALES de Kateto.
+"""Discusion tipo panel usando las voces REALES de Hipotenusa.
 
-Reusa kateto.voices.factory._PROFILES (perfiles reales con sus roles) y
-kateto.voices.base.OpenAICompatibleProvider (provider LLM real, :11434).
+Reusa hipotenusa.voices.factory._PROFILES (perfiles reales con sus roles) y
+hipotenusa.voices.base.OpenAICompatibleProvider (provider LLM real, :11434).
 Jane actua de moderadora/jueza: plantea el tema, pide opinion a las otras
 voces, y cierra con veredicto. El texto se vuelca a .md (no a TTS).
 Uso: uv run python gen_discussion.py ["tema opcional"]
@@ -15,15 +15,15 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from kateto.providers import ChatMessage
-from kateto.voices.base import GenerationRequest, OpenAICompatibleProvider
-from kateto.voices.factory import _PROFILES
+from hipotenusa.providers import ChatMessage
+from hipotenusa.voices.base import GenerationRequest, OpenAICompatibleProvider
+from hipotenusa.voices.factory import _PROFILES
 
 import os
-from kateto.core.config import load_config
+from hipotenusa.core.config import load_config
 
 ENDPOINT = "http://localhost:11434/v1"
-MODEL = "Kateto"
+MODEL = "Hipotenusa"
 try:
     _cfg = load_config()
     _vllm = _cfg.settings.plugin.get("voice_llm") if _cfg.settings.plugin else None
@@ -32,8 +32,8 @@ try:
         MODEL = getattr(_vllm, "model", None) or (isinstance(_vllm, dict) and _vllm.get("model")) or MODEL
 except Exception:
     pass
-ENDPOINT = os.environ.get("KATETO_LLM_ENDPOINT") or ENDPOINT
-MODEL = os.environ.get("KATETO_LLM_MODEL") or MODEL
+ENDPOINT = os.environ.get("HIPOTENUSA_LLM_ENDPOINT") or ENDPOINT
+MODEL = os.environ.get("HIPOTENUSA_LLM_MODEL") or MODEL
 
 _SPEECH_CONSTRAINT = (
     " You are a voice assistant in a live conversation. Never use symbols, bullet"
@@ -42,7 +42,7 @@ _SPEECH_CONSTRAINT = (
 )
 _PANEL = ["whisperer", "doktor", "conquest"]  # voces que opinan; Jane modera/juzga
 _TOPICS = [
-    "Vale la pena construir un sistema multi-agente como Kateto en vez de un solo agente grande?",
+    "Vale la pena construir un sistema multi-agente como Hipotenusa en vez de un solo agente grande?",
     "El streaming de respuestas en vivo mejora la experiencia o solo agrega latencia y bugs?",
     "Las voces de un asistente deberian tener personalidades opuestas o todas serviles?",
     "El hot-reload 'aunque rompa' es buena idea para un sistema de voz en produccion?",
@@ -55,7 +55,7 @@ def _doc_prompt(voice_id: str) -> str:
     if base.endswith(_SPEECH_CONSTRAINT):
         base = base[: -len(_SPEECH_CONSTRAINT)]
     return (
-        base + " Estas en una DISCUSION ESCRITA entre las voces del equipo Kateto, no"
+        base + " Estas en una DISCUSION ESCRITA entre las voces del equipo Hipotenusa, no"
         " hablando por voz. Responde en ESPANOL, parrafos libres. Manten tu rol."
     )
 
@@ -95,7 +95,7 @@ async def main() -> None:
     # 1) Jane modera: plantea el tema al panel.
     framing = await speak(
         "jane",
-        f"Eres la MODERADORA de un panel de expertos del equipo Kateto. Presenta este"
+        f"Eres la MODERADORA de un panel de expertos del equipo Hipotenusa. Presenta este"
         f" tema al panel y formula la pregunta central que deben debatir:\n\nTEMA: {topic}",
     )
     # 2) El panel opina, cada voz ve el planteamiento de Jane.
@@ -115,10 +115,10 @@ async def main() -> None:
         f" cierra con una conclusion. 3 a 5 oraciones.",
     )
 
-    out = Path(__file__).parent / "discusion_kateto.md"
+    out = Path(__file__).parent / "discusion_hipotenusa.md"
     md = [
-        f"# Panel Kateto: {topic}\n",
-        f"_Generado {datetime.now():%Y-%m-%d %H:%M} con las voces reales de Kateto"
+        f"# Panel Hipotenusa: {topic}\n",
+        f"_Generado {datetime.now():%Y-%m-%d %H:%M} con las voces reales de Hipotenusa"
         f" ({ENDPOINT}, modelo `{MODEL}`). Jane modera y juzga; panel ="
         f" {', '.join(_PROFILES[v].display_name for v in _PANEL)}._\n",
         f"**Tema:** {topic}\n---\n",

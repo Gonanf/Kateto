@@ -1,0 +1,518 @@
+import json
+import math
+import shutil
+import socket
+import subprocess
+from pathlib import Path
+import struct
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
+import pytest
+
+from hipotenusa.core.event import AudioOutput, TextChunk
+from hipotenusa.core.manager import PluginManager
+from hipotenusa.plugins.system.http_server import HttpServer
+from hipotenusa.core.rms import (
+    RMSProcessor,
+    apply_ema,
+    calculate_raw_rms,
+    map_rms_to_jaw_transform,
+    map_rms_to_puppet_transform,
+    normalize_rms,
+)
+from hipotenusa.plugins.visual_overlay.visual_overlay_plugin import VisualOverlayPlugin
+
+
+def test_calculate_raw_rms():
+    # Given: empty or invalid bytes
+    assert calculate_raw_rms(b"") == 0.0
+    assert calculate_raw_rms(b"\x00") == 0.0
+
+    # Given: 100 samples with constant amplitude 32767
+    max_samples = struct.pack("<100h", *[32767] * 100)
+    rms_max = calculate_raw_rms(max_samples)
+    assert math.isclose(rms_max, 32767 / 32768.0, rel_tol=1e-3)
+
+    # Given: silence (0 amplitude)
+    silence = struct.pack("<100h", *[0] * 100)
+    assert calculate_raw_rms(silence) == 0.0
+
+
+def test_normalize_rms():
+    # Given: below noise threshold (0.01)
+    assert normalize_rms(0.005, noise_threshold=0.01, peak_threshold=0.8) == 0.0
+    assert normalize_rms(0.01, noise_threshold=0.01, peak_threshold=0.8) == 0.0
+
+    # Given: at peak threshold (0.8)
+    assert normalize_rms(0.8, noise_threshold=0.01, peak_threshold=0.8) == 1.0
+    assert normalize_rms(0.9, noise_threshold=0.01, peak_threshold=0.8) == 1.0
+
+    # Given: midpoint
+    mid_raw = 0.01 + 0.5 * (0.8 - 0.01)
+    assert math.isclose(normalize_rms(mid_raw, noise_threshold=0.01, peak_threshold=0.8), 0.5)
+
+
+def test_apply_ema():
+    # Given: initial state 0.0 and step input 1.0 with alpha=0.3
+    step1 = apply_ema(1.0, 0.0, alpha=0.3)
+    assert math.isclose(step1, 0.3)
+
+    step2 = apply_ema(1.0, step1, alpha=0.3)
+    assert math.isclose(step2, 0.3 * 1.0 + 0.7 * 0.3)
+
+    # Given: very small value decays to 0.0
+    assert apply_ema(0.0, 1e-5, alpha=0.3) == 0.0
+
+
+def test_map_rms_to_jaw_transform_pure_mapping():
+    # Given: noise floor = 0.05
+    # When: rms is below noise floor
+    assert map_rms_to_jaw_transform(0.0) == (0.0, 0.0)
+    assert map_rms_to_jaw_transform(0.04) == (0.0, 0.0)
+    assert map_rms_to_jaw_transform(0.05) == (0.0, 0.0)
+
+    # When: rms is at intermediate level (0.525 gives factor = (0.525 - 0.05) / 0.95 = 0.5)
+    # jaw NEGATIVO = capa de arriba que sube = abre (bug 125)
+    offset_y, rotation = map_rms_to_jaw_transform(0.525)
+    assert math.isclose(offset_y, -20.0, abs_tol=1e-2)
+    assert math.isclose(rotation, 3.25, abs_tol=1e-2)
+
+    # When: rms is at maximum (1.0)
+    assert map_rms_to_jaw_transform(1.0) == (-40.0, 6.5)
+
+    # When: rms exceeds 1.0
+    assert map_rms_to_jaw_transform(1.5) == (-40.0, 6.5)
+
+
+def test_rms_processor_stateful_and_windowed():
+    processor = RMSProcessor(alpha=0.3, noise_threshold=0.01, peak_threshold=0.8, sample_rate=16000)
+
+    # When: processing silence
+    silence = struct.pack("<320h", *[0] * 320)
+    assert processor.process(silence) == 0.0
+
+    # When: processing audio with signal
+    samples = struct.pack("<640h", *[15000] * 640)
+    rms = processor.process(samples)
+    assert 0.0 < rms <= 1.0
+
+    # When: reset
+    processor.reset()
+    assert processor.current_ema == 0.0
+
+
+@pytest.mark.asyncio
+async def test_visual_overlay_compute_rms_and_broadcast():
+    plugin = VisualOverlayPlugin()
+
+    # Generate 100 16-bit PCM samples
+    samples = struct.pack("<100h", *[5000] * 100)
+    rms = plugin.compute_rms(samples)
+    assert 0.0 < rms < 1.0
+
+    # Mock websocket connection
+    mock_ws = MagicMock()
+    mock_ws.send_json = AsyncMock()
+
+    await plugin.register_websocket(mock_ws)
+
+    # Test subtitle chunk event
+    chunk = TextChunk(text="Hello overlay", sequence=1, voice_id="jane")
+    await plugin.on_text_chunk(chunk)
+
+    mock_ws.send_json.assert_called_once()
+    sub_payload = mock_ws.send_json.call_args[0][0]
+    assert sub_payload["type"] == "subtitle"
+    assert sub_payload["event"] == "text_chunk"
+    assert sub_payload["text"] == "Hello overlay"
+    assert sub_payload["voice_id"] == "jane"
+
+    # Test audio output event
+    audio = AudioOutput(samples=samples, sample_rate=16000, channels=1, voice_id="jane")
+    await plugin.on_audio_output(audio)
+
+    assert mock_ws.send_json.call_count == 2
+    vis_payload = mock_ws.send_json.call_args_list[1][0][0]
+    assert vis_payload["type"] == "viseme"
+    assert vis_payload["event"] == "audio_output"
+    assert vis_payload["voice_id"] == "jane"
+    assert vis_payload["rms"] > 0.0
+    assert "jawOffsetY" in vis_payload
+    assert "jawRotation" in vis_payload
+    assert vis_payload["data"]["rms"] == vis_payload["rms"]
+
+
+@pytest.mark.asyncio
+async def test_audio_output_explicit_rms_passthrough():
+    plugin = VisualOverlayPlugin()
+    mock_ws = MagicMock()
+    mock_ws.send_json = AsyncMock()
+    await plugin.register_websocket(mock_ws)
+
+    # When: AudioOutput has explicit rms
+    audio = AudioOutput(samples=b"", sample_rate=16000, channels=1, voice_id="jane", rms=0.525)
+    await plugin.on_audio_output(audio)
+
+    mock_ws.send_json.assert_called_once()
+    payload = mock_ws.send_json.call_args[0][0]
+    assert payload["rms"] == 0.525
+    assert math.isclose(payload["jawOffsetY"], -20.0, abs_tol=1e-2)
+    assert math.isclose(payload["jawRotation"], 3.25, abs_tol=1e-2)
+
+
+@pytest.mark.asyncio
+async def test_http_server_serves_avatar_assets_and_overlay(tmp_path: Path):
+    voices_dir = tmp_path / "voices" / "jane"
+    voices_dir.mkdir(parents=True)
+    (voices_dir / "top.png").write_bytes(b"dummy_top_png")
+    (voices_dir / "mouth.png").write_bytes(b"dummy_mouth_png")
+    (voices_dir / "avatar_head.png").write_bytes(b"dummy_head_png")
+    (voices_dir / "avatar_jaw.png").write_bytes(b"dummy_jaw_png")
+    (voices_dir / "forbidden.txt").write_bytes(b"secret")
+
+    manager = PluginManager()
+    server = HttpServer(manager, host="127.0.0.1", port=8996, config_dir=tmp_path)
+    await server.start()
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # 1. Overlay HTML endpoint
+            resp_overlay = await client.get("http://127.0.0.1:8996/overlay")
+            assert resp_overlay.status_code == 200
+            assert "vtuber-overlay" in resp_overlay.text
+            assert "avatar_head.png" in resp_overlay.text
+            assert "avatar_jaw.png" in resp_overlay.text
+
+            # 1b. Component and Courtroom routes
+            resp_comp = await client.get("http://127.0.0.1:8996/components/hipotenusa-avatar.js")
+            assert resp_comp.status_code == 200
+            assert "HipotenusaAvatar" in resp_comp.text
+            assert "HipotenusaSubtitles" in resp_comp.text
+
+            resp_court = await client.get("http://127.0.0.1:8996/courtroom")
+            assert resp_court.status_code == 200
+            assert "hipotenusa-paper-transcript" in resp_court.text
+            # Display-only courtroom: no buttons, no browser TTS.
+            assert "<button" not in resp_court.text
+            assert "speechSynthesis" not in resp_court.text
+            assert "BrowserPcmPlayer" not in resp_court.text
+            # Photo-based scene and thinking-phase handling.
+            assert "/assets/courtroom_bg.jpg" in resp_court.text
+            assert "/assets/judge_bench.jpg" in resp_court.text
+            assert "/assets/stand_left.jpg" in resp_court.text
+            assert "/assets/stand_right.jpg" in resp_court.text
+            assert 'phase === "thinking"' in resp_court.text
+
+            assert "caption" in resp_overlay.text
+
+            # 2. Valid avatar assets
+            for filename, expected_bytes in [
+                ("top.png", b"dummy_top_png"),
+                ("mouth.png", b"dummy_mouth_png"),
+                ("avatar_head.png", b"dummy_head_png"),
+                ("avatar_jaw.png", b"dummy_jaw_png"),
+            ]:
+                resp = await client.get(f"http://127.0.0.1:8996/voices/jane/{filename}")
+                assert resp.status_code == 200
+                assert resp.content == expected_bytes
+
+            # 3. Disallowed file
+            resp_disallowed = await client.get("http://127.0.0.1:8996/voices/jane/forbidden.txt")
+            assert resp_disallowed.status_code == 404
+
+            # 4. Non-existent avatar
+            resp_missing = await client.get("http://127.0.0.1:8996/voices/ghost/avatar_head.png")
+            assert resp_missing.status_code == 404
+
+            # 5. Debate scene assets served from assets/bate_debate/
+            resp_bg = await client.get("http://127.0.0.1:8996/assets/courtroom_bg.jpg")
+            assert resp_bg.status_code == 200
+            assert resp_bg.headers["content-type"].startswith("image/jpeg")
+            resp_bench = await client.get("http://127.0.0.1:8996/assets/judge_bench.jpg")
+            assert resp_bench.status_code == 200
+            assert resp_bench.headers["content-type"].startswith("image/jpeg")
+            resp_stands = await client.get("http://127.0.0.1:8996/assets/stand_left.jpg")
+            assert resp_stands.status_code == 200
+            resp_chars = await client.get("http://127.0.0.1:8996/assets/jane.png")
+            assert resp_chars.status_code == 200
+            resp_no_traversal = await client.get("http://127.0.0.1:8996/assets/..%2F..%2Fpyproject.toml")
+            assert resp_no_traversal.status_code == 404
+            resp_ghost_asset = await client.get("http://127.0.0.1:8996/assets/ghost.png")
+            assert resp_ghost_asset.status_code == 404
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_visual_overlay_audio_streaming_and_multi_agent_config():
+    import base64
+
+    # Given: settings with custom layout, voices, and audio streaming enabled
+    settings = MagicMock()
+    settings.layout = "multi"
+    settings.voices = ["jane", "doktor", "whisperer"]
+    settings.audio = True
+    settings.get.side_effect = lambda k, default=None: getattr(settings, k, default)
+
+    plugin = VisualOverlayPlugin(settings=settings)
+    assert plugin._layout == "multi"
+    assert plugin._voices == ["jane", "doktor", "whisperer"]
+    assert plugin._stream_audio is True
+
+    # When: audio output with PCM samples is emitted
+    mock_ws = MagicMock()
+    mock_ws.send_json = AsyncMock()
+    await plugin.register_websocket(mock_ws)
+
+    sample_bytes = struct.pack("<50h", *[4000] * 50)
+    audio = AudioOutput(samples=sample_bytes, sample_rate=24000, channels=1, voice_id="doktor", format="pcm_s16le")
+    await plugin.on_audio_output(audio)
+
+    # Then: broadcast payload includes base64 audio and audio format metadata
+    assert mock_ws.send_json.call_count == 1
+    payload = mock_ws.send_json.call_args[0][0]
+    assert payload["event"] == "audio_output"
+    assert payload["voice_id"] == "doktor"
+    assert payload["sample_rate"] == 24000
+    assert payload["format"] == "pcm_s16le"
+    assert payload["audio"] == base64.b64encode(sample_bytes).decode("ascii")
+    assert payload["data"]["audio"] == payload["audio"]
+
+
+@pytest.mark.asyncio
+async def test_visual_overlay_programmatic_layout_event():
+    from hipotenusa.core.event import OverlayLayout
+
+    plugin = VisualOverlayPlugin()
+    mock_ws = MagicMock()
+    mock_ws.send_json = AsyncMock()
+    await plugin.register_websocket(mock_ws)
+
+    # When: emitting an OverlayLayout event for a game (e.g. chess / versus)
+    event = OverlayLayout(
+        layout="sides",
+        positions={"jane": "left", "doktor": "right"},
+        voices=["jane", "doktor"],
+    )
+    await plugin.on_overlay_layout(event)
+
+    # Then: layout update is broadcast to connected websockets
+    assert mock_ws.send_json.call_count == 1
+    payload = mock_ws.send_json.call_args[0][0]
+    assert payload["event"] == "overlay_layout"
+    assert payload["layout"] == "sides"
+    assert payload["positions"]["jane"] == "left"
+    assert payload["positions"]["doktor"] == "right"
+    assert payload["voices"] == ["jane", "doktor"]
+
+
+WEB_DIR = Path(__file__).resolve().parents[1] / "plugins" / "visual_overlay" / "web"
+
+
+def test_js_jaw_kinematics_suite():
+    """Corre la suite JS del jaw (bug 112: ciclo abre/cierra, convención única).
+
+    El JS es el path primario de animación (setRms/pulseWord); sin este
+    wrapper `uv run pytest` no lo cubriría. Skip si no hay runtime JS.
+    """
+    node = shutil.which("node") or shutil.which("bun")
+    if node is None:
+        pytest.skip("sin runtime JS (node/bun)")
+    suite = WEB_DIR / "hipotenusa-avatar.test.mjs"
+    cmd = [node, "--test", str(suite)] if "node" in node else [node, "test", str(suite)]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, f"suite JS falló:\n{proc.stdout}\n{proc.stderr}"
+
+
+def _run_js_probe(probe: str):
+    """Evalúa un probe ESM contra hipotenusa-avatar.js y devuelve el JSON impreso."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("sin node para evaluar el kinematics JS")
+    prelude = (
+        "globalThis.HTMLElement=class{};"
+        "globalThis.customElements={get:()=>undefined,define:()=>{}};"
+        f"const m=await import({json.dumps(str(WEB_DIR / 'hipotenusa-avatar.js'))});"
+    )
+    proc = subprocess.run([node, "--input-type=module", "-e", prelude + probe], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"probe JS falló:\n{proc.stderr}"
+    return json.loads(proc.stdout)
+
+
+def test_js_idle_silencio_sin_lateral():
+    # Given: IdleMotion con rngs extremos (siempre 0, siempre ~1, alternado)
+    # When: se avanza 6 s en pasos de 50 ms y se combina en silencio (hablando o no)
+    # Then: jawOffsetX y jawOffsetY del idle son 0 exactos con cualquier rng,
+    #   el giro queda en ±3° y ni hablando el idle suma lateral a la voz
+    rows = _run_js_probe("""
+      const rngs = [() => 0, () => 0.999999, (() => { let i = 0; return () => (i++ % 2 ? 0.9 : 0.1); })()];
+      const rows = [];
+      for (const rng of rngs) {
+        const idle = new m.IdleMotion({ rng, startMs: 0 });
+        for (let t = 0; t <= 6000; t += 50) {
+          const pose = idle.update(t);
+          for (const speaking of [false, true]) {
+            const silent = m.combineIdleWithVoice(pose, { jawOffsetX: 0, jawOffsetY: 0, jawRotation: 0 }, speaking);
+            const voice = m.combineIdleWithVoice(pose, { jawOffsetX: 5.25, jawOffsetY: -10, jawRotation: 1 }, speaking);
+            rows.push([pose.jawOffsetX, pose.jawOffsetY, silent.jawOffsetX, silent.jawOffsetY, silent.jawRotation, voice.jawOffsetX]);
+          }
+        }
+      }
+      console.log(JSON.stringify(rows));
+    """)
+    assert len(rows) > 0
+    for jx, jy, kx, ky, rot, vx in rows:
+        assert jx == 0 and jy == 0 and kx == 0 and ky == 0
+        assert abs(rot) <= 3.0 + 1e-9
+        assert vx == 5.25
+
+
+def test_js_jaw_envelope_attack_release():
+    # Given: rms fijo 0.5 (factor constante, la forma la pone solo el tiempo)
+    # When: se muestrea un ciclo completo del flap en pasos de 1 ms
+    # Then: la SUBIDA al pico es más corta que la BAJADA, sin saltos discretos
+    #   entre frames, con pico ≈ -factor*40 y cruces del neutro cada ciclo
+    data = _run_js_probe("""
+      const rms = 0.5, T = 1000 / m.FLAP_HZ, ys = [];
+      for (let t = 0; t <= Math.floor(T); t += 1) ys.push(m.computeJawKinematics(rms, t).jawOffsetY);
+      let peak = 0;
+      for (let i = 1; i < ys.length; i++) if (ys[i] < ys[peak]) peak = i;
+      let step = 0;
+      for (let i = 1; i < ys.length; i++) step = Math.max(step, Math.abs(ys[i] - ys[i - 1]));
+      const mid = (ys[peak] + ys[0]) / 2;
+      let crossings = 0;
+      const seq = [];
+      for (let t = 0; t <= 1000; t += 1) seq.push(m.computeJawKinematics(rms, t).jawOffsetY);
+      for (let i = 1; i < seq.length; i++) if ((seq[i-1] - mid) * (seq[i] - mid) < 0) crossings++;
+      console.log(JSON.stringify({ ys, peak, step, crossings }));
+    """)
+    ys, peak, step, crossings = data["ys"], data["peak"], data["step"], data["crossings"]
+    rise_ms, fall_ms = peak, (len(ys) - 1) - peak
+    # Then: apertura rápida (~25-35 ms) y cierre más lento
+    assert rise_ms < fall_ms
+    assert 20 <= rise_ms <= 40
+    # Then: continua entre frames (nada de saltos discretos)
+    assert step < 2.5
+    # Then: amplitud escalada por rms (factor 0.52 con rms 0.5, tope intacto)
+    factor = ((0.5 - 0.015) / 0.985) ** 0.52
+    assert math.isclose(ys[peak], -factor * 40.0, abs_tol=5e-2)
+    assert ys[0] == 0
+    # Then: cruza el neutro varias veces por segundo (2 por ciclo)
+    assert crossings >= 10
+
+
+def test_js_jaw_silencio_cero_exacto():
+    # Given: rms bajo el umbral de silencio (0.015)
+    # When: computeJawKinematics en varios instantes
+    # Then: transform exactamente 0 (sin piso ni deriva)
+    rows = _run_js_probe("""
+      const rows = [];
+      for (const rms of [0.0, 0.01, 0.014, 0.0149]) {
+        for (let t = 0; t <= 500; t += 37) rows.push(m.computeJawKinematics(rms, t));
+      }
+      console.log(JSON.stringify(rows));
+    """)
+    assert len(rows) > 0
+    for k in rows:
+        assert k["jawOffsetX"] == 0 and k["jawOffsetY"] == 0 and k["jawRotation"] == 0
+
+
+def test_css_jaw_head_sin_transicion_transform():
+    # Given: el fuente del web component
+    # When: se extraen los bloques .layer-jaw y .layer-head
+    # Then: ninguna declaración transition anima transform (el snap vive en
+    #   la cinemática; una transición re-suaviza cada frame del rAF)
+    import re
+
+    src = (WEB_DIR / "hipotenusa-avatar.js").read_text()
+    for cls in (".layer-jaw", ".layer-head"):
+        block = re.search(re.escape(cls) + r"\s*\{(.*?)\}", src, re.DOTALL).group(1)
+        transitions = re.findall(r"transition\s*:\s*([^;]+);", block)
+        assert all(t.strip() == "none" for t in transitions), f"{cls} suaviza transform vía CSS: {transitions}"
+
+
+def test_shared_convention_js_backend_vs_python_puppet():
+    """La convención es única entre computeBackendKinematics (JS) y
+    map_rms_to_puppet_transform (Python): mismo signo en jaw (≤ 0 = abre,
+    la capa de arriba sube — bug 125), head baja en leve positivo (≥ 0) y
+    mismos topes. Bug 112: antes el path local era siempre negativo mientras
+    el backend era positivo (salto ~55px).
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("sin node para evaluar el kinematics JS")
+    probe = (
+        "globalThis.HTMLElement=class{};"
+        "globalThis.customElements={get:()=>undefined,define:()=>{}};"
+        f"const m=await import({json.dumps(str(WEB_DIR / 'hipotenusa-avatar.js'))});"
+        "const out={};"
+        "for (const r of [0.0,0.04,0.1,0.3,0.525,0.8,1.0]) out[r]=m.computeBackendKinematics(r);"
+        "console.log(JSON.stringify(out));"
+    )
+    proc = subprocess.run([node, "--input-type=module", "-e", probe], capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, f"probe JS falló:\n{proc.stderr}"
+    js_results = json.loads(proc.stdout)
+    for rms_str, js in js_results.items():
+        rms = float(rms_str)
+        py = map_rms_to_puppet_transform(rms)
+        assert (js["jawOffsetY"] <= 0) == (py["jawOffsetY"] <= 0), f"signo jaw difiere con rms={rms}"
+        assert (js["headOffsetY"] >= 0) == (py["headOffsetY"] >= 0), f"signo head difiere con rms={rms}"
+        assert math.isclose(js["jawOffsetY"], py["jawOffsetY"], abs_tol=1e-2), f"jaw difiere con rms={rms}"
+        assert math.isclose(js["jawRotation"], py["jawRotation"], abs_tol=1e-2), f"rot difiere con rms={rms}"
+        assert math.isclose(js["headOffsetY"], py["headOffsetY"], abs_tol=1e-2), f"head difiere con rms={rms}"
+
+
+class _FakeOverlay:
+    name = "visual_overlay"
+
+    def __init__(self) -> None:
+        self.payloads: list[dict] = []
+
+    async def _broadcast(self, payload: dict) -> None:
+        self.payloads.append(payload)
+
+
+@pytest.mark.asyncio
+async def test_game_event_sin_rms_no_mueve_el_jaw(tmp_path: Path):
+    # Given: el server de /api/game/event con un visual_overlay que captura
+    async with httpx.AsyncClient() as client:
+        manager = PluginManager()
+        overlay = _FakeOverlay()
+        manager.register_plugin(overlay)
+        # puerto efímero: otro test del mismo archivo puede fijar un puerto y colisionar
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        server = HttpServer(manager, host="127.0.0.1", port=port, config_dir=tmp_path)
+        await server.start()
+        try:
+            url = f"http://127.0.0.1:{port}/api/game/event"
+
+            # When: evento sin dato de audio, y evento con rms vacío
+            for payload in (
+                {"event_type": "move", "voice_id": "jane", "text": "hola"},
+                {"event_type": "move", "voice_id": "jane", "text": "hola", "rms": ""},
+            ):
+                resp = await client.post(url, json=payload)
+                assert resp.status_code == 200
+
+                # Then: sin audio no hay movimiento de boca (bug 131)
+                viseme = overlay.payloads[-2]
+                assert viseme["type"] == "viseme"
+                assert viseme["rms"] == 0.0
+                assert viseme["is_speaking"] is False
+                assert viseme["jawOffsetX"] == 0.0
+                assert viseme["jawOffsetY"] == 0.0
+                assert viseme["jawRotation"] == 0.0
+                assert viseme["headOffsetY"] == 0.0
+
+            # Y con rms de voz el payload sí mueve la boca (control positivo)
+            resp = await client.post(url, json={"event_type": "move", "voice_id": "jane", "text": "hola", "rms": 0.5})
+            assert resp.status_code == 200
+            speaking = overlay.payloads[-2]
+            assert speaking["is_speaking"] is True
+            assert speaking["jawOffsetY"] < 0
+        finally:
+            await server.stop()
+

@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from kateto.plugins.audio_processor.speakers import SpeakerTracker
+from hipotenusa.plugins.audio_processor.speakers import SpeakerTracker
 
 VOICES = Path.home() / ".local/share/piper/voices"
 A = VOICES / "es_AR-daniela-high.onnx"

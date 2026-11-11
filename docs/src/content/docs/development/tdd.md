@@ -1,6 +1,6 @@
 ---
 title: Tdd
-description: Tdd — documentación de Kateto.
+description: Tdd — documentación de Hipotenusa.
 ---
 
 # TDD & Development
@@ -41,9 +41,9 @@ Managed by the user.
 ## Project Structure
 
 ```
-kateto/
+hipotenusa/
 ├── pyproject.toml
-├── kateto/
+├── hipotenusa/
 │   ├── __init__.py
 │   ├── __main__.py          # Entrypoint: main() dispatches argv
 │   ├── run_mode.py          # RuntimeOwner, RuntimeComponents assembly

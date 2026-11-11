@@ -1,5 +1,5 @@
-[kateto]
-name = "Kateto"
+[hipotenusa]
+name = "Hipotenusa"
 language = "en"
 debug = false
 hot_reload = false
@@ -114,6 +114,19 @@ endpoint = "https://api.boson.ai/v1/audio/speech"
 api_key = ""
 model = "higgs-tts-3"
 default_voice = "chloe"
+
+[plugin.audio_output_phonon]
+# TTS streaming (phonon-40m-es, runtime ptts). El wheel de PyPI es CPU-only;
+# para usar la GPU hay que compilar `cargo build --release -p ptts --features cli,vulkan`.
+# Licencia del modelo: CC BY-NC 4.0 (no comercial). Extra: `hipotenusa[phonon]`.
+enabled = false
+model = "hf://gradium/phonon-40m-es"
+lang = "es"
+quant = "q8"
+# auto = backend GPU del wheel si lo trae; cpu en el wheel de PyPI.
+# En Vulkan el quant tiene que ser "f32": q8_0/q4 solo corren en CPU o CUDA.
+device = "auto"
+default_voice = ""
 
 [plugin.audio_output_player]
 enabled = true
@@ -243,10 +256,10 @@ timeout = 600
 # reasoning_effort = "none"  # none|minimal|low|medium|high (gateway: off|disabled|disable → none)
 
 [mcp_servers.system]
-command = "kateto"
+command = "hipotenusa"
 
 # BYO video-rag sidecar for the vision describe fallback chain (plugin-side
-# use only — no voice mcp_servers entry). Inherits Kateto's process env.
+# use only — no voice mcp_servers entry). Inherits Hipotenusa's process env.
 [mcp_servers.video_rag]
 command = "video-rag"
 args = ["mcp", "serve"]
@@ -275,6 +288,19 @@ enabled = true
 # Las voces reales son las cinco de Hipotenusa; jane/doktor/conquest/whisperer
 # ya no existen como plugin y el router elegia nombres muertos.
 voice_probabilities = { dionisio = 0.2, truman = 0.2, elgarca = 0.2, elchacal = 0.2, pagliacci = 0.2 }
+# Impulso propio: la voz habla sola a un momento al azar entre impulse_min y
+# impulse_max, pero SOLO si hay estímulo fresco (transcripción o descripción
+# visual en los últimos impulse_fresh). Sin estímulo no inventa charla.
+# impulse_enabled = false
+# impulse_min = "90s"
+# impulse_max = "4m"
+# impulse_fresh = "10m"
+# Clip IA->IA: al terminar el turno de una voz se lo pasa a otra con un marco
+# de situación (no un chiste). 3 turnos es el tope que soporta el gate.
+# interject_enabled = false
+# interject_chance = 0.55
+# interject_max_turns = 3
+# interject_cooldown = "6s"
 
 [plugin.http_server]
 enabled = true
@@ -296,6 +322,22 @@ timeout = 1.0
 python = "python3"
 script = "/run/media/chaos/secundario/proyectos/kateto-eot2/clasificador_hibrido.py"
 etapa2 = "ft"
+
+# Modo stream (Alien Isolation): Hipotenusa comenta la partida Y contesta el chat
+# de YouTube en voz alta con texto literal (sin LLM). Prioridad: donaciones
+# (Super Chat/stickers/membresias) > mensajes > frases de guion cuando el chat
+# esta callado min_s..max_s. Necesita yt-dlp en el PATH para leer el chat;
+# sin video_url queda solo en frases. El ruteo al mic virtual del juego es del
+# SO: ver el docstring del plugin (PULSE_SINK NO funciona con sounddevice).
+# [plugin.stream_mode]
+# enabled = true
+# voice = "jane"
+# video_url = ""          # URL o videoId del live; vacio = solo frases
+# min_s = 60
+# max_s = 180
+# filler = true           # false = no habla sola, solo contesta el chat
+# max_chars = 220
+# phrases = ["frase 1", "frase 2"]
 
 [plugin.executor_vision]
 enabled = true
@@ -321,3 +363,4 @@ max_frames_per_describe = 2
 # descarta con log, nunca se manda.
 vision_sidecar_max_width = 1024
 device_index = 0
+

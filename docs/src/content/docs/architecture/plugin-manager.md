@@ -1,6 +1,6 @@
 ---
 title: Plugin Manager
-description: Plugin Manager — documentación de Kateto.
+description: Plugin Manager — documentación de Hipotenusa.
 ---
 
 # PluginManager

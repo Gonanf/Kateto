@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <link rel="icon" href="data:," />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0b0b0f" />
+  <title>Hipotenusa Visual Overlay</title>
+  <script type="module" src="/components/hipotenusa-avatar.js?v=flap6"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: white;
+      user-select: none;
+    }
+
+    /* Floating Toolbar (OBS / Stream friendly: auto-hides or hides via ?controls=0) */
+    #toolbar {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      display: flex;
+      gap: 10px;
+      z-index: 100;
+      opacity: 0.92;
+      transition: opacity 0.4s ease;
+    }
+    #toolbar.fade {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .tool-btn {
+      background: rgba(15, 23, 42, 0.84);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #e2e8f0;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    .tool-btn:hover {
+      background: rgba(30, 41, 59, 0.95);
+      border-color: rgba(255, 255, 255, 0.35);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .tool-btn.active {
+      background: rgba(37, 99, 235, 0.85);
+      border-color: rgba(147, 197, 253, 0.6);
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(59, 130, 246, 0.45);
+    }
+
+    /* Stage Container (Full viewport) */
+    #stage {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    #vtuber-overlay {
+      position: absolute;
+      inset: 0;
+    }
+
+    /* Agent Card: smooth positioning transition for game moves and side shifts */
+    .agent-card {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition:
+        top 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        left 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        right 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        bottom 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+        scale 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+        opacity 0.25s ease,
+        filter 0.25s ease;
+      opacity: 0.72;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
+    }
+    .agent-card.speaking {
+      opacity: 1.0;
+      /* Independent `scale` property (not `transform`): it composes with the
+         inline positioning translate (translateX/Y(-50%)) instead of replacing
+         it. `transform: scale() !important` used to drop the centering while
+         talking, jerking the whole card sideways on every utterance. */
+      scale: 1.06;
+      filter: drop-shadow(0 8px 24px rgba(59, 130, 246, 0.6));
+    }
+    .agent-card.hidden {
+      display: none !important;
+    }
+
+    .agent-card hipotenusa-avatar {
+      width: 220px;
+      height: 220px;
+      max-width: 28vw;
+      max-height: 28vw;
+    }
+
+    /* Name Tag */
+    .agent-tag {
+      margin-top: 6px;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #f8fafc;
+      padding: 4px 14px;
+      border-radius: 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: capitalize;
+      transition: all 0.2s ease;
+    }
+    .agent-card.speaking .agent-tag {
+      background: rgba(37, 99, 235, 0.9);
+      border-color: rgba(147, 197, 253, 0.7);
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+      color: #ffffff;
+    }
+
+    /* Subtitle Banner at bottom */
+    #caption-bar {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(840px, 92vw);
+      min-height: 48px;
+      background: rgba(10, 15, 26, 0.86);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      z-index: 50;
+    }
+    #caption-bar.empty {
+      opacity: 0;
+      transform: translateX(-50%) translateY(12px);
+      pointer-events: none;
+    }
+    #caption-badge {
+      font-weight: 700;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      white-space: nowrap;
+      letter-spacing: 0.04em;
+    }
+    #caption-text {
+      font-size: 1.15rem;
+      line-height: 1.4;
+      text-align: center;
+      color: rgba(241, 245, 249, 0.45);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    }
+    #caption-text .w-spoken {
+      color: #f1f5f9;
+    }
+
+    #offline-badge {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      z-index: 50;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: rgba(120, 53, 15, 0.92);
+      color: #fde68a;
+      font: 700 0.78rem/1 "JetBrains Mono", ui-monospace, monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    #offline-badge[hidden] { display: none; }
+    body.offline #caption-bar { opacity: 0.5; }
+  </style>
+</head>
+<body>
+
+  <!-- Floating Stream Controls -->
+  <div id="toolbar">
+    <button id="mode-btn" class="tool-btn" title="Alternar presets de layout (Row, Sides/Chess, Corners, Single)">
+      👥 Layout: Row
+    </button>
+    <button id="audio-btn" class="tool-btn" title="Habilitar/Deshabilitar reproducción de audio TTS en el navegador">
+      🔇 Audio: OFF
+    </button>
+  </div>
+
+  <!-- Main Stage & VTuber Overlay Container -->
+  <div id="stage">
+    <div id="vtuber-overlay" class="overlay-container">
+      <div id="agents-holder">
+        <!-- Agent cards dynamically rendered with avatar_head.png and avatar_jaw.png -->
+      </div>
+    </div>
+    <div id="caption-bar" class="empty">
+      <span id="caption-badge">Hipotenusa</span>
+      <span id="caption-text"></span>
+    </div>
+  </div>
+
+  <div id="offline-badge" hidden>offline · hipotenusa inalcanzable</div>
+
+  <script type="module">
+    import { BrowserPcmPlayer, VOICE_NAMES } from '/components/hipotenusa-avatar.js?v=flap6';
+    import { createOfflineShell } from '/components/hipotenusa-offline.js?v=offline1';
+
+    const offlineShell = createOfflineShell({ doc: document, speech: window.speechSynthesis });
+    window.hipotenusaOffline = offlineShell;
+
+    // Parse URL parameters
+    const params = new URLSearchParams(window.location.search);
+    let currentLayout = (params.get('layout') || params.get('mode') || 'row').toLowerCase();
+    
+    // Strict voice filter: if specified in URL (e.g. ?voices=jane or ?voices=doktor),
+    // this window will ONLY ever show those voices and never bleed or add others!
+    let rawVoicesParam = params.get('voices');
+    let hasVoiceFilter = Boolean(rawVoicesParam && rawVoicesParam.trim().length > 0);
+    let currentVoices = hasVoiceFilter
+      ? rawVoicesParam.split(',').map(v => v.trim().toLowerCase()).filter(Boolean)
+      : null;
+
+    let audioParam = params.get('audio');
+    let isAudioEnabled = (audioParam === '1' || audioParam === 'true');
+    const showControls = params.get('controls') !== '0';
+
+    // Parse custom position overrides from URL:
+    // e.g. ?pos_jane=left&pos_doktor=right OR ?positions={"jane":"left","doktor":"right"}
+    let customPositions = {};
+    if (params.get('positions')) {
+      try {
+        customPositions = JSON.parse(params.get('positions'));
+      } catch (e) {
+        console.warn("Failed to parse ?positions JSON:", e);
+      }
+    }
+    for (const [key, value] of params.entries()) {
+      if (key.startsWith('pos_')) {
+        const vid = key.replace('pos_', '').toLowerCase();
+        customPositions[vid] = value;
+      }
+    }
+
+    const toolbar = document.getElementById('toolbar');
+    const modeBtn = document.getElementById('mode-btn');
+    const audioBtn = document.getElementById('audio-btn');
+    const agentsHolder = document.getElementById('agents-holder');
+    const captionBar = document.getElementById('caption-bar');
+    const captionBadge = document.getElementById('caption-badge');
+    const captionText = document.getElementById('caption-text');
+
+    if (!showControls) {
+      toolbar.style.display = 'none';
+    }
+
+    // Web Audio PCM Player
+    const pcmPlayer = new BrowserPcmPlayer({ sampleRate: 24000, enabled: isAudioEnabled });
+
+    function updateAudioButton() {
+      if (isAudioEnabled) {
+        audioBtn.textContent = '🔊 Audio: ON';
+        audioBtn.classList.add('active');
+      } else {
+        audioBtn.textContent = '🔇 Audio: OFF';
+        audioBtn.classList.remove('active');
+      }
+    }
+
+    audioBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      isAudioEnabled = !isAudioEnabled;
+      if (isAudioEnabled) {
+        pcmPlayer.enable();
+      } else {
+        pcmPlayer.disable();
+      }
+      updateAudioButton();
+    });
+    updateAudioButton();
+
+    document.addEventListener('click', () => {
+      if (isAudioEnabled) {
+        pcmPlayer.enable();
+      }
+    }, { once: true });
+
+    // Toolbar auto-fade
+    let idleTimer = null;
+    function resetIdleTimer() {
+      if (!showControls) return;
+      toolbar.classList.remove('fade');
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        toolbar.classList.add('fade');
+      }, 3500);
+    }
+    window.addEventListener('mousemove', resetIdleTimer);
+    resetIdleTimer();
+
+    // Layout Presets list for cycling
+    const LAYOUT_PRESETS = ['row', 'sides', 'corners', 'top-bottom', 'single'];
+    let layoutMode = currentLayout || 'row';
+
+    function updateModeButton() {
+      const labelMap = {
+        'row': '👥 Layout: Row',
+        'sides': '♟️ Layout: Sides (Chess)',
+        'versus': '⚔️ Layout: Sides (Versus)',
+        'chess': '♟️ Layout: Sides (Chess)',
+        'corners': '📐 Layout: Corners',
+        'top-bottom': '↕️ Layout: Top-Bottom',
+        'single': '👤 Layout: Single',
+        'custom': '🎯 Layout: Custom',
+      };
+      modeBtn.textContent = labelMap[layoutMode] || `👥 Layout: ${layoutMode}`;
+      recalculatePositions();
+    }
+
+    modeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const curIdx = LAYOUT_PRESETS.indexOf(layoutMode);
+      layoutMode = LAYOUT_PRESETS[(curIdx + 1) % LAYOUT_PRESETS.length];
+      updateModeButton();
+    });
+
+    // Voice List — empty until the server pushes the real (enabled) voices on WS connect
+    // (`overlay_layout`); the old hardcoded jane/doktor/conquest/whisperer kept showing
+    // avatars for voices no longer in config.
+    let defaultVoices = [];
+    let activeVoiceList = currentVoices || defaultVoices;
+
+    // Agent Card Elements Cache
+    const agentCards = new Map();
+    let activeSpeakerId = null;
+
+    function renderAgentCards(voices) {
+      agentsHolder.innerHTML = '';
+      agentCards.clear();
+
+      voices.forEach(voiceId => {
+        const card = document.createElement('div');
+        card.className = 'agent-card';
+        card.id = `card-${voiceId}`;
+
+        const avatar = document.createElement('hipotenusa-avatar');
+        avatar.setAttribute('voice', voiceId);
+
+        const tag = document.createElement('div');
+        tag.className = 'agent-tag';
+        tag.textContent = VOICE_NAMES[voiceId] || (voiceId.charAt(0).toUpperCase() + voiceId.slice(1));
+
+        card.appendChild(avatar);
+        card.appendChild(tag);
+        agentsHolder.appendChild(card);
+
+        agentCards.set(voiceId, { card, avatar, tag, speakingTimer: null });
+      });
+
+      recalculatePositions();
+    }
+
+    // Position Parser & Anchor Calculator
+    function parseAnchor(pos) {
+      if (!pos) return null;
+      const p = String(pos).trim().toLowerCase();
+
+      const anchors = {
+        'left': { left: '5%', top: '50%', transform: 'translateY(-50%)' },
+        'right': { right: '5%', top: '50%', transform: 'translateY(-50%)' },
+        'top': { top: '8%', left: '50%', transform: 'translateX(-50%)' },
+        'bottom': { bottom: '16%', left: '50%', transform: 'translateX(-50%)' },
+        'center': { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' },
+        'top-left': { top: '8%', left: '6%', transform: 'none' },
+        'top-right': { top: '8%', right: '6%', transform: 'none' },
+        'bottom-left': { bottom: '16%', left: '6%', transform: 'none' },
+        'bottom-right': { bottom: '16%', right: '6%', transform: 'none' },
+      };
+
+      if (anchors[p]) return anchors[p];
+
+      // Coordinate format e.g. "15%,50%" or "x:20%,y:80%" or "100px,200px"
+      const match = p.match(/(?:x:)?\s*([0-9.]+(?:%|px|vw))\s*,\s*(?:y:)?\s*([0-9.]+(?:%|px|vh))/);
+      if (match) {
+        return { left: match[1], top: match[2], transform: 'translate(-50%, -50%)' };
+      }
+
+      return null;
+    }
+
+    function applyCardStyles(card, styleObj) {
+      card.style.top = '';
+      card.style.bottom = '';
+      card.style.left = '';
+      card.style.right = '';
+      card.style.transform = '';
+
+      for (const [k, v] of Object.entries(styleObj)) {
+        card.style[k] = v;
+      }
+    }
+
+    function recalculatePositions() {
+      const count = activeVoiceList.length;
+      if (count === 0) return;
+
+      activeVoiceList.forEach((voiceId, idx) => {
+        const item = agentCards.get(voiceId);
+        if (!item) return;
+        const card = item.card;
+        // Row sizing is inline; other layouts keep the CSS default (220px / 28vw).
+        item.avatar.style.width = '';
+        item.avatar.style.height = '';
+        item.tag.style.maxWidth = '';
+        item.tag.style.fontSize = '';
+        item.tag.style.padding = '';
+
+        // Custom position override takes highest priority
+        const customPos = customPositions[voiceId];
+        const parsedCustom = parseAnchor(customPos);
+        if (parsedCustom) {
+          card.classList.remove('hidden');
+          applyCardStyles(card, parsedCustom);
+          return;
+        }
+
+        // Layout Presets
+        if (layoutMode === 'single') {
+          if (!activeSpeakerId) activeSpeakerId = activeVoiceList[0];
+          if (voiceId === activeSpeakerId) {
+            card.classList.remove('hidden');
+            applyCardStyles(card, {
+              bottom: '16%',
+              left: '50%',
+              transform: 'translateX(-50%) scale(1.15)',
+            });
+          } else {
+            card.classList.add('hidden');
+          }
+          return;
+        }
+
+        card.classList.remove('hidden');
+
+        if (layoutMode === 'sides' || layoutMode === 'versus' || layoutMode === 'chess') {
+          // Opposite sides of screen (perfect for Chess, board games, or debates)
+          // Row count comes from the voice count: the old fixed 30/65/100% put the
+          // third stacked card half off the bottom edge (5 voices clipped, even at 1080p).
+          const rows = Math.max(1, Math.ceil(count / 2));
+          const half = Math.max(1, item.card.getBoundingClientRect().height / 2);
+          const span = Math.max(0, window.innerHeight - 2 * half - 16);
+          const yOffset = `${Math.round(half + 8 + (rows > 1 ? Math.floor(idx / 2) * span / (rows - 1) : span / 2))}px`;
+          if (idx % 2 === 0) {
+            // Left side (Player 1 / White)
+            applyCardStyles(card, {
+              left: '6%',
+              top: yOffset,
+              transform: 'translateY(-50%)',
+            });
+          } else {
+            // Right side (Player 2 / Black)
+            applyCardStyles(card, {
+              right: '6%',
+              top: yOffset,
+              transform: 'translateY(-50%)',
+            });
+          }
+        } else if (layoutMode === 'top-bottom') {
+          if (idx === 0) {
+            applyCardStyles(card, { top: '8%', left: '50%', transform: 'translateX(-50%)' });
+          } else if (idx === 1) {
+            applyCardStyles(card, { bottom: '16%', left: '50%', transform: 'translateX(-50%)' });
+          } else if (idx === 2) {
+            applyCardStyles(card, { top: '50%', left: '8%', transform: 'translateY(-50%)' });
+          } else {
+            applyCardStyles(card, { top: '50%', right: '8%', transform: 'translateY(-50%)' });
+          }
+        } else if (layoutMode === 'corners') {
+          if (count === 2) {
+            // Diagonal opposition: Player 1 at bottom-left, Player 2 at top-right
+            const twoCorners = [
+              { bottom: '18%', left: '6%', transform: 'none' },
+              { top: '8%', right: '6%', transform: 'none' },
+            ];
+            applyCardStyles(card, twoCorners[idx % 2]);
+          } else {
+            const cornerMap = [
+              { top: '8%', left: '6%', transform: 'none' },
+              { top: '8%', right: '6%', transform: 'none' },
+              { bottom: '18%', left: '6%', transform: 'none' },
+              { bottom: '18%', right: '6%', transform: 'none' },
+            ];
+            applyCardStyles(card, cornerMap[idx % 4]);
+          }
+        } else {
+          // Default: 'row' (centered bottom row). Slots are real viewport slots so
+          // the row never clips: 5 cards at 220px ran off both edges under ~1570px
+          // (7% - translateX(-50%) = negative x). Avatar shrinks to the slot.
+          const vw = window.innerWidth;
+          const slotCount = Math.max(count, 1);
+          const size = Math.max(60, Math.min(220, (vw * 0.92) / slotCount - 8));
+          const step = 92 / slotCount;
+          item.avatar.style.width = `${size}px`;
+          item.avatar.style.height = `${size}px`;
+          // The name tag can be wider than the avatar ("Elchacal"), which widened
+          // the card and pushed the last slot past the right edge at 390px.
+          item.tag.style.maxWidth = `${size}px`;
+          // Below ~100px the label only fit by truncating to "Pa…": shrink the
+          // type and the padding instead of losing the name on a phone.
+          if (size < 100) {
+            item.tag.style.fontSize = '0.62rem';
+            item.tag.style.padding = '2px 6px';
+          }
+          applyCardStyles(card, {
+            bottom: '16%',
+            left: `${4 + step / 2 + idx * step}%`,
+            transform: 'translateX(-50%)',
+          });
+        }
+      });
+    }
+
+    renderAgentCards(activeVoiceList);
+    updateModeButton();
+    window.addEventListener('resize', recalculatePositions);
+
+    // Caption handler
+    let captionClearTimer = null;
+    // Word-synced karaoke: per-voice { words: [{text, start_ms, end_ms}] } for the
+    // sentence currently being heard. Words come from EdgeTTS WordBoundary timings
+    // on audio_output events; reveal position comes from the player's post-write
+    // visemes (audio_ms = ms of sentence audio already on the speakers).
+    const voiceWords = new Map();
+    // Caption ownership: while a voice is audibly speaking, its audio events
+    // own the caption bar. LLM-paced text_chunk events arriving for the NEXT
+    // sentence must not overwrite the currently spoken one (caption z-fighting).
+    // Ownership expires shortly after the last audible activity.
+    const audioCaptionOwns = new Map();
+    function audioOwnsCaption(voiceId) {
+      return (audioCaptionOwns.get((voiceId || '').toLowerCase()) || 0) > Date.now();
+    }
+    function hasActiveWords(voiceId) {
+      const state = voiceWords.get((voiceId || '').toLowerCase());
+      return Boolean(state && state.active);
+    }
+    function storeWords(voiceId, words) {
+      // Synthesis bursts overlap playback: sentences arrive faster than they
+      // are heard. Keep the audible one active and queue the next instead of
+      // replacing (replacing is what stepped over the current subtitle).
+      if (!voiceId || !Array.isArray(words) || words.length === 0) return false;
+      const vid = voiceId.toLowerCase();
+      let state = voiceWords.get(vid);
+      if (!state) {
+        state = { active: null, pending: [] };
+        voiceWords.set(vid, state);
+      }
+      if (!state.active) {
+        state.active = { words };
+        return true; // new sentence
+      }
+      const last = state.pending[state.pending.length - 1];
+      if (!last || words.length < last.words.length) {
+        // A shrinking snapshot starts a new sentence; a growing one extends
+        // the pending sentence already queued.
+        state.pending.push({ words });
+      } else {
+        state.pending[state.pending.length - 1] = { words };
+      }
+      return false;
+    }
+    function completeWords(voiceId) {
+      const vid = (voiceId || '').toLowerCase();
+      const state = voiceWords.get(vid);
+      if (!state) return;
+      const next = state.pending.shift();
+      if (next) {
+        state.active = next;
+      } else {
+        voiceWords.delete(vid);
+      }
+    }
+    function revealWords(voiceId, audioMs) {
+      const vid = (voiceId || '').toLowerCase();
+      const state = voiceWords.get(vid);
+      const entry = state ? state.active : null;
+      if (!entry || typeof audioMs !== 'number') return false;
+      const words = entry.words;
+      let shown = 0;
+      for (const w of words) {
+        if (typeof w.start_ms === 'number' && w.start_ms <= audioMs) shown++;
+        else break;
+      }
+      if (shown === 0) return false;
+      captionBadge.textContent = VOICE_NAMES[vid] || voiceId;
+      captionText.innerHTML = '';
+      words.forEach((w, i) => {
+        const span = document.createElement('span');
+        span.textContent = (i > 0 ? ' ' : '') + w.text;
+        if (i < shown) span.className = 'w-spoken';
+        captionText.appendChild(span);
+      });
+      captionBar.classList.remove('empty');
+      if (captionClearTimer) clearTimeout(captionClearTimer);
+      captionClearTimer = setTimeout(() => {
+        captionBar.classList.add('empty');
+        captionClearTimer = null;
+      }, 5000);
+      const lastEnd = words[words.length - 1].end_ms;
+      if (typeof lastEnd === 'number' && audioMs >= lastEnd) {
+        // Sentence fully heard: promote the queued sentence, if any.
+        completeWords(vid);
+      }
+      return true;
+    }
+    function setCaption(voiceId, text) {
+      if (!text || !text.trim()) return;
+      captionBadge.textContent = VOICE_NAMES[voiceId] || voiceId;
+      captionText.textContent = text.trim();
+      captionBar.classList.remove('empty');
+
+      if (captionClearTimer) clearTimeout(captionClearTimer);
+      captionClearTimer = setTimeout(() => {
+        captionBar.classList.add('empty');
+        captionClearTimer = null;
+      }, 5000);
+    }
+
+    function onSpeakerActivity(voiceId, rms, msgPayload) {
+      const vid = (voiceId || '').toLowerCase();
+      if (!vid) return;
+
+      // STRICT FILTER: If window is opened with ?voices=jane, ignore any other voices completely!
+      if (hasVoiceFilter && !currentVoices.includes(vid)) {
+        return;
+      }
+
+      let agent = agentCards.get(vid);
+
+      // Only add dynamically if there is NO explicit voices filter
+      if (!agent && !hasVoiceFilter) {
+        activeVoiceList.push(vid);
+        renderAgentCards(activeVoiceList);
+        agent = agentCards.get(vid);
+      }
+
+      if (!agent) return;
+
+      if (activeSpeakerId !== vid) {
+        activeSpeakerId = vid;
+        if (layoutMode === 'single') {
+          recalculatePositions();
+        }
+      }
+
+      if (typeof rms === 'number') {
+        // Use erratic jaw animation (computeJawKinematics) — jaw moves randomly,
+        // body stays still. Ignores backend jawOffsetX/headOffsetY for animation.
+        agent.avatar.setRms(rms);
+        if (rms > 0.05) {
+          agent.card.classList.add('speaking');
+          if (agent.speakingTimer) clearTimeout(agent.speakingTimer);
+          // Hold past the ~1s worst-case gap between playback visemes so the
+          // mouth doesn't freeze mid-speech; post-write visemes re-arm this.
+          agent.speakingTimer = setTimeout(() => {
+            agent.card.classList.remove('speaking');
+            agent.avatar.setRms(0);
+          }, 1500);
+        }
+      }
+    }
+
+    // Connect WebSocket
+    function connectWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${proto}//${location.host}/ws/overlay`);
+
+      ws.onopen = () => { offlineShell.update({ type: 'ws_open' }); };
+      ws.onerror = () => { offlineShell.update({ type: 'ws_error' }); };
+
+      ws.onmessage = (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+        if (!msg) return;
+
+        // Dynamic Layout & Position Events (e.g. emitted from games, chess, scripts)
+        if (msg.event === 'overlay_layout' || msg.type === 'layout') {
+          if (msg.layout) {
+            layoutMode = msg.layout.toLowerCase();
+          }
+          if (msg.positions && typeof msg.positions === 'object') {
+            Object.assign(customPositions, msg.positions);
+          }
+          if (Array.isArray(msg.voices) && !hasVoiceFilter) {
+            activeVoiceList = msg.voices.map(v => v.toLowerCase());
+            renderAgentCards(activeVoiceList);
+          }
+          updateModeButton();
+          return;
+        }
+
+        // Live Audio Output (Visemes & Streaming PCM audio)
+        if (msg.event === 'audio_output' || msg.type === 'viseme') {
+          const voiceId = (msg.voice_id || (msg.data && msg.data.voice_id) || '').toLowerCase();
+          
+          // Strict filter check
+          if (hasVoiceFilter && voiceId && !currentVoices.includes(voiceId)) {
+            return;
+          }
+
+          const rawRms = (typeof msg.rms === 'number') ? msg.rms : (msg.data && typeof msg.data.rms === 'number') ? msg.data.rms : 0.0;
+          const text = msg.text || (msg.data && msg.data.text);
+          const audioB64 = msg.audio || (msg.data && msg.data.audio);
+          const words = msg.words || (msg.data && msg.data.words);
+          const audioMs = (typeof msg.audio_ms === 'number') ? msg.audio_ms
+            : (msg.data && typeof msg.data.audio_ms === 'number' ? msg.data.audio_ms : null);
+
+          // Play streaming backend TTS audio
+          if (audioB64 && isAudioEnabled) {
+            const sampleRate = msg.sample_rate || (msg.data && msg.data.sample_rate) || 24000;
+            const channels = msg.channels || (msg.data && msg.data.channels) || 1;
+            pcmPlayer.playChunk(audioB64, sampleRate, channels);
+          }
+
+          if (words && words.length) {
+            storeWords(voiceId, words);
+          }
+
+          if (voiceId) {
+            onSpeakerActivity(voiceId, rawRms, msg);
+          }
+          // Karaoke reveal owns the caption while a sentence is audibly in
+          // progress; otherwise fall back to the sentence text on audio events
+          // (TTS-paced, still ahead of LLM-paced text_chunk captions).
+          if (audioMs !== null && revealWords(voiceId, audioMs)) {
+            // Caption handled by karaoke.
+          } else if (text && !hasActiveWords(voiceId)) {
+            setCaption(voiceId, text);
+          }
+          if (voiceId && (text || (words && words.length) || rawRms > 0.05)) {
+            audioCaptionOwns.set(voiceId.toLowerCase(), Date.now() + 1500);
+          }
+          return;
+        }
+
+        // Subtitles / Text Chunks
+        if (msg.event === 'text_chunk' || msg.type === 'subtitle') {
+          const voiceId = (msg.voice_id || (msg.data && msg.data.voice_id) || '').toLowerCase();
+          if (hasVoiceFilter && voiceId && !currentVoices.includes(voiceId)) {
+            return;
+          }
+          const text = msg.text || (msg.data && msg.data.text);
+          if (voiceId && text) {
+            onSpeakerActivity(voiceId, 0.08);
+            // Don't let LLM-paced text jump ahead while audio owns the caption.
+            if (!hasActiveWords(voiceId) && !audioOwnsCaption(voiceId)) {
+              setCaption(voiceId, text);
+            }
+          }
+          return;
+        }
+
+        // Debate Turns
+        if (msg.event === 'debate') {
+          const voiceId = (msg.voice_id || (msg.data && msg.data.voice_id) || '').toLowerCase();
+          if (hasVoiceFilter && voiceId && !currentVoices.includes(voiceId)) {
+            return;
+          }
+          const text = msg.text || (msg.data && msg.data.text);
+          if (voiceId && text) {
+            onSpeakerActivity(voiceId, 0.12);
+            if (!hasActiveWords(voiceId) && !audioOwnsCaption(voiceId)) {
+              setCaption(voiceId, text);
+            }
+          }
+          return;
+        }
+
+        // Interruption
+        if (msg.event === 'interrupt' || msg.type === 'interrupt') {
+          pcmPlayer.stop();
+          voiceWords.clear();
+          audioCaptionOwns.clear();
+          document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('speaking'));
+          agentCards.forEach(a => {
+            if (typeof a.avatar.setJawTransform === 'function') a.avatar.setJawTransform({ jawOffsetX:0, jawOffsetY:0, jawRotation:0, headOffsetY:0 });
+            else a.avatar.setRms(0);
+            if (typeof a.avatar.stopSpeaking === 'function') a.avatar.stopSpeaking();
+          });
+          return;
+        }
+
+        // Voice Idle
+        if (msg.event === 'voice_idle') {
+          const vid = String(msg.voice || msg.voice_id || (msg.data && (msg.data.voice || msg.data.voice_id)) || '').toLowerCase();
+          if (vid) {
+            voiceWords.delete(vid);
+            audioCaptionOwns.delete(vid);
+          } else {
+            voiceWords.clear();
+            audioCaptionOwns.clear();
+          }
+          document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('speaking'));
+          agentCards.forEach(a => {
+            if (typeof a.avatar.setJawTransform === 'function') a.avatar.setJawTransform({ jawOffsetX:0, jawOffsetY:0, jawRotation:0, headOffsetY:0 });
+            else a.avatar.setRms(0);
+          });
+          return;
+        }
+      };
+
+      ws.onclose = () => {
+        offlineShell.update({ type: 'ws_close' });
+        setTimeout(connectWs, 2000);
+      };
+    }
+
+    connectWs();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/offline/sw.js', { scope: '/' }).catch(() => {});
+    }
+  </script>
+</body>
+</html>

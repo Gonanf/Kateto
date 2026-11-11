@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>Hipotenusa · Estudio</title>
+  <style>
+    /* Set de entrevista. Ver design/escenario-entrevista.md: los numeros son
+       px de diseno a 1280 de ancho y se escalan con --s (a 1920 => x1.5). */
+    :root {
+      --st-bg: #06080e; --st-bg-2: #0d121c; --st-panel: #141b26;
+      --st-line: rgba(255, 255, 255, .10); --st-text: #e8eef8; --st-text-dim: #93a2b8;
+      --st-accent: #7dd3fc; --st-accent-2: #f5b544; --st-live: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color: var(--st-text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    body { display: grid; place-items: center; }
+
+    /* Escenario 16:9; --s = 1px de diseno (1280 => 1px, 1920 => 1.5px). */
+    #stage { position: relative; width: min(100vw, 177.7778vh); height: min(56.25vw, 100vh);
+      container-type: size; overflow: hidden; isolation: isolate;
+      --s: calc(100cqw / 1280);
+      background: linear-gradient(180deg, var(--st-bg) 0%, var(--st-bg-2) 45%, #111824 74%, #090d14 100%); }
+    /* key light + vineta lateral (fondo) */
+    #stage::before { content: ""; position: absolute; z-index: -3; inset: 0;
+      background:
+        radial-gradient(ellipse 35% 43% at 42% 39%, rgba(125,211,252,.14), rgba(125,211,252,.045) 42%, transparent 76%),
+        linear-gradient(90deg, rgba(0,0,0,.63), transparent 19%, transparent 80%, rgba(0,0,0,.70)); }
+    /* vineta final (por encima del set, debajo de los carteles: z 5 en la spec) */
+    #stage::after { content: ""; position: absolute; z-index: 5; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 74% 86% at 50% 46%, transparent 54%, rgba(0,0,0,.52) 100%); }
+
+    /* pared acustica: listones verticales cada 38 (1280), apagados a los bordes */
+    .acoustic-wall { position: absolute; z-index: -2; inset: 0 0 33.333% 0; opacity: .72;
+      background:
+        repeating-linear-gradient(90deg, transparent 0 21px,
+          rgba(116,136,160,.105) 21px 23px, rgba(0,0,0,.28) 23px 27px, transparent 27px 38px),
+        linear-gradient(90deg, #080b11 0%, transparent 19%, transparent 81%, #080b11 100%);
+      mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+
+    /* piso: horizonte a 2/3 de alto */
+    .floor { position: absolute; z-index: -1; inset: 66.666% 0 0;
+      border-top: 1px solid rgba(190,208,230,.19);
+      background: linear-gradient(180deg, rgba(117,143,174,.10), rgba(20,29,43,.32) 22%, rgba(5,8,14,.88) 100%); }
+    .floor::before { content: ""; position: absolute; top: -1px; left: 15%; width: 56%;
+      height: calc(115 * var(--s)); opacity: .22;
+      background: linear-gradient(180deg, rgba(125,211,252,.13), transparent); filter: blur(calc(15 * var(--s))); }
+
+    /* reflejo bajo el avatar */
+    .reflection { position: absolute; z-index: 1; left: calc(400 * var(--s)); bottom: calc(16 * var(--s));
+      width: calc(260 * var(--s)); height: calc(52 * var(--s)); border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(125,211,252,.16), rgba(0,0,0,.45) 60%, transparent 74%);
+      filter: blur(calc(10 * var(--s))); }
+
+    /* slot del avatar: plano medio. Las artes existentes son de cuerpo entero
+       (1814x3443), asi que las capas se recortan a esta caja (ver script). */
+    .slot { position: absolute; z-index: 2; left: calc(360 * var(--s)); bottom: calc(28 * var(--s));
+      width: calc(340 * var(--s)); height: calc(460 * var(--s));
+      /* sin glow: el halo sobre un recorte de foto se lee como sticker */
+      filter: drop-shadow(0 calc(8 * var(--s)) calc(16 * var(--s)) rgba(0,0,0,.5)); }
+    hipotenusa-avatar { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    /* canto de mesa en primer plano */
+    .desk-edge { position: absolute; z-index: 4; left: 0; right: 0; bottom: calc(22 * var(--s)); height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(125,211,252,.20) 20%, rgba(215,228,244,.24) 50%,
+        rgba(125,211,252,.16) 78%, transparent);
+      box-shadow: 0 calc(-7 * var(--s)) calc(24 * var(--s)) rgba(125,211,252,.045); }
+
+    /* cartel de pregunta: top/left/right 48 · alto max 168 (1280) */
+    .question { position: absolute; z-index: 8; top: calc(48 * var(--s)); left: calc(48 * var(--s));
+      /* el bug EN VIVO vive en la columna derecha: el cartel no la invade */
+      right: calc(300 * var(--s)); min-height: calc(130 * var(--s)); max-height: calc(168 * var(--s));
+      padding: calc(22 * var(--s)) calc(30 * var(--s)) calc(22 * var(--s)) calc(34 * var(--s));
+      display: flex; flex-direction: column; justify-content: center; overflow: hidden;
+      border: 1px solid rgba(255,255,255,.075); background: rgba(5,8,14,.82);
+      transition: opacity .2s ease; }
+    .question::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0;
+      width: calc(3 * var(--s)); background: var(--st-accent); }
+    .question.empty { opacity: .3; }
+    .question .label { margin: 0 0 calc(8 * var(--s)); color: var(--st-accent);
+      font-size: calc(11 * var(--s)); line-height: 1.2; font-weight: 500;
+      letter-spacing: .16em; text-transform: uppercase; }
+    .question .copy { margin: 0; max-width: calc(880 * var(--s));
+      font-size: calc(34 * var(--s)); line-height: 1.25; font-weight: 500; letter-spacing: -.025em; }
+
+    /* EN VIVO + reloj: top/right 48 (1280) */
+    .live { position: absolute; z-index: 9; top: calc(48 * var(--s)); right: calc(48 * var(--s));
+      display: flex; align-items: center; gap: calc(11 * var(--s)); font-size: calc(11 * var(--s));
+      line-height: 1; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; }
+    .dot { width: calc(7 * var(--s)); height: calc(7 * var(--s)); flex: none; border-radius: 50%;
+      background: var(--st-live); box-shadow: 0 0 calc(10 * var(--s)) rgba(239,68,68,.48);
+      animation: pulse 2.4s ease-in-out infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 calc(10 * var(--s)) rgba(239,68,68,.48); }
+      50% { opacity: .66; box-shadow: 0 0 calc(4 * var(--s)) rgba(239,68,68,.25); }
+    }
+    .clock { margin-left: calc(9 * var(--s)); padding-left: calc(15 * var(--s));
+      border-left: 1px solid var(--st-line); color: var(--st-text-dim);
+      font-size: calc(13 * var(--s)); font-variant-numeric: tabular-nums; letter-spacing: .07em; }
+
+    /* placa de invitado: left/bottom 48 (1280) */
+    .plate { position: absolute; z-index: 9; left: calc(48 * var(--s)); bottom: calc(48 * var(--s));
+      min-width: calc(284 * var(--s));
+      padding: calc(13 * var(--s)) calc(20 * var(--s)) calc(14 * var(--s));
+      border: 1px solid rgba(255,255,255,.12); background: rgba(8,12,19,.78); }
+    .plate .name { display: block; margin: 0 0 calc(5 * var(--s));
+      font-size: calc(22 * var(--s)); line-height: 1.1; font-weight: 600; letter-spacing: .07em; }
+    .plate .meta { display: block; color: var(--st-text-dim); font-size: calc(11 * var(--s));
+      line-height: 1.25; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; }
+
+    .signature { position: absolute; z-index: 9; right: calc(48 * var(--s)); bottom: calc(48 * var(--s));
+      color: rgba(147,162,184,.72); font-size: calc(11 * var(--s)); font-weight: 500; letter-spacing: .10em; }
+
+    .notice { position: absolute; z-index: 10; left: calc(48 * var(--s)); right: calc(48 * var(--s));
+      bottom: calc(130 * var(--s)); display: none; padding: calc(12 * var(--s)) calc(16 * var(--s));
+      background: #3b0d0d; border: 1px solid var(--st-live); font-size: calc(12 * var(--s)); }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div class="acoustic-wall" aria-hidden="true"></div>
+    <div class="floor" aria-hidden="true"></div>
+    <div class="reflection" aria-hidden="true"></div>
+    <div class="slot"><hipotenusa-avatar></hipotenusa-avatar></div>
+    <div class="desk-edge" aria-hidden="true"></div>
+
+    <section class="question empty">
+      <p class="label">Pregunta</p>
+      <p class="copy" id="qtext">esperando…</p>
+    </section>
+
+    <div class="live"><i class="dot" aria-hidden="true"></i><span>En vivo</span><time class="clock" id="clock">00:00:00</time></div>
+    <section class="plate"><span class="name" id="pname">—</span><span class="meta">Invitado · Temporada 1</span></section>
+    <div class="signature">hipotenusa · estudio 2</div>
+    <div class="notice" id="err"></div>
+  </div>
+
+  <script type="module">
+    // El avatar es el componente existente: misma carpeta, sin duplicar arte ni cinematica.
+    import './hipotenusa-avatar.js';
+
+    const params = new URLSearchParams(location.search);
+    const voice = (params.get('voice') || 'jane').trim().toLowerCase();
+    const name = (params.get('name') || voice).trim();
+    // La pagina puede servirse desde otro origen (http.server, OBS): el runtime se resuelve aparte.
+    const runtime = (params.get('runtime') || location.host).trim();
+    const base = `${location.protocol === 'https:' ? 'https:' : 'http:'}//${runtime}`;
+
+    const avatar = document.querySelector('hipotenusa-avatar');
+    const qcard = document.querySelector('.question');
+    const qtext = document.getElementById('qtext');
+    const err = document.getElementById('err');
+    document.getElementById('pname').textContent = name.toUpperCase();
+    document.title = `Hipotenusa · Estudio · ${name}`;
+
+    // El componente pide /voices/... absoluto a la raiz de SU origen. Servida desde
+    // otro puerto esa ruta no existe: se prefija el runtime. Mismo origen: no se toca.
+    if (runtime !== location.host) {
+      const rewrite = new MutationObserver((muts) => {
+        for (const m of muts) {
+          const img = m.target;
+          if (img.tagName !== 'IMG') continue;
+          const src = img.getAttribute('src') || '';
+          if (src.startsWith('/voices/')) img.setAttribute('src', base + src);
+        }
+      });
+      rewrite.observe(avatar.shadowRoot, { attributes: true, attributeFilter: ['src'], subtree: true });
+    }
+    avatar.setAttribute('voice', voice);
+
+    // El arte de las voces es de cuerpo entero; el set es un plano medio. Se recorta
+    // a la caja del slot (top) en vez de encogerse: contain dejaba la figura entera
+    // diminuta y cortada por el borde inferior.
+    for (const img of avatar.shadowRoot.querySelectorAll('img')) {
+      img.style.objectFit = 'cover';
+      img.style.objectPosition = '50% 0%';
+    }
+
+    // Reloj: tiempo desde que se abre el set (no inventa una hora de programa).
+    const t0 = Date.now();
+    const clock = document.getElementById('clock');
+    setInterval(() => {
+      const s = Math.floor((Date.now() - t0) / 1000);
+      clock.textContent = [s / 3600, (s / 60) % 60, s % 60]
+        .map((n) => String(Math.floor(n)).padStart(2, '0')).join(':');
+    }, 1000);
+
+    // La pregunta es lo que llega por la transcripcion del runtime (mismo contrato que /interview).
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    function connect() {
+      const ws = new WebSocket(`${proto}//${runtime}/ws/overlay`);
+      ws.onmessage = (ev) => {
+        let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+        if (!msg) return;
+        if (msg.event === 'transcription') {
+          const text = (msg.text || (msg.data && msg.data.text) || '').trim();
+          if (text) { qtext.textContent = text; qcard.classList.remove('empty'); }
+        }
+        if (msg.event === 'voice_idle') qcard.classList.add('empty');
+      };
+      ws.onclose = () => setTimeout(connect, 1500);
+    }
+    connect();
+
+    // Aviso honesto si la voz no tiene arte. Cross-origin el fetch es opaco: no se pregunta.
+    // Range, no HEAD: el runtime rutea GET y HEAD devuelve 405 (falso positivo).
+    if (runtime === location.host) {
+      fetch(`${base}/voices/${encodeURIComponent(voice)}/avatar_head.png`, { headers: { Range: 'bytes=0-0' } })
+        .then((r) => {
+          if (r.ok) return;
+          err.textContent = `${voice} no tiene arte todavía: falta avatar_head.png (el slot queda vacío).`;
+          err.style.display = 'block';
+        })
+        .catch(() => {});
+    }
+  </script>
+</body>
+</html>

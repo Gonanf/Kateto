@@ -5,7 +5,7 @@ description: "AGENT.md — notas del agente"
 
 # AGENT — Full Specification
 
-This directory documents the **complete Kateto specification** as defined in `SPEC.md`.
+This directory documents the **complete Hipotenusa specification** as defined in `SPEC.md`.
 
 `SPEC.md` is the canonical MVP reference; there is no separate `MVP.md`. These docs cover the broader architecture — MVP/P0 plus post-MVP P1, P2, and P3 material — and explicitly mark features that are outside the shipped MVP.
 

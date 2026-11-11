@@ -1,11 +1,11 @@
 ---
 title: Plugins
-description: Vista general de los plugins del bus de eventos de Kateto.
+description: Vista general de los plugins del bus de eventos de Hipotenusa.
 ---
 
 # Plugins
 
-Cada plugin de Kateto vive en `kateto/plugins/<tipo>/` y se auto-descubre por convención: un archivo `__init__.py` que exporta `create_plugins(ctx)` instancia el plugin, y los métodos `on_*` se registran como suscriptores del bus.
+Cada plugin de Hipotenusa vive en `hipotenusa/plugins/<tipo>/` y se auto-descubre por convención: un archivo `__init__.py` que exporta `create_plugins(ctx)` instancia el plugin, y los métodos `on_*` se registran como suscriptores del bus.
 
 ## Tipos de plugin
 

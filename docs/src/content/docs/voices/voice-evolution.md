@@ -1,6 +1,6 @@
 ---
 title: Voice Evolution
-description: Voice Evolution — documentación de Kateto.
+description: Voice Evolution — documentación de Hipotenusa.
 ---
 
 # Voice Evolution — SOUL, JOURNAL, MEMORIES

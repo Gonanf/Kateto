@@ -4,7 +4,7 @@ Bug: `docs/src/content/docs/bugs/94-auto-barge-in-por-vad-escucha-propio-parlant
 
 ## Causa raíz (verificada en el código)
 
-- `kateto/plugins/audio_input/listener.py:183` (antes del fix): `_interrupt_playback` solo chequeaba `interrupt_on_vad`; el flag `_playback_active`, seteado en `on_audio_output`/`set_playback_active` (`listener.py:131-135`), **nunca se consultaba** antes de interrumpir.
+- `hipotenusa/plugins/audio_input/listener.py:183` (antes del fix): `_interrupt_playback` solo chequeaba `interrupt_on_vad`; el flag `_playback_active`, seteado en `on_audio_output`/`set_playback_active` (`listener.py:131-135`), **nunca se consultaba** antes de interrumpir.
 - Con parlantes (sin AEC ni headset), el propio TTS llega al mic, el Silero VAD dispara `voice_started` y `manager.interrupt(reason="voice_activity")` mataba generación/TTS/player lanes a la primera palabra. El `returncode 255` de ffmpeg era síntoma, no causa.
 
 ## Estrategia elegida: ventana de gracia (debounce) sobre el playback propio
@@ -32,11 +32,11 @@ No se tocó `vad_threshold` ni `silence_timeout`: el problema es gating, no sens
 
 ## Cambios
 
-- `kateto/plugins/audio_input/base.py`: `DEFAULT_BARGE_IN_GRACE_MS`, campo `barge_in_grace_ms` en `AudioInputConfig`, lectura en `from_settings`.
-- `kateto/plugins/audio_input/listener.py`: tracking de `_playback_started_at`/`_deferred_barge_in`, gating en `_interrupt_playback`, re-check en el drain loop, resets en `enable`/`disable`/`set_playback_active`.
-- `kateto/tests/test_audio_input.py`: `test_vad_interrupts_active_playback_once_per_playback_window` adaptado — ese test codificaba el comportamiento buggy (interrumpir de inmediato con playback recién iniciado). Se preservó su intención ("una sola interrupción por ventana de playback") adelantando `_playback_started_at` más allá de la gracia para modelar un barge-in real. No se debilitó ni borró ningún test.
+- `hipotenusa/plugins/audio_input/base.py`: `DEFAULT_BARGE_IN_GRACE_MS`, campo `barge_in_grace_ms` en `AudioInputConfig`, lectura en `from_settings`.
+- `hipotenusa/plugins/audio_input/listener.py`: tracking de `_playback_started_at`/`_deferred_barge_in`, gating en `_interrupt_playback`, re-check en el drain loop, resets en `enable`/`disable`/`set_playback_active`.
+- `hipotenusa/tests/test_audio_input.py`: `test_vad_interrupts_active_playback_once_per_playback_window` adaptado — ese test codificaba el comportamiento buggy (interrumpir de inmediato con playback recién iniciado). Se preservó su intención ("una sola interrupción por ventana de playback") adelantando `_playback_started_at` más allá de la gracia para modelar un barge-in real. No se debilitó ni borró ningún test.
 
-## Cobertura de tests (`kateto/tests/test_audio_barge_in.py`, 8 tests)
+## Cobertura de tests (`hipotenusa/tests/test_audio_barge_in.py`, 8 tests)
 
 | Test | Cubre |
 |---|---|
@@ -53,14 +53,14 @@ Todos con manager y audio_output mockeados (captura fixture, Silero determinista
 ## Verificación (comandos y conteos exactos)
 
 ```
-$ .venv/bin/python -m pytest kateto/tests/test_audio_barge_in.py -q
+$ .venv/bin/python -m pytest hipotenusa/tests/test_audio_barge_in.py -q
 8 passed in 0.99s
 
-$ .venv/bin/python -m pytest kateto/tests/ -q -k "audio or listener or vad or interrupt"
+$ .venv/bin/python -m pytest hipotenusa/tests/ -q -k "audio or listener or vad or interrupt"
 1 failed, 54 passed, 387 deselected
 ```
 
-El único fallo, `test_audio_capture.py::test_sounddevice_capture_uses_raw_int16_mono_native_rate_input`, es **preexistente** y ajeno a este fix: el fake de `sounddevice.RawInputStream` del test no acepta el kwarg `latency` que `kateto/plugins/audio_input/capture.py:103` le pasa (no toqué `capture.py`). Este archivo está fuera del alcance de la regla 0.
+El único fallo, `test_audio_capture.py::test_sounddevice_capture_uses_raw_int16_mono_native_rate_input`, es **preexistente** y ajeno a este fix: el fake de `sounddevice.RawInputStream` del test no acepta el kwarg `latency` que `hipotenusa/plugins/audio_input/capture.py:103` le pasa (no toqué `capture.py`). Este archivo está fuera del alcance de la regla 0.
 
 ## Qué NO se puede verificar sin audio real
 
@@ -77,12 +77,12 @@ El único fallo, `test_audio_capture.py::test_sounddevice_capture_uses_raw_int16
 `set_playback_active(True)` re-stampeaba `_playback_started_at` en **cada** chunk
 del TTS (un utterance = N eventos `AudioOutput(final=False)`, `final=True` recién
 al final). `elapsed_ms` quedaba siempre < `barge_in_grace_ms` → barge-in diferido
-para siempre → imposible cortar a Kateto durante todo el playback.
+para siempre → imposible cortar a Hipotenusa durante todo el playback.
 
 Fix (`listener.py`, `set_playback_active`): el stamp se setea **una sola vez por
 ventana de playback** (transición inactivo→activo); los `True` repetidos hacen
 early-return. `on_audio_output` además acumula el nivel de playback (`_playback_rms`,
-EMA sobre `calculate_raw_rms` de `kateto/core/rms.py`).
+EMA sobre `calculate_raw_rms` de `hipotenusa/core/rms.py`).
 
 ## 2. Discriminador por nivel + habla sostenida
 
@@ -127,7 +127,7 @@ Logs con números para tunear por hardware:
 | `max_turn_secs` | `30.0` | Techo del buffer de turno |
 
 Defaults comentados agregados en `config/defaults/config.toml`
-(`[plugin.audio_input_mic]`). No se tocó `~/.config/kateto/`.
+(`[plugin.audio_input_mic]`). No se tocó `~/.config/hipotenusa/`.
 
 ## 5. Tests adaptados (comportamiento viejo → nuevo, sin debilitar)
 
@@ -159,7 +159,7 @@ en 1 chunk, flush único tras silencio, cap por `max_turn_secs`, defaults/overri
 
 # Segunda pasada (2026-09-18) — A/B/C/D: watchdog, desacople, user_turn, cadena e2e
 
-Los dos síntomas originales seguían: (1) Kateto habla encima del usuario,
+Los dos síntomas originales seguían: (1) Hipotenusa habla encima del usuario,
 (2) una generación por fragmento de Whisper. Cuatro fixes, todos con causa
 verificable en código.
 
@@ -199,7 +199,7 @@ ni contratos, reusando handlers existentes: `VoiceAgent.on_interrupt` cancela
 el player limpia las lanes. (Con `interrupt_on_vad=true` el `voice_activity`
 ya cubre el corte, por eso la señal solo se emite en modo workaround.)
 
-## D. Test end-to-end de la cadena (`kateto/tests/test_audio_turn_chain.py`)
+## D. Test end-to-end de la cadena (`hipotenusa/tests/test_audio_turn_chain.py`)
 
 Listener → whisper (fake) → classifier (fake) → `generate`: 3 segmentos
 separados por menos que `turn_silence_timeout` → 1 `transcribe` + 1 `generate`;
@@ -240,7 +240,7 @@ un segmento). Cuando el usuario retomaba el habla dentro de la ventana de
 classifier → generate. La voz contestaba un mensaje incompleto mientras el
 usuario seguía hablando.
 
-## Fix (`kateto/plugins/audio_input/listener.py`)
+## Fix (`hipotenusa/plugins/audio_input/listener.py`)
 
 - En `_drain_callback_queue`, al detectar habla con `_playback_active` en falso
   (habla real, no bleed propio) y task pendiente: `self._cancel_turn_flush()` +
@@ -272,7 +272,7 @@ usuario seguía hablando.
 `AudioInputConfig.turn_hold_ms` leído de `PluginSettings` vía `getattr`
 (compatible con configs viejas, igual que los knobs anteriores).
 
-## Tests (`kateto/tests/test_audio_turn_flush.py`, 5 tests)
+## Tests (`hipotenusa/tests/test_audio_turn_flush.py`, 5 tests)
 
 | Test | Cubre |
 |---|---|
@@ -315,7 +315,7 @@ mensajes acumulados. El `_steering` bloquea el drenado inmediato, pero el próxi
 `decide` externo lo limpia (`_steering = False`) y el idle siguiente drena la
 cola vieja.
 
-## Fix (`kateto/plugins/system/turn_gate.py`, sin cambios de firmas ni contratos)
+## Fix (`hipotenusa/plugins/system/turn_gate.py`, sin cambios de firmas ni contratos)
 
 - `on_interrupt`: si el interrupt viene del **usuario** (reason en
   `{"voice_activity", "user_turn"}`), descarta la cola (`_pending.clear()`) y
@@ -324,7 +324,7 @@ cola vieja.
 - Diagnóstico de cola: al encolar, `turn_gate: queued <event>(<target>) pending=<n>`
   (el log de `draining` ya existía). El próximo log muestra si se acumula.
 
-## Tests (`kateto/tests/test_turn_gate.py`, 3 nuevos)
+## Tests (`hipotenusa/tests/test_turn_gate.py`, 3 nuevos)
 
 | Test | Cubre |
 |---|---|

@@ -1,6 +1,6 @@
 ---
 title: Voice Agent
-description: Voice Agent — documentación de Kateto.
+description: Voice Agent — documentación de Hipotenusa.
 ---
 
 # VoiceAgent Base Class
@@ -38,7 +38,7 @@ When the LLM returns an end-of-text token, the voice emits a `voice_idle` event.
 Voices are created declaratively via `factory.py`:
 
 ```
-~/.config/kateto/voices/
+~/.config/hipotenusa/voices/
 ├── jane/
 │   ├── SOUL.md
 │   ├── MEMORIES.md

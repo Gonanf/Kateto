@@ -1,6 +1,6 @@
 ---
 title: Backlog
-description: Backlog — documentación de Kateto.
+description: Backlog — documentación de Hipotenusa.
 ---
 
 # Backlog & Sprint Management

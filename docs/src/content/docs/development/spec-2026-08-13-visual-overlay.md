@@ -9,7 +9,7 @@ Fecha: 2026-08-13 | Worktree: wt/visual-overlay | Fuente: spec del usuario (harn
 
 ## Problem Statement
 
-El overlay actual de Kateto (`kateto/plugins/visual_overlay/`, HTML + Datastar v1.0.2) conmuta binariamente entre `top.png` (boca cerrada) y `mouth.png` (boca abierta) al recibir `audio_output` por el WebSocket `/ws/overlay`. Ese salto entre dos frames se ve seco y poco orgánico en stream. Los VTubers usan "muppet cutout": una mandíbula recortada que se mueve de forma continua con la amplitud del audio.
+El overlay actual de Hipotenusa (`hipotenusa/plugins/visual_overlay/`, HTML + Datastar v1.0.2) conmuta binariamente entre `top.png` (boca cerrada) y `mouth.png` (boca abierta) al recibir `audio_output` por el WebSocket `/ws/overlay`. Ese salto entre dos frames se ve seco y poco orgánico en stream. Los VTubers usan "muppet cutout": una mandíbula recortada que se mueve de forma continua con la amplitud del audio.
 
 ## Solution
 
@@ -50,4 +50,4 @@ Constraints del usuario:
 ## Further Notes
 
 - Spec original completa del usuario: `/home/chaos/proyectos/harness-research/docs/muppet-cutout-spec.md`.
-- Ver brainstorming-kateto.md §I y §D9/H12.
+- Ver brainstorming-hipotenusa.md §I y §D9/H12.

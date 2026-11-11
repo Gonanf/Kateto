@@ -15,7 +15,7 @@ These were partially implemented then reverted. Documented here for clean implem
 
 ## 1. `capabilities` field on VoiceProfile
 
-**Files:** `kateto/voices/base.py`, `kateto/voices/factory.py`
+**Files:** `hipotenusa/voices/base.py`, `hipotenusa/voices/factory.py`
 
 Add `capabilities: tuple[str, ...] = ()` to `VoiceProfile` dataclass. Set per-voice in `factory.py`:
 
@@ -31,7 +31,7 @@ Add `capabilities: tuple[str, ...] = ()` to `VoiceProfile` dataclass. Set per-vo
 
 ## 2. New Event Models
 
-**File:** `kateto/core/event.py`
+**File:** `hipotenusa/core/event.py`
 
 Add three event models:
 
@@ -57,7 +57,7 @@ Also re-export `GenerateData` if not already exposed.
 
 ## 3. AudioPipeline Dataclass
 
-**File:** `kateto/voices/base.py`
+**File:** `hipotenusa/voices/base.py`
 
 ```python
 @dataclass
@@ -76,7 +76,7 @@ Add `on_speak` handler and `_do_generate` helper to VoiceAgent. Register `speak`
 
 ## 4. VoiceManager Plugin
 
-**File:** `kateto/plugins/system/voice_manager.py` (new)
+**File:** `hipotenusa/plugins/system/voice_manager.py` (new)
 
 Plugin that:
 
@@ -92,7 +92,7 @@ Plugin that:
 
 ## 5. Classifier Route Change
 
-**File:** `kateto/plugins/executor/classifier.py`
+**File:** `hipotenusa/plugins/executor/classifier.py`
 
 Change the EXECUTE → generate emit to target `"voice_manager"` instead of individual voices:
 
@@ -105,13 +105,13 @@ target="voice_manager",
 ## 6. TTS/Player Pipeline Support
 
 **Files:**
-- `kateto/plugins/audio_output/zonos.py`
-- `kateto/plugins/audio_output/camb.py`
-- `kateto/plugins/audio_output/edgetts.py`
-- `kateto/plugins/audio_output/player.py`
+- `hipotenusa/plugins/audio_output/zonos.py`
+- `hipotenusa/plugins/audio_output/camb.py`
+- `hipotenusa/plugins/audio_output/edgetts.py`
+- `hipotenusa/plugins/audio_output/player.py`
 
 Each TTS plugin gets:
-- Import `AudioPipeline` from `kateto.voices.base`
+- Import `AudioPipeline` from `hipotenusa.voices.base`
 - `_pipeline: AudioPipeline | None = None` in `__init__`
 - `_pipeline_task: asyncio.Task | None = None` in `__init__`
 - Pipeline startup in `enable()`: create task for `_run_pipeline()`
@@ -130,19 +130,19 @@ Sentinel protocol: `None` on token_queue = end of generation; `None` on pcm_queu
 
 ## 7. Wire VoiceManager into Runtime
 
-**File:** `kateto/run_mode.py`
+**File:** `hipotenusa/run_mode.py`
 
 - Remove old `_VoiceManagerPlugin` class
 - Remove `RuntimeOwner.on_voice_enable` method
 - Remove unused imports (`VoiceEnableData`, `VoiceEnabledData`, `DiscoveryContext`)
-- Import `VoiceManager` from `kateto.plugins.system.voice_manager`
+- Import `VoiceManager` from `hipotenusa.plugins.system.voice_manager`
 - In `start()`: replace `_VoiceManagerPlugin(self)` with `VoiceManager(self._config)`
 
 ---
 
 ## 8. Config Changes
 
-**File:** `kateto/core/config.py`
+**File:** `hipotenusa/core/config.py`
 
 Add to `PluginSettings`:
 

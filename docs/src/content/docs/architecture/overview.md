@@ -1,11 +1,11 @@
 ---
 title: Overview
-description: Overview — documentación de Kateto.
+description: Overview — documentación de Hipotenusa.
 ---
 
 # System Overview
 
-**Kateto** is an intelligent event bus where audio plugins, AI agents (Voices), and external services communicate in a decentralized manner. Its core is a **PluginManager** broker that handles both plugin lifecycle and event routing — there is no separate mediator component.
+**Hipotenusa** is an intelligent event bus where audio plugins, AI agents (Voices), and external services communicate in a decentralized manner. Its core is a **PluginManager** broker that handles both plugin lifecycle and event routing — there is no separate mediator component.
 
 ## Design Principles
 
@@ -63,7 +63,7 @@ A FastAPI HTTP server mirrors the MCP server surface, providing an HTTP API for 
 
 ### Agent Tool-Calling
 
-Voice agents use **pydantic-ai** for structured tool-calling. `KatetoToolset` wraps `VoiceToolExecutor` for pydantic-ai integration, providing built-in tools (file ops, skill loading, runtime tools) plus user MCP servers injected per-voice.
+Voice agents use **pydantic-ai** for structured tool-calling. `HipotenusaToolset` wraps `VoiceToolExecutor` for pydantic-ai integration, providing built-in tools (file ops, skill loading, runtime tools) plus user MCP servers injected per-voice.
 
 ## Priority Overview
 

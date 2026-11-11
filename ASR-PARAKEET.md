@@ -1,16 +1,16 @@
-# ASR Parakeet (CrispASR) — motor alternativo de STT en Kateto
+# ASR Parakeet (CrispASR) — motor alternativo de STT en Hipotenusa
 
 Añade parakeet (CrispASR) como motor de transcripción **alternativo** al whisper.
-No se tocó `whisper.py` ni `kateto/providers/whisper.py`; el motor viejo sigue igual.
+No se tocó `whisper.py` ni `hipotenusa/providers/whisper.py`; el motor viejo sigue igual.
 
 ## Archivos
-- `kateto/providers/parakeet.py` — `ParakeetProvider` (CLI: mismo contrato que providers whisper, `__aenter__`/`aclose`/`transcribe`; escribe WAV temp 16 kHz mono s16le, invoca `-m <modelo> --backend parakeet ... -otxt -of <base>`, timeouts y fail-open), **y** `ParakeetServerProvider` (server: habla con un `crispasr --server` ya levantado vía `POST /v1/audio/transcriptions`, multipart, con `health` opcional al arrancar), **y** `ParakeetStreamProvider` (streaming: abre el binario **una vez** en `__aenter__`, `feed(pcm)` por stdin, lector en tarea aparte que parsea las líneas JSON a `TranscriptionData` vía callback `on_event`; `aclose()` cierra stdin, espera el último `final` con timeout y mata el proceso; fail-open con reinicio acotado `stream_max_restarts` y degradación a no-streaming). Factory `create_parakeet_provider(settings)` que elige por `backend = "server" | "cli" | "stream"`.
-- `kateto/plugins/audio_processor/parakeet.py` — `ParakeetAudioProcessor(Plugin)`, capabilities `("transcribe",)`, espejo de whisper (`audio_chunk` → `transcription`). En `enable()` arma el provider por `backend`, y si es `server` proba `/health` (warning claro si no está, sin tumbar el enable). En modo `stream`, `on_audio_chunk` extrae el PCM crudo (`pcm_s16le` directo, `wav` desenvuelto) y lo pasa a `feed()`; el callback `on_event` re-emite cada `partial`/`final` como `transcription` con el flag `partial`. Fail-open: errores se loguean, no se emite evento, el bus sigue vivo.
-- `kateto/core/event.py` — `TranscriptionData.partial: bool = False` (ver § Streaming por qué el mismo evento y no uno nuevo).
-- `kateto/plugins/audio_processor/__init__.py` — registra `audio_processor_parakeet` (`ctx.plugin_settings(...)`) **sin sacar whisper**. Si falta la sección (config vieja) se omite solo parakeet.
-- `kateto/providers/__init__.py` — exporta `ParakeetProvider`, `ParakeetServerProvider`, `create_parakeet_provider`.
+- `hipotenusa/providers/parakeet.py` — `ParakeetProvider` (CLI: mismo contrato que providers whisper, `__aenter__`/`aclose`/`transcribe`; escribe WAV temp 16 kHz mono s16le, invoca `-m <modelo> --backend parakeet ... -otxt -of <base>`, timeouts y fail-open), **y** `ParakeetServerProvider` (server: habla con un `crispasr --server` ya levantado vía `POST /v1/audio/transcriptions`, multipart, con `health` opcional al arrancar), **y** `ParakeetStreamProvider` (streaming: abre el binario **una vez** en `__aenter__`, `feed(pcm)` por stdin, lector en tarea aparte que parsea las líneas JSON a `TranscriptionData` vía callback `on_event`; `aclose()` cierra stdin, espera el último `final` con timeout y mata el proceso; fail-open con reinicio acotado `stream_max_restarts` y degradación a no-streaming). Factory `create_parakeet_provider(settings)` que elige por `backend = "server" | "cli" | "stream"`.
+- `hipotenusa/plugins/audio_processor/parakeet.py` — `ParakeetAudioProcessor(Plugin)`, capabilities `("transcribe",)`, espejo de whisper (`audio_chunk` → `transcription`). En `enable()` arma el provider por `backend`, y si es `server` proba `/health` (warning claro si no está, sin tumbar el enable). En modo `stream`, `on_audio_chunk` extrae el PCM crudo (`pcm_s16le` directo, `wav` desenvuelto) y lo pasa a `feed()`; el callback `on_event` re-emite cada `partial`/`final` como `transcription` con el flag `partial`. Fail-open: errores se loguean, no se emite evento, el bus sigue vivo.
+- `hipotenusa/core/event.py` — `TranscriptionData.partial: bool = False` (ver § Streaming por qué el mismo evento y no uno nuevo).
+- `hipotenusa/plugins/audio_processor/__init__.py` — registra `audio_processor_parakeet` (`ctx.plugin_settings(...)`) **sin sacar whisper**. Si falta la sección (config vieja) se omite solo parakeet.
+- `hipotenusa/providers/__init__.py` — exporta `ParakeetProvider`, `ParakeetServerProvider`, `create_parakeet_provider`.
 - `config/defaults/config.toml` — sección `[plugin.audio_processor_parakeet]` con `backend = "server"` (default) / `"cli"`, `host`/`port`, y `gpu_backend`/`device`/`bin`/`model` (solo CLI).
-- `kateto/tests/test_audio_processor_parakeet.py` — 16 tests `@pytest.mark.asyncio`: provider mockeado/binario falso para CLI + camino server vía `httpx.MockTransport` (sin depender de proceso real) + camino streaming con proceso hijo falso (parcial, final, línea basura ignorada, muerte y reinicio, degradación tras el límite, `aclose()` esperando el `final`, y plugin stream de punta a punta en el bus).
+- `hipotenusa/tests/test_audio_processor_parakeet.py` — 16 tests `@pytest.mark.asyncio`: provider mockeado/binario falso para CLI + camino server vía `httpx.MockTransport` (sin depender de proceso real) + camino streaming con proceso hijo falso (parcial, final, línea basura ignorada, muerte y reinicio, degradación tras el límite, `aclose()` esperando el `final`, y plugin stream de punta a punta en el bus).
 - `docs/src/content/docs/plugins/audio-processor.md` — doc del plugin.
 
 ## El modo server sí existe (corrección del trabajo anterior)
@@ -160,7 +160,7 @@ Decisión: **un campo opcional en `TranscriptionData` y el mismo evento
    `partial` es su espejo para el lado STT.
 
 ## Verificación
-- `uv run pytest kateto/tests/test_audio_processor_parakeet.py -q` → **16 passed**:
+- `uv run pytest hipotenusa/tests/test_audio_processor_parakeet.py -q` → **16 passed**:
   CLI (provider mockeado + binario falso), server (`httpx.MockTransport`) y
   streaming (proceso hijo falso: parcial/final/basura/reinicio/degradación/`aclose`/plugin).
 - E2E real **server**: `ParakeetServerProvider` contra `crispasr --server` (Vulkan,
@@ -172,7 +172,7 @@ Decisión: **un campo opcional en `TranscriptionData` y el mismo evento
 - El server se levantó solo para verificar y se mató al terminar (ver Limpieza).
 
 ## Sin verificar
-- No se levantó `uv run kateto run` (sesión del usuario activa); el registro del
+- No se levantó `uv run hipotenusa run` (sesión del usuario activa); el registro del
   plugin se valida por tests de bus/discovery, no por arranque end-to-end.
 - Hot-swap (`POST /load` ultra↔redux) no ejercitado desde el provider.
 - Sin resampleo: se asume PCM s16le 16 kHz mono (lo que emite el mic); otras tasas

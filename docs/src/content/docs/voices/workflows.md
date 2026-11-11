@@ -1,6 +1,6 @@
 ---
 title: Workflows
-description: Workflows — documentación de Kateto.
+description: Workflows — documentación de Hipotenusa.
 ---
 
 # Workflows
@@ -11,15 +11,15 @@ Workflows are **instructions given to a voice** to execute a process step by ste
 
 | Location | Purpose |
 |---|---|
-| `config/kateto/workflows/{name}/` | **Global workflows** shared across voices (daily standup, sprint review) |
-| `config/kateto/voices/{voice}/workflows/{name}/` | **Per-voice workflows** specific to an agent's role |
+| `config/hipotenusa/workflows/{name}/` | **Global workflows** shared across voices (daily standup, sprint review) |
+| `config/hipotenusa/voices/{voice}/workflows/{name}/` | **Per-voice workflows** specific to an agent's role |
 
 Global workflows can be assigned to any voice at runtime. Per-voice workflows are available only to that agent.
 
 ## Structure
 
 ```
-config/kateto/voices/{voice}/workflows/{workflow_name}/
+config/hipotenusa/voices/{voice}/workflows/{workflow_name}/
 └── workflow.py       # Literal phases, instructions, deliverables, checkpoints
 ```
 

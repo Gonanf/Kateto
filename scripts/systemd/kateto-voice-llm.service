@@ -1,7 +1,7 @@
 # Sin --device el backend puede repartir capas con la iGPU y rinde ~4,5x menos;
 # en esta maquina Vulkan0 = RX 6500 XT porque VK_ICD_FILENAMES expone solo el ICD radeon.
 [Unit]
-Description=Kateto voice LLM — llama-server :8092 (gemma-4-E2B-it-qat-q4_0, OpenAI /v1 alias "local")
+Description=Hipotenusa voice LLM — llama-server :8092 (gemma-4-E2B-it-qat-q4_0, OpenAI /v1 alias "local")
 Documentation=https://github.com/ggml-org/llama.cpp
 After=network.target
 

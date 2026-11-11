@@ -1,6 +1,6 @@
 ---
 title: Tooling
-description: Tooling — documentación de Kateto.
+description: Tooling — documentación de Hipotenusa.
 ---
 
 # Tooling
@@ -16,7 +16,7 @@ Everything uses **uv**. No pip, no poetry, no conda, no manual virtualenv.
 | `uv remove <package>` | Remove dependency |
 | `uv run <script>` | Run script in project environment |
 | `uv run pytest` | Run tests |
-| `uv run kateto` | Start the system |
+| `uv run hipotenusa` | Start the system |
 | `uv build` | Build the package |
 | `uv publish` | Publish to PyPI (future) |
 | `uv python pin 3.12` | Pin Python version |

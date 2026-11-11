@@ -5,11 +5,11 @@ description: "Spec de implementación — 2026 08 13 Memory Ledger."
 
 # Spec: Memoria de 2 capas (VoiceMemoryLedger)
 
-Fecha: 2026-08-13 | Worktree: wt/memory-ledger | Fuente: harness research (brainstorm-kateto.md §D5/H3/G3)
+Fecha: 2026-08-13 | Worktree: wt/memory-ledger | Fuente: harness research (brainstorm-hipotenusa.md §D5/H3/G3)
 
 ## Problem Statement
 
-La memoria persistente de Kateto es pobre y desorganizada: los recuerdos se inyectan sueltos en el SOUL o se escriben en caliente (voice_soul_manager muta SOUL.md/JOURNAL.md sin validación ni rollback fiable), degradando la consistencia de la voz y ensuciando el estado entre corridas. No hay hechos declarativos por voz que persistan de forma estructurada entre streams.
+La memoria persistente de Hipotenusa es pobre y desorganizada: los recuerdos se inyectan sueltos en el SOUL o se escriben en caliente (voice_soul_manager muta SOUL.md/JOURNAL.md sin validación ni rollback fiable), degradando la consistencia de la voz y ensuciando el estado entre corridas. No hay hechos declarativos por voz que persistan de forma estructurada entre streams.
 
 ## Solution
 
@@ -49,4 +49,4 @@ El SOUL queda de solo lectura. Cada voz tiene un **VoiceMemoryLedger**: un almac
 ## Further Notes
 
 - Regla de higiene (lección Hermes): guardar hechos declarativos, NO "fixed X"/PR numbers/logs de progreso.
-- Ver brainstorming-kateto.md §D5/H3/G3.
+- Ver brainstorming-hipotenusa.md §D5/H3/G3.

@@ -31,10 +31,10 @@ def _default_estado_path() -> str:
         uid = os.getuid()
         run_user = Path(f"/run/user/{uid}")
         if run_user.is_dir():
-            return str(run_user / "kateto-voice-llm-watchdog.json")
+            return str(run_user / "hipotenusa-voice-llm-watchdog.json")
     except (AttributeError, OSError):
         pass
-    return str(Path(tempfile.gettempdir()) / "kateto-voice-llm-watchdog.json")
+    return str(Path(tempfile.gettempdir()) / "hipotenusa-voice-llm-watchdog.json")
 
 
 def medir_tok_s(url: str, max_tokens: int, timeout: float = 30.0) -> float | None:
@@ -166,7 +166,7 @@ def main(
     try:
         parser = argparse.ArgumentParser(description="Vigilante del LLM de voz")
         parser.add_argument("--url", default="http://127.0.0.1:8092")
-        parser.add_argument("--unit", default="kateto-voice-llm.service")
+        parser.add_argument("--unit", default="hipotenusa-voice-llm.service")
         parser.add_argument("--umbral-tok-s", type=float, default=15.0)
         parser.add_argument("--intentos", type=int, default=2)
         parser.add_argument("--max-tokens", type=int, default=8)

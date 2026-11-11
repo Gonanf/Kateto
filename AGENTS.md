@@ -1,8 +1,8 @@
-# Kateto — AGENTS.md
+# Hipotenusa — AGENTS.md
 
 ## What It Is
 
-Kateto is an event-driven voice team for project work. Jane orchestrates, Doktor handles planning/backlog, Conquest facilitates agile ceremonies. All communication runs through a PluginManager that is simultaneously the event bus and plugin lifecycle manager — no separate mediator.
+Hipotenusa is an event-driven voice team for project work. Jane orchestrates, Doktor handles planning/backlog, Conquest facilitates agile ceremonies. All communication runs through a PluginManager that is simultaneously the event bus and plugin lifecycle manager — no separate mediator.
 
 **Stack:** Python 3.12+ async/await · uv · pytest-asyncio · Pydantic · FastAPI · MCP 1.28
 
@@ -11,14 +11,14 @@ Kateto is an event-driven voice team for project work. Jane orchestrates, Doktor
 ## Entrypoints & Commands
 
 ```
-uv run kateto config check              # validate TOML, bootstrap defaults
-uv run kateto run                        # event runtime (HTTP/WS on :8080)
-uv run kateto smoke                      # full bounded smoke test
-uv run kateto compile [whisper|llama]    # compile native backends & bindings (vulkan, cuda, cpu)
-uv run kateto setup                      # interactive setup wizard
+uv run hipotenusa config check              # validate TOML, bootstrap defaults
+uv run hipotenusa run                        # event runtime (HTTP/WS on :8080)
+uv run hipotenusa smoke                      # full bounded smoke test
+uv run hipotenusa compile [whisper|llama]    # compile native backends & bindings (vulkan, cuda, cpu)
+uv run hipotenusa setup                      # interactive setup wizard
 ```
 
-Kateto supports in-process backends (pywhispercpp, mmBERT, llama-cpp-python) as well as BYO external servers (whisper-server, llama-server, Zonos).
+Hipotenusa supports in-process backends (pywhispercpp, mmBERT, llama-cpp-python) as well as BYO external servers (whisper-server, llama-server, Zonos).
 
 ## Architecture
 
@@ -52,11 +52,11 @@ Errors are caught per-plugin and emitted as error events. The bus stays up.
 
 ### Voices (3 built-in: Jane, Doktor, Conquest)
 
-Defined in `kateto/voices/factory.py` with `VoiceProfile` (voice_id, display_name, role, system_prompt). Config keys in `config.toml` are lowercase (`voice.jane`, `voice.doktor`, `voice.conquest`). Directory names in `config/defaults/voices/` match lowercase.
+Defined in `hipotenusa/voices/factory.py` with `VoiceProfile` (voice_id, display_name, role, system_prompt). Config keys in `config.toml` are lowercase (`voice.jane`, `voice.doktor`, `voice.conquest`). Directory names in `config/defaults/voices/` match lowercase.
 
 Voice lifecycle:
 1. `create_voice()` reads profile, creates `VoiceAgent` with `OpenAICompatibleProvider`
-2. `VoiceAgent` sets up `VoiceMemory` (per-voice file store in `~/.config/kateto/voices/{name}/`)
+2. `VoiceAgent` sets up `VoiceMemory` (per-voice file store in `~/.config/hipotenusa/voices/{name}/`)
 3. Optional: agent provider + `VoiceToolExecutor` for tool-enabled generation
 
 ### Config Bootstrap
@@ -65,7 +65,7 @@ Voice lifecycle:
 config/defaults/config.toml  +  config/defaults/voices/{name}/workflows/
     → _copy_missing_defaults() → user config dir
 ```
-Bootstrap copies missing files only (does not overwrite existing). User config at `$XDG_CONFIG_HOME/kateto` or `~/.config/kateto/`.
+Bootstrap copies missing files only (does not overwrite existing). User config at `$XDG_CONFIG_HOME/hipotenusa` or `~/.config/hipotenusa/`.
 
 **Precedence:** user config > config/defaults/ > hardcoded (factory.py)
 
@@ -73,7 +73,7 @@ All code resolves voice paths via `config_dir / "voices" / voice_name`. Defaults
 
 ### Hot Reload
 
-`watchdog` monitors `kateto/plugins/`, `kateto/voices/`, and user config voice/workflow dirs. On file change: cancel plugin task → clear queue → reload module/config. Graceful — the bus stays up.
+`watchdog` monitors `hipotenusa/plugins/`, `hipotenusa/voices/`, and user config voice/workflow dirs. On file change: cancel plugin task → clear queue → reload module/config. Graceful — the bus stays up.
 
 ### Workflow System
 
@@ -84,8 +84,8 @@ Declarative Python files in `{voice_dir}/workflows/{name}/workflow.py`. Fields: 
 ## Project Structure
 
 ```
-kateto/
-├── kateto/
+hipotenusa/
+├── hipotenusa/
 │   ├── __main__.py      # Entrypoint: main() dispatches argv
 │   ├── run_mode.py      # RuntimeOwner, RuntimeComponents assembly
 │   ├── live.py          # build_event_runtime() — wires everything
@@ -138,20 +138,20 @@ kateto/
 uv run pytest
 
 # Single test with verbose output
-uv run pytest kateto/tests/test_workflow.py::test_workflow_catalog_discover_voice_with_workflows -v
+uv run pytest hipotenusa/tests/test_workflow.py::test_workflow_catalog_discover_voice_with_workflows -v
 
 # Run a test file
-uv run pytest kateto/tests/test_storage.py -v
+uv run pytest hipotenusa/tests/test_storage.py -v
 
 # Fastest feedback — run the core+workflow+config tests
-uv run pytest kateto/tests/test_event_bus.py kateto/tests/test_plugin_manager.py kateto/tests/test_config.py kateto/tests/test_workflow.py kateto/tests/test_storage.py -v
+uv run pytest hipotenusa/tests/test_event_bus.py hipotenusa/tests/test_plugin_manager.py hipotenusa/tests/test_config.py hipotenusa/tests/test_workflow.py hipotenusa/tests/test_storage.py -v
 ```
 
 ### Patterns
 
 - **pytest-asyncio** (strict mode). Async tests must be marked with `@pytest.mark.asyncio` or they won't be collected.
 - **BDD-style comments:** `# Given:`, `# When:`, `# Then:` throughout test files.
-- **Fixture helpers:** `kateto/tests/conversation_support.py` — `make_voices()` creates all 3 voices. `_write_workflow()` in test_workflow.py.
+- **Fixture helpers:** `hipotenusa/tests/conversation_support.py` — `make_voices()` creates all 3 voices. `_write_workflow()` in test_workflow.py.
 - **tmp_path** used for config dirs — tests create minimal temp config structures, never touch real user config.
 
 ### Known Pre-existing Failures
@@ -160,7 +160,7 @@ These are NOT caused by your changes:
 
 | Failure | Why |
 |---------|-----|
-| 7 test files with collection error | Missing `kateto.qa` module — external QA scripts, not part of core |
+| 7 test files with collection error | Missing `hipotenusa.qa` module — external QA scripts, not part of core |
 | `test_cli_connector` | Missing QA scripts |
 | `test_conversation_support` | Missing module dependency |
 
@@ -184,7 +184,7 @@ id: 17                    # sequential, next after highest existing
 title: "TUI plugins tab: ..."
 severity: Media           # Baja | Media | Alta | Crítica
 status: open              # open | resolved
-component: kateto/tests/test_tui.py   # path or module name
+component: hipotenusa/tests/test_tui.py   # path or module name
 resolved: 2026-07-19      # only if status=resolved (newer convention)
 ---
 
@@ -236,14 +236,14 @@ All voice/workflow name comparisons use `casefold()` — case-insensitive by des
 
 ### config/defaults/ Is NOT for Runtime
 
-The `config/defaults/` directory is a bootstrap template. At runtime, ONLY the user config directory (`~/.config/kateto/`) is read. Changes to `config/defaults/` only take effect on first bootstrap of a new config.
+The `config/defaults/` directory is a bootstrap template. At runtime, ONLY the user config directory (`~/.config/hipotenusa/`) is read. Changes to `config/defaults/` only take effect on first bootstrap of a new config.
 
 ### In-process Backends & Compilation
 
-Kateto supports running locally without external server processes:
+Hipotenusa supports running locally without external server processes:
 - Speech-to-text via `pywhispercpp` Python bindings (or native `whisper-server`)
 - Intent classification via `mmBERT` (ONNX) or `llama.cpp` (`llama-cpp-python`)
-- Compile native whisper.cpp or llama.cpp with `uv run kateto compile [whisper|llama] --backend [vulkan|cuda|cpu|metal|openblas]`
+- Compile native whisper.cpp or llama.cpp with `uv run hipotenusa compile [whisper|llama] --backend [vulkan|cuda|cpu|metal|openblas]`
 
 ### Workflow Files Are Python
 
@@ -251,7 +251,7 @@ Workflow definitions in `{voice}/workflows/{name}/workflow.py` are actual Python
 
 ### Voice Tool Executor
 
-`VoiceToolExecutor` in `kateto/voices/tools.py` provides 13 built-in tools including file operations, skill loading, and runtime tools (create_skill, update_skill, create_workflow, update_workflow, update_soul). MCP servers declared in config.toml are injected per-voice.
+`VoiceToolExecutor` in `hipotenusa/voices/tools.py` provides 13 built-in tools including file operations, skill loading, and runtime tools (create_skill, update_skill, create_workflow, update_workflow, update_soul). MCP servers declared in config.toml are injected per-voice.
 
 ### TUI Switch for Plugins
 

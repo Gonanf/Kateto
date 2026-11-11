@@ -1,6 +1,6 @@
 ---
 title: Audio Output
-description: Audio Output — documentación de Kateto.
+description: Audio Output — documentación de Hipotenusa.
 ---
 
 # Audio Output (TTS) Plugins

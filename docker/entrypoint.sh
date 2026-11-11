@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 cleanup() {
     local status=$?
-    for pid in "${KATETO_PID:-}" "${LLAMA_PID:-}" "${CLASSIFIER_PID:-}" "${WHISPER_PID:-}"; do
+    for pid in "${HIPOTENUSA_PID:-}" "${LLAMA_PID:-}" "${CLASSIFIER_PID:-}" "${WHISPER_PID:-}"; do
         if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
             kill "${pid}" 2>/dev/null || true
         fi
@@ -40,7 +40,7 @@ llama-server \
     > >(sed -u 's/^/[llama] /') 2>&1 &
 LLAMA_PID=$!
 
-uv run kateto run > >(sed -u 's/^/[kateto] /') 2>&1 &
-KATETO_PID=$!
+uv run hipotenusa run > >(sed -u 's/^/[hipotenusa] /') 2>&1 &
+HIPOTENUSA_PID=$!
 
-wait "${KATETO_PID}"
+wait "${HIPOTENUSA_PID}"

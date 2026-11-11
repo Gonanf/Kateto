@@ -284,7 +284,7 @@ and `whisperer`.
 The `describe_images` sidecar link is live in the fallback chain but the
 server entry is BYO and disabled by default. To use it: install the
 `video-rag` binary on `PATH` and point it at its own config via
-`VIDEO_BASE_URL` / `VIDEO_VISION_MODEL` (the sidecar inherits Kateto's
-process env and reads its own `config.toml` — no Kateto config change).
+`VIDEO_BASE_URL` / `VIDEO_VISION_MODEL` (the sidecar inherits Hipotenusa's
+process env and reads its own `config.toml` — no Hipotenusa config change).
 Its hours-ago `search` / `answer` tools are available for a future memory
 item and are NOT wired into the live chain here.

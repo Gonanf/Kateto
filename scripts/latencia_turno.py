@@ -68,7 +68,7 @@ def ensure_environment() -> None:
         sys.exit(3)
 
 
-# Asegurar sys.path con la raíz del repo antes de imports de kateto
+# Asegurar sys.path con la raíz del repo antes de imports de hipotenusa
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
@@ -80,7 +80,7 @@ def resolver_config_timeouts(repo_root: Path | None = None) -> dict[str, Any]:
     Lee <repo_root>/config/defaults/config.toml, sección [plugin.audio_input_mic].
     Falla cerrado con excepción si falta el archivo, la sección o silence_timeout.
     """
-    from kateto.plugins.audio_input.base import DEFAULT_TURN_SILENCE_TIMEOUT
+    from hipotenusa.plugins.audio_input.base import DEFAULT_TURN_SILENCE_TIMEOUT
 
     root = repo_root if repo_root is not None else _REPO_ROOT
     config_path = root / "config" / "defaults" / "config.toml"
@@ -233,8 +233,8 @@ class DeterministicSileroModel:
 
 
 def _build_benchmark_plugins():
-    from kateto.core import Plugin
-    from kateto.core.event import AudioData, GenerateData, TextChunk, TranscriptionData
+    from hipotenusa.core import Plugin
+    from hipotenusa.core.event import AudioData, GenerateData, TextChunk, TranscriptionData
 
     class FakeWhisper(Plugin):
         def __init__(self) -> None:
@@ -394,16 +394,16 @@ async def run_benchmark(
     logger.remove()
     logger.add(sys.stderr, level="WARNING")
 
-    from kateto.core import PluginManager
-    from kateto.core.config import PluginSettings
-    from kateto.plugins.audio_input.base import SileroVad
-    from kateto.plugins.audio_input.mic import MicrophoneAudioInput
-    from kateto.tests.conversation_support import (
+    from hipotenusa.core import PluginManager
+    from hipotenusa.core.config import PluginSettings
+    from hipotenusa.plugins.audio_input.base import SileroVad
+    from hipotenusa.plugins.audio_input.mic import MicrophoneAudioInput
+    from hipotenusa.tests.conversation_support import (
         StreamingFixtureProvider,
         enable_voices,
         write_references,
     )
-    from kateto.tests.test_audio_turn_chain import FixtureCaptureFactory
+    from hipotenusa.tests.test_audio_turn_chain import FixtureCaptureFactory
 
     FakeWhisper, FakeClassifier, TTSSink = _build_benchmark_plugins()
 
@@ -421,7 +421,7 @@ async def run_benchmark(
         factory = FixtureCaptureFactory()
 
         global eot_gate
-        from kateto.plugins.system.eot_gate import EotGate
+        from hipotenusa.plugins.system.eot_gate import EotGate
 
         if mock_eot_gate:
             class MockEotGate:
@@ -430,7 +430,7 @@ async def run_benchmark(
                 available = True
                 async def initialize(self): pass
                 async def aclassify(self, prompt: str):
-                    from kateto.plugins.system.eot_gate import EotAction
+                    from hipotenusa.plugins.system.eot_gate import EotAction
                     class MockResult:
                         action = EotAction.RESPOND
                     return MockResult()
@@ -479,7 +479,7 @@ async def run_benchmark(
         # Conditionally enable turn_gate
         omit_list = [p.strip() for p in plugins_omitidos.split(",") if p.strip()]
         if "turn_gate" not in omit_list:
-            from kateto.plugins.system.turn_gate import TurnGate
+            from hipotenusa.plugins.system.turn_gate import TurnGate
             turn_gate = TurnGate()
             await manager.enable_plugin(turn_gate)
         else:
